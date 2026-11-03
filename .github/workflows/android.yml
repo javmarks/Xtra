@@ -32,7 +32,7 @@ jobs:
         name: apk
         path: app/build/outputs/apk/release/*.apk
 
-    -     - name: Generate release notes
+    - - name: Generate release notes
       run: |
         if git rev-parse refs/tags/latest >/dev/null 2>&1; then
           git log refs/tags/latest..HEAD --oneline --decorate=no > notes.txt
