@@ -24,7 +24,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.github.andreyasadchy.xtra"
+        applicationId = "com.github.andreyasadchy.xtra.custom"
         minSdk = 24
         targetSdk = 37
         versionCode = 121
@@ -65,7 +65,7 @@ android {
 }
 
 dependencies {
-    compileOnly("com.google.j2objc:j2objc-annotations:3.0.0") // OkHttpDataSource SettableFuture
+    compileOnly("com.google.j2objc:j2objc-annotations:3.0.0")
     implementation("com.google.mlkit:language-id:17.0.6")
     implementation("com.google.mlkit:translate:17.0.3")
 
@@ -125,11 +125,8 @@ apollo {
     }
 }
 
-// Delete large build log files from ~/.gradle/daemon/X.X/daemon-XXX.out.log
-// Source: https://discuss.gradle.org/t/gradle-daemon-produces-a-lot-of-logs/9905
 File("${project.gradle.gradleUserHomeDir.absolutePath}/daemon/${project.gradle.gradleVersion}").listFiles()?.forEach {
     if (it.name.endsWith(".out.log")) {
-        // println("Deleting gradle log file: $it") // Optional debug output
         it.delete()
     }
 }
