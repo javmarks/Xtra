@@ -61,8 +61,10 @@ import com.github.andreyasadchy.xtra.R
 import com.github.andreyasadchy.xtra.databinding.FragmentPlayerBinding
 import com.github.andreyasadchy.xtra.model.VideoQuality
 import com.github.andreyasadchy.xtra.model.ui.Video
+import com.github.andreyasadchy.xtra.model.ui.User
 import com.github.andreyasadchy.xtra.ui.channel.ChannelPagerFragmentDirections
 import com.github.andreyasadchy.xtra.ui.chat.ChatFragment
+import com.github.andreyasadchy.xtra.ui.search.channels.AddChatDialogFragment
 import com.github.andreyasadchy.xtra.ui.common.BaseNetworkFragment
 import com.github.andreyasadchy.xtra.ui.common.IntegrityDialog
 import com.github.andreyasadchy.xtra.ui.common.RadioButtonDialogFragment
@@ -89,7 +91,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
 
 @OptIn(UnstableApi::class)
-abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment.OnSortOptionChanged, IntegrityDialog.Listener {
+abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment.OnSortOptionChanged, IntegrityDialog.Listener, AddChatDialogFragment.Listener {
 
     private var _binding: FragmentPlayerBinding? = null
     protected val binding get() = _binding!!
@@ -177,6 +179,9 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         with(binding) {
+            addChatButton.setOnClickListener {
+                AddChatDialogFragment().show(childFragmentManager, "addChatDialog")
+            }
             viewLifecycleOwner.lifecycleScope.launch {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
                     viewModel.integrity.collect {
@@ -1124,6 +1129,11 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 chatFragment = fragment
             }
         }
+    }
+
+    override fun onChannelSelected(user: User) {
+        val channelName = user.name ?: user.login ?: "channel"
+        Toast.makeText(requireContext(), "Selected $channelName", Toast.LENGTH_SHORT).show()
     }
 
     private fun initLayout() {
