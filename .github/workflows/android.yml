@@ -1,3 +1,4 @@
+
 name: Build
 
 on:
@@ -9,49 +10,52 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout sources
-      uses: actions/checkout@v7
-      with:
-        fetch-depth: 0
-        filter: blob:none
-    - name: Setup Java
-      uses: actions/setup-java@v6
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v6
-      with:
-        cache-provider: 'basic'
-    - name: Build with Gradle
-      run: ./gradlew assembleRelease
+      - name: Checkout sources
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
 
-    - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v7
-      with:
-        name: apk
-        path: app/build/outputs/apk/release/*.apk
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
 
-    - name: Generate release notes
-      run: |
-        if git rev-parse refs/tags/latest >/dev/null 2>&1; then
-          git log refs/tags/latest..HEAD --oneline --decorate=no > notes.txt
-        else
-          git log -1 --oneline --decorate=no > notes.txt
-        fi
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: 'basic'
 
-    - name: Update tag
-      run: |
-        git tag -f latest
-        git push -f origin tag latest
+      - name: Build with Gradle
+        run: ./gradlew assembleRelease
 
-    - name: Delete release
-      continue-on-error: true
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: gh release delete latest -y
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk
+          path: app/build/outputs/apk/release/*.apk
 
-    - name: Create release
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: gh release create latest --title "Latest" --notes-file notes.txt --latest=true 'app/build/outputs/apk/release/*.apk'
+      - name: Generate release notes
+        run: |
+          if git rev-parse refs/tags/latest >/dev/null 2>&1; then
+            git log refs/tags/latest..HEAD --oneline --decorate=no > notes.txt
+          else
+            git log -1 --oneline --decorate=no > notes.txt
+          fi
+
+      - name: Update tag
+        run: |
+          git tag -f latest
+          git push -f origin tag latest
+
+      - name: Delete release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete latest -y
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create latest --title "Latest" --notes-file notes.txt --latest=true app/build/outputs/apk/release/*.apk
