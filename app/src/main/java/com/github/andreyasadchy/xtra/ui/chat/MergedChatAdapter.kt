@@ -34,7 +34,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private fun rendererFor(owner: ChatAdapter, message: ChatMessage): ChatAdapter {
         val originId = message.sourceRoomId ?: message.roomId
-        return sourcesByChannelId[originId] ?: owner
+        return if (originId.isNullOrBlank()) owner else sourcesByChannelId[originId] ?: owner
     }
 
     fun addMessage(owner: ChatAdapter, message: ChatMessage) {
