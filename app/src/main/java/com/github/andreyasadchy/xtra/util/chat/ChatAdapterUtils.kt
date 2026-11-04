@@ -152,7 +152,9 @@ object ChatAdapterUtils {
                         }
                     }
                 }
-                itemView.setBackgroundResource(0)
+                // EventSub chat notifications (including subscriptions and gifted subs) should
+                // remain visually identifiable even when Twitch supplies no message text.
+                itemView.setBackgroundResource(if (!chatMessage.msgId.isNullOrBlank()) R.color.chatMessageNotice else 0)
             }
             else -> {
                 if (chatMessage.systemMsg != null) {
