@@ -1213,7 +1213,11 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private fun observeChatSource(fragment: ChatFragment) {
         if (!observedChatSources.add(fragment)) return
         fragment.viewLifecycleOwnerLiveData.observe(viewLifecycleOwner) { owner ->
-            if (owner == null || chatSourceJobs.containsKey(fragment)) return@observe
+            if (owner == null) {
+                chatSourceJobs[fragment]?.cancel()
+                return@observe
+            }
+            if (chatSourceJobs[fragment]?.isActive == true) return@observe
             var attachedAdapter: ChatAdapter? = null
             val job = owner.lifecycleScope.launch {
                 owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
