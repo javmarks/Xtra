@@ -25,6 +25,10 @@ class ChatMessage(
     var translatedMessage: String? = null,
     var translationFailed: Boolean = false,
     var messageLanguage: String? = null,
+    val roomId: String? = null,
+    val sourceRoomId: String? = null,
+    val sourceMessageId: String? = null,
+    val isSourceOnly: Boolean? = null,
 ) {
     companion object {
         const val SYSTEM_MESSAGE = 0
