@@ -6,7 +6,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.github.andreyasadchy.xtra.model.chat.ChatMessage
 
 class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-    private data class Entry(val owner: ChatAdapter, val renderer: ChatAdapter, val message: ChatMessage)
+    private data class Entry(val owner: ChatAdapter, var renderer: ChatAdapter, val message: ChatMessage)
 
     private val entries = mutableListOf<Entry>()
     private val sources = linkedSetOf<ChatAdapter>()
@@ -28,6 +28,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     fun addSource(source: ChatAdapter, channelId: String?, messages: List<ChatMessage>) {
         sources.add(source)
         if (!channelId.isNullOrBlank()) sourcesByChannelId[channelId] = source
+        entries.forEach { it.renderer = rendererFor(it.owner, it.message) }
         replaceSourceMessages(source, messages)
     }
 
