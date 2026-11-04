@@ -102,6 +102,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     protected val binding get() = _binding!!
     protected val viewModel: PlayerViewModel by viewModels { PlayerViewModelFactory }
     protected var chatFragment: ChatFragment? = null
+    private var primaryChatFragment: ChatFragment? = null
     private var mergedChatRecyclerView: RecyclerView? = null
     private var mergedChatAdapter: MergedChatAdapter? = null
     private var isAllChatsSelected = false
@@ -1108,6 +1109,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 ?: (childFragmentManager.findFragmentById(R.id.chatFragmentContainer) as? ChatFragment)
             if (currentChatFragment != null) {
                 chatFragment = currentChatFragment
+                if (primaryChatFragment == null) primaryChatFragment = currentChatFragment
             } else {
                 val fragment = when (playbackService?.type) {
                     BasePlaybackService.STREAM -> ChatFragment.newInstance(
@@ -1142,6 +1144,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     childFragmentManager.beginTransaction().replace(R.id.chatFragmentContainer, fragment).commit()
                 }
                 chatFragment = fragment
+                if (primaryChatFragment == null) primaryChatFragment = fragment
             }
             refreshChatTabs()
         }
@@ -1200,14 +1203,43 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 ?: fragment.arguments?.getString("channel_login")
                 ?: "Chat"
             val points = channelPointsBalances[fragment]
+            val tabContainer = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
             val tab = Button(requireContext()).apply {
                 text = if (points != null) "$label · ${java.text.NumberFormat.getIntegerInstance().format(points)}" else label
                 isAllCaps = false
                 isSelected = !isAllChatsSelected && fragment === chatFragment
                 setOnClickListener { switchChatFragment(fragment) }
             }
-            binding.chatTabsContainer.addView(
+            tabContainer.addView(
                 tab,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+            if (fragment !== primaryChatFragment) {
+                val closeTab = Button(requireContext()).apply {
+                    text = "×"
+                    isAllCaps = false
+                    contentDescription = "Remove $label chat"
+                    minWidth = 0
+                    minimumWidth = 0
+                    setPadding(8, 0, 8, 0)
+                    setOnClickListener { removeChatFragment(fragment) }
+                }
+                tabContainer.addView(
+                    closeTab,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                )
+            }
+            binding.chatTabsContainer.addView(
+                tabContainer,
                 LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
@@ -1310,6 +1342,38 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 }
             }
         }
+    }
+
+    private fun removeChatFragment(fragment: ChatFragment) {
+        if (fragment === primaryChatFragment || !fragment.isAdded) return
+
+        // Explicitly stop this channel even when the keep-chat-open preference is enabled.
+        fragment.disconnect()
+        chatSourceJobs[fragment]?.cancel()
+        fragment.mergedChatAdapter?.let { mergedChatAdapter?.removeSource(it) }
+        observedChatSources.remove(fragment)
+        channelPointsBalances.remove(fragment)
+
+        childFragmentManager.beginTransaction()
+            .remove(fragment)
+            .commitNow()
+
+        val remaining = getChatFragments()
+        if (chatFragment === fragment) {
+            val fallback = primaryChatFragment?.takeIf { it.isAdded }
+                ?: remaining.firstOrNull()
+            if (fallback != null) {
+                chatFragment = fallback
+                switchChatFragment(fallback)
+            }
+        } else if (isAllChatsSelected && remaining.size < 2) {
+            remaining.firstOrNull()?.let { switchChatFragment(it) }
+                ?: run {
+                    isAllChatsSelected = false
+                    mergedChatRecyclerView?.visibility = View.GONE
+                }
+        }
+        refreshChatTabs()
     }
 
     private fun showAllChats() {
