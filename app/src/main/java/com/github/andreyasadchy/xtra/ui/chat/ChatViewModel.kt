@@ -1315,7 +1315,7 @@ class ChatViewModel(
         private val channelId: String?,
     ) : ChatReadWebSocket.Listener {
         override suspend fun onConnect() {
-            onMessage(ChatMessage(systemMsg = ContextCompat.getString(applicationContext, R.string.chat_join).format(channelLogin)))
+            if (!moderationOnly) onMessage(ChatMessage(systemMsg = ContextCompat.getString(applicationContext, R.string.chat_join).format(channelLogin)))
         }
 
         override suspend fun onChatMessage(message: ChatUtils.IRCMessage, userNotice: Boolean) {
@@ -1428,6 +1428,7 @@ class ChatViewModel(
         private val isLoggedIn: Boolean,
         private val accountId: String?,
         private val channelId: String?,
+        private val moderationOnly: Boolean = false,
     ) : EventSubWebSocket.Listener {
         override suspend fun onConnect() {
             onMessage(ChatMessage(systemMsg = ContextCompat.getString(applicationContext, R.string.chat_join).format(channelLogin)))
