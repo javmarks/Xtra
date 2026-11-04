@@ -12,9 +12,14 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val sources = linkedSetOf<ChatAdapter>()
     private val sourcesByChannelId = mutableMapOf<String, ChatAdapter>()
 
+    override fun getItemViewType(position: Int): Int {
+        val renderer = entries.getOrNull(position)?.renderer ?: return 0
+        return sources.indexOf(renderer).takeIf { it >= 0 } ?: 0
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-        val source = sources.firstOrNull()
-        return source?.onCreateViewHolder(parent, viewType)
+        val source = sources.elementAtOrNull(viewType) ?: sources.firstOrNull()
+        return source?.onCreateViewHolder(parent, 0)
             ?: object : RecyclerView.ViewHolder(TextView(parent.context)) {}
     }
 
