@@ -108,6 +108,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private val observedChatSources = mutableSetOf<ChatFragment>()
     private val chatSourceJobs = mutableMapOf<ChatFragment, Job>()
     private val sharedChatRendererFragments = mutableMapOf<String, ChatFragment>()
+    private val channelPointsBalances = mutableMapOf<ChatFragment, Int>()
     protected open val playbackService: BasePlaybackService? = null
     protected var started = false
 
@@ -1198,8 +1199,9 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             val label = fragment.arguments?.getString("channel_name")
                 ?: fragment.arguments?.getString("channel_login")
                 ?: "Chat"
+            val points = channelPointsBalances[fragment]
             val tab = Button(requireContext()).apply {
-                text = label
+                text = if (points != null) "$label · ${java.text.NumberFormat.getIntegerInstance().format(points)}" else label
                 isAllCaps = false
                 isSelected = !isAllChatsSelected && fragment === chatFragment
                 setOnClickListener { switchChatFragment(fragment) }
@@ -1253,6 +1255,13 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     launch {
                         sourceViewModel.sharedChatParticipantUsers.collect { users ->
                             ensureSharedChatRenderers(users)
+                        }
+                    }
+                    launch {
+                        sourceViewModel.channelPointsBalance.collect { balance ->
+                            if (balance == null) channelPointsBalances.remove(fragment)
+                            else channelPointsBalances[fragment] = balance
+                            if (!fragment.isMergedRendererOnly && _binding != null) refreshChatTabs()
                         }
                     }
                     val initialMessages = if (fragment.isMergedRendererOnly) {
@@ -2584,6 +2593,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         chatSourceJobs.clear()
         observedChatSources.clear()
         sharedChatRendererFragments.clear()
+        channelPointsBalances.clear()
         mergedChatRecyclerView = null
         mergedChatAdapter = null
         isAllChatsSelected = false
