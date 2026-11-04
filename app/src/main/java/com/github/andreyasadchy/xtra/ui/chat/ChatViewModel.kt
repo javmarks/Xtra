@@ -33,6 +33,7 @@ import com.github.andreyasadchy.xtra.model.chat.TwitchEmote
 import com.github.andreyasadchy.xtra.model.chat.VideoChatMessage
 import com.github.andreyasadchy.xtra.model.ui.TranslatedChannel
 import com.github.andreyasadchy.xtra.model.helix.user.User
+import com.github.andreyasadchy.xtra.model.gql.chat.PinnedChatResponse
 import com.github.andreyasadchy.xtra.model.helix.chat.PinnedChatMessageResponse
 import com.github.andreyasadchy.xtra.repository.GraphQLRepository
 import com.github.andreyasadchy.xtra.repository.HelixRepository
@@ -223,43 +224,59 @@ class ChatViewModel(
 
     fun refreshPinnedChatMessage(channelId: String?) {
         if (channelId.isNullOrBlank()) return
-        val headers = TwitchApiHelper.getHelixHeaders(applicationContext)
-        val moderatorId = applicationContext.tokenPrefs().getString(C.USER_ID, null)
-        if (headers[C.HEADER_TOKEN].isNullOrBlank() || moderatorId.isNullOrBlank()) {
-            pinnedChatExpiryJob?.cancel()
-            pinnedChatMessage.value = null
-            return
-        }
         viewModelScope.launch {
-            try {
-                val response = helixRepository.getPinnedChatMessage(
-                    applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
-                    headers,
+            val networkLibrary = applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP)
+            val pinned = try {
+                // Twitch's viewer-facing web client exposes pinned chat through this public GQL query.
+                val response = graphQLRepository.loadPinnedChatMessage(
+                    networkLibrary,
+                    TwitchApiHelper.getGQLHeaders(applicationContext),
                     channelId,
-                    moderatorId,
                 )
-                val pinned = response.data.firstOrNull()
-                pinnedChatExpiryJob?.cancel()
-                pinnedChatMessage.value = pinned
-                val expiresAt = pinned?.expiresAt
-                val expiryTime = expiresAt?.let {
-                    runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
-                }
-                if (pinned != null && expiryTime != null) {
-                    val messageId = pinned.messageId
-                    pinnedChatExpiryJob = viewModelScope.launch {
-                        delay((expiryTime - System.currentTimeMillis()).coerceAtLeast(0L))
-                        if (pinnedChatMessage.value?.messageId == messageId) {
-                            pinnedChatMessage.value = null
-                            // Check whether another message was pinned after this one expired.
-                            refreshPinnedChatMessage(channelId)
-                        }
+                response.data?.channel?.pinnedChatMessages?.edges?.firstOrNull()?.node?.let { node ->
+                    node.pinnedMessage?.let { message ->
+                        PinnedChatMessageResponse.PinnedMessage(
+                            messageId = message.id,
+                            broadcasterId = channelId,
+                            senderName = message.sender?.displayName,
+                            pinnedByName = node.pinnedBy?.displayName,
+                            message = PinnedChatMessageResponse.Message(message.content?.text),
+                            pinnedAt = node.startsAt,
+                            expiresAt = node.endsAt,
+                        )
                     }
                 }
             } catch (_: Exception) {
-                // A viewer without the required moderator scope cannot read pinned chat.
-                pinnedChatExpiryJob?.cancel()
-                pinnedChatMessage.value = null
+                // Fall back to Helix for accounts that can moderate this channel.
+                val helixHeaders = TwitchApiHelper.getHelixHeaders(applicationContext)
+                val moderatorId = applicationContext.tokenPrefs().getString(C.USER_ID, null)
+                if (helixHeaders[C.HEADER_TOKEN].isNullOrBlank() || moderatorId.isNullOrBlank()) {
+                    null
+                } else {
+                    runCatching {
+                        helixRepository.getPinnedChatMessage(
+                            networkLibrary,
+                            helixHeaders,
+                            channelId,
+                            moderatorId,
+                        ).data.firstOrNull()
+                    }.getOrNull()
+                }
+            }
+            pinnedChatExpiryJob?.cancel()
+            pinnedChatMessage.value = pinned
+            val expiryTime = pinned?.expiresAt?.let {
+                runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
+            }
+            if (pinned != null && expiryTime != null) {
+                val messageId = pinned.messageId
+                pinnedChatExpiryJob = viewModelScope.launch {
+                    delay((expiryTime - System.currentTimeMillis()).coerceAtLeast(0L))
+                    if (pinnedChatMessage.value?.messageId == messageId) {
+                        pinnedChatMessage.value = null
+                        refreshPinnedChatMessage(channelId)
+                    }
+                }
             }
         }
     }
