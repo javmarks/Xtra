@@ -1255,24 +1255,30 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                             ensureSharedChatRenderers(users)
                         }
                     }
-                    val initialMessages = synchronized(sourceViewModel.chatMessages) {
-                        sourceViewModel.chatMessages.toList()
+                    val initialMessages = if (fragment.isMergedRendererOnly) {
+                        emptyList()
+                    } else {
+                        synchronized(sourceViewModel.chatMessages) {
+                            sourceViewModel.chatMessages.toList()
+                        }
                     }
                     merged.addSource(sourceAdapter, fragment.mergedChatChannelId, initialMessages)
-                    launch {
-                        sourceViewModel.newMessage.collect { result ->
-                            if (result.third > 0) merged.removeOldestMessages(sourceAdapter, result.third)
-                            merged.addMessage(sourceAdapter, result.first)
+                    if (!fragment.isMergedRendererOnly) {
+                        launch {
+                            sourceViewModel.newMessage.collect { result ->
+                                if (result.third > 0) merged.removeOldestMessages(sourceAdapter, result.third)
+                                merged.addMessage(sourceAdapter, result.first)
+                            }
                         }
-                    }
-                    launch {
-                        sourceViewModel.addMessages.collect { result ->
-                            merged.addOlderMessages(sourceAdapter, result.first)
+                        launch {
+                            sourceViewModel.addMessages.collect { result ->
+                                merged.addOlderMessages(sourceAdapter, result.first)
+                            }
                         }
-                    }
-                    launch {
-                        sourceViewModel.removeMessages.collect {
-                            merged.clearSource(sourceAdapter)
+                        launch {
+                            sourceViewModel.removeMessages.collect {
+                                merged.clearSource(sourceAdapter)
+                            }
                         }
                     }
                 }
