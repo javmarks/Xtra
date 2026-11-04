@@ -33,6 +33,7 @@ import com.github.andreyasadchy.xtra.model.chat.TwitchEmote
 import com.github.andreyasadchy.xtra.model.chat.VideoChatMessage
 import com.github.andreyasadchy.xtra.model.ui.TranslatedChannel
 import com.github.andreyasadchy.xtra.model.helix.user.User
+import com.github.andreyasadchy.xtra.model.helix.chat.PinnedChatMessageResponse
 import com.github.andreyasadchy.xtra.repository.GraphQLRepository
 import com.github.andreyasadchy.xtra.repository.HelixRepository
 import com.github.andreyasadchy.xtra.repository.PlayerRepository
@@ -134,6 +135,7 @@ class ChatViewModel(
     private val _streamInfo = MutableStateFlow<PubSubUtils.StreamInfo?>(null)
     val sharedChatParticipants = MutableStateFlow<List<String>>(emptyList())
     val channelPointsBalance = MutableStateFlow<Int?>(null)
+    val pinnedChatMessage = MutableStateFlow<PinnedChatMessageResponse.PinnedMessage?>(null)
     val sharedChatParticipantUsers = MutableStateFlow<List<User>>(emptyList())
     val streamInfo: StateFlow<PubSubUtils.StreamInfo?> = _streamInfo
     private val _playbackMessage = MutableStateFlow<PubSubUtils.PlaybackMessage?>(null)
@@ -172,6 +174,7 @@ class ChatViewModel(
             startLiveChat(channelId, channelLogin)
             loadSharedChatParticipants(channelId)
             refreshChannelPointsBalance(channelLogin)
+            refreshPinnedChatMessage(channelId)
             addChatter(channelName)
             loadEmotes(channelId, channelLogin)
             if (applicationContext.prefs().getBoolean(C.CHAT_RECENT, true)) {
@@ -205,6 +208,30 @@ class ChatViewModel(
                 }
                 channelPointsBalance.value = response.data?.community?.channel?.self?.communityPoints?.balance
             } catch (e: Exception) {
+            }
+        }
+    }
+
+    fun refreshPinnedChatMessage(channelId: String?) {
+        if (channelId.isNullOrBlank()) return
+        val headers = TwitchApiHelper.getHelixHeaders(applicationContext)
+        val moderatorId = applicationContext.tokenPrefs().getString(C.USER_ID, null)
+        if (headers[C.HEADER_TOKEN].isNullOrBlank() || moderatorId.isNullOrBlank()) {
+            pinnedChatMessage.value = null
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val response = helixRepository.getPinnedChatMessage(
+                    applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                    headers,
+                    channelId,
+                    moderatorId,
+                )
+                pinnedChatMessage.value = response.data.firstOrNull()
+            } catch (_: Exception) {
+                // A viewer without the required moderator scope cannot read pinned chat.
+                pinnedChatMessage.value = null
             }
         }
     }
