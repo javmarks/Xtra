@@ -82,6 +82,16 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         if (indexes.isNotEmpty()) notifyDataSetChanged()
     }
 
+    fun removeSource(source: ChatAdapter) {
+        if (!sources.remove(source)) return
+        sourcesByChannelId.entries.removeAll { it.value === source }
+        entries.forEach { entry ->
+            if (entry.renderer === source) entry.renderer = entry.owner
+        }
+        entries.removeAll { it.owner === source }
+        notifyDataSetChanged()
+    }
+
     fun clearSource(owner: ChatAdapter) {
         if (entries.removeAll { it.owner === owner }) notifyDataSetChanged()
     }
