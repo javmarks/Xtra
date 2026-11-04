@@ -112,7 +112,13 @@ class ChatAdapter(
         )
         holder.bind(chatMessage, result.builder)
         ChatAdapterUtils.loadImages(
-            fragment, holder.textView, { holder.bind(chatMessage, it) }, result.images, result.imagePaint, result.userName, result.userNameStartIndex,
+            fragment, holder.textView, {
+                // Image requests may finish after RecyclerView has reused this row for another message.
+                // Only update the row if it is still bound to the message that started the request.
+                if (holder.boundMessage === chatMessage) {
+                    holder.bind(chatMessage, it)
+                }
+            }, result.images, result.imagePaint, result.userName, result.userNameStartIndex,
             backgroundColor, imageLibrary, result.builder, result.translated, emoteSize, badgeSize, gifSize, emoteQuality, animateGifs, enableOverlayEmotes,
             chatMessage, savedColors, useReadableColors, isLightTheme, showLanguageDownloadDialog, true
         )
@@ -236,8 +242,11 @@ class ChatAdapter(
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
 
         val textView = itemView as TextView
+        var boundMessage: ChatMessage? = null
+            private set
 
         fun bind(chatMessage: ChatMessage, formattedMessage: SpannableStringBuilder) {
+            boundMessage = chatMessage
             textView.apply {
                 text = formattedMessage
                 textSize = messageTextSize
