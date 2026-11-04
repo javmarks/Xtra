@@ -16,6 +16,7 @@ import android.text.style.StyleSpan
 import android.text.style.URLSpan
 import android.util.Patterns
 import android.view.View
+import org.json.JSONObject
 import androidx.core.graphics.ColorUtils
 import androidx.fragment.app.Fragment
 import coil3.asDrawable
@@ -113,6 +114,13 @@ object ChatAdapterUtils {
                         prepareEmotes(chatMessage, chatMessage.systemMsg, builder, builderIndex, images, imageClick, useReadableColors, isLightTheme, enableOverlayEmotes, useBoldNames, loggedInUser, chatUrl, getEmoteBytes, savedColors, localTwitchEmotes, showPersonalEmotes, personalEmoteSets, null, thirdPartyEmotes, cheerEmotes, savedLocalTwitchEmotes, savedLocalCheerEmotes, savedLocalEmotes)
                     }
                     builderIndex = builder.length
+                    val subscriptionDetails = getSubscriptionNoticeDetails(chatMessage.msgId, chatMessage.fullMsg)
+                    if (!subscriptionDetails.isNullOrBlank()) {
+                        val detailsText = "\\n$subscriptionDetails"
+                        builder.append(detailsText)
+                        builder.setSpan(ForegroundColorSpan(getSavedColor("#B8A0D8", savedColors, useReadableColors, isLightTheme)), builderIndex, builderIndex + detailsText.length, SPAN_EXCLUSIVE_EXCLUSIVE)
+                        builderIndex = builder.length
+                    }
                     if (chatMessage.translatedMessage != null) {
                         translated = true
                         val result = addTranslation(chatMessage, builder, builderIndex, savedColors, useReadableColors, isLightTheme, showLanguageDownloadDialog, hideErrors)
@@ -411,6 +419,43 @@ object ChatAdapterUtils {
             }
         }
         return MessageResult(builder, images, imagePaint, userName, userNameStartIndex, translated)
+    }
+
+    private fun getSubscriptionNoticeDetails(noticeType: String?, fullMsg: String?): String? {
+        val type = noticeType?.removePrefix("shared_chat_") ?: return null
+        val json = try { fullMsg?.let { JSONObject(it) } } catch (_: Exception) { null } ?: return null
+        val tier = when (json.optString("sub_tier")) {
+            "1000" -> "Tier 1"
+            "2000" -> "Tier 2"
+            "3000" -> "Tier 3"
+            else -> null
+        }
+        val details = mutableListOf<String>()
+        if (tier != null && type in setOf("sub", "resub", "sub_gift", "community_sub_gift")) {
+            details.add(tier)
+        }
+        when (type) {
+            "resub" -> {
+                val resub = json.optJSONObject("resub")
+                val months = resub?.optInt("cumulative_months", 0) ?: 0
+                val streak = resub?.optInt("streak_months", 0) ?: 0
+                if (months > 0) details.add("$months months total")
+                if (streak > 0) details.add("$streak-month streak")
+            }
+            "sub_gift" -> {
+                val gift = json.optJSONObject("sub_gift")
+                val recipient = gift?.optString("recipient_user_name")?.takeIf { !it.isNullOrBlank() && it != "null" }
+                val duration = gift?.optInt("duration_months", 0) ?: 0
+                if (recipient != null) details.add("to $recipient")
+                if (duration > 0) details.add("$duration months")
+            }
+            "community_sub_gift" -> {
+                val gift = json.optJSONObject("community_sub_gift")
+                val total = gift?.optInt("total", 0) ?: 0
+                if (total > 0) details.add("$total gifted")
+            }
+        }
+        return details.takeIf { it.isNotEmpty() }?.joinToString(" • ")
     }
 
     private fun getSubscriptionNoticeLabel(noticeType: String?): String? {
