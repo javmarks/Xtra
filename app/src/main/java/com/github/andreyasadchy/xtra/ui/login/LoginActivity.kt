@@ -148,6 +148,11 @@ class LoginActivity : AppCompatActivity() {
                 "moderator:manage:banned_users", // moderation/bans
                 "moderator:manage:chat_messages", // moderation/chat
                 "moderator:manage:chat_settings", // chat/settings
+                "moderator:read:blocked_terms", // moderation/moderate logs
+                "moderator:read:unban_requests", // moderation/moderate logs
+                "moderator:read:warnings", // moderation/moderate logs
+                "moderator:read:moderators", // moderation/moderate logs
+                "moderator:read:vips", // moderation/moderate logs
                 "moderator:read:chatters", // chat/chatters
                 "moderator:read:followers", // channels/followers
                 "user:manage:chat_color", // chat/color
