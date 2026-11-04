@@ -76,6 +76,12 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
     private val viewModel: ChatViewModel by viewModels { ChatViewModelFactory }
     private var adapter: ChatAdapter? = null
 
+    val mergedChatViewModel: ChatViewModel
+        get() = viewModel
+
+    val mergedChatAdapter: ChatAdapter?
+        get() = adapter
+
     private var isChatTouched = false
     private var showChatStatus = false
     private var hasRecentEmotes = false
