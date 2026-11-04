@@ -153,7 +153,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.channelPointsBalance.collectLatest { balance ->
-                    binding.channelPointsBar.isVisible = balance != null && !isMergedRendererOnly
+                    binding.channelPointsBar.isVisible = (balance != null || viewModel.watchStreak.value != null) && !isMergedRendererOnly
                     binding.channelPointsBalance.text = balance?.let { NumberFormat.getIntegerInstance().format(it) } ?: ""
                 }
             }
@@ -176,6 +176,38 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     }.orEmpty()
                 }
             }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.watchStreak.collectLatest { streak ->
+                    binding.watchStreakIndicator.isVisible = streak != null
+                    binding.watchStreakIndicator.text = streak?.let { "🔥 ${it.count}" }.orEmpty()
+                    binding.channelPointsBar.isVisible = (viewModel.channelPointsBalance.value != null || streak != null) && !isMergedRendererOnly
+                }
+            }
+        }
+        binding.watchStreakIndicator.setOnClickListener {
+            val streak = viewModel.watchStreak.value ?: return@setOnClickListener
+            val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
+                ?: requireArguments().getString(KEY_CHANNEL_LOGIN) ?: "channel"
+            val expiry = streak.expiresAt?.let { value ->
+                runCatching {
+                    val time = java.time.Instant.parse(value).toEpochMilli()
+                    "Recovery window ends " + DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
+                }.getOrNull()
+            }
+            requireContext().getAlertDialogBuilder()
+                .setTitle("Watch Streak · #$channelName")
+                .setMessage(buildString {
+                    append("🔥  ")
+                    append(streak.count)
+                    append(if (streak.count == 1) " consecutive stream" else " consecutive streams")
+                    if (streak.threshold > 0) append("\nNext milestone: ${streak.threshold}")
+                    if (streak.bonusPoints > 0) append("\nMilestone bonus: +${NumberFormat.getIntegerInstance().format(streak.bonusPoints)} Channel Points")
+                    expiry?.let { append("\n$it") }
+                })
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
         }
         binding.pinnedChatBar.setOnClickListener {
             val pinned = viewModel.pinnedChatMessage.value ?: return@setOnClickListener

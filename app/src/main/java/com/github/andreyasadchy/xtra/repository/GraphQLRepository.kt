@@ -76,6 +76,7 @@ import com.github.andreyasadchy.xtra.model.gql.chat.GlobalCheerEmotesResponse
 import com.github.andreyasadchy.xtra.model.gql.chat.ModeratorsResponse
 import com.github.andreyasadchy.xtra.model.gql.chat.PinnedChatResponse
 import com.github.andreyasadchy.xtra.model.gql.chat.UserEmotesResponse
+import com.github.andreyasadchy.xtra.model.gql.chat.WatchStreakResponse
 import com.github.andreyasadchy.xtra.model.gql.chat.VipsResponse
 import com.github.andreyasadchy.xtra.model.gql.clip.ClipDataResponse
 import com.github.andreyasadchy.xtra.model.gql.clip.ClipUrlsResponse
@@ -1497,6 +1498,23 @@ class GraphQLRepository(
             }
         }.toString()
         json.decodeFromString<ChannelPointContextResponse>(sendPersistedQuery(networkLibrary, headers, body))
+    }
+
+    suspend fun loadWatchStreak(networkLibrary: String?, headers: Map<String, String>, channelId: String?): WatchStreakResponse = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            putJsonObject("extensions") {
+                putJsonObject("persistedQuery") {
+                    put("sha256Hash", "0b1471876d7647993731b9e3c6a13bf304c67fb31d07f06a945d42286ee377c4")
+                    put("version", 1)
+                }
+            }
+            put("operationName", "RewardList")
+            putJsonObject("variables") {
+                put("channelID", channelId)
+                put("shouldIncludeAllSuspendedStreaks", false)
+            }
+        }.toString()
+        json.decodeFromString<WatchStreakResponse>(sendPersistedQuery(networkLibrary, headers, body))
     }
 
     suspend fun loadClaimPoints(networkLibrary: String?, headers: Map<String, String>, channelId: String?, claimId: String?): ErrorResponse = withContext(Dispatchers.IO) {

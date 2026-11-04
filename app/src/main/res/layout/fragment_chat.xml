@@ -161,6 +161,24 @@
                 android:layout_marginStart="8dp"
                 android:text="Channel Points"
                 android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+            <TextView
+                android:id="@+id/watchStreakIndicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingStart="8dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="4dp"
+                android:textColor="?attr/colorPrimary"
+                android:textAppearance="?attr/textAppearanceTitleSmall"
+                android:visibility="gone"
+                tools:text="🔥 4"
+                tools:visibility="visible" />
         </LinearLayout>
 
         <LinearLayout

@@ -16,6 +16,7 @@ import com.github.andreyasadchy.xtra.R
 import com.github.andreyasadchy.xtra.XtraApp
 import com.github.andreyasadchy.xtra.model.chat.Badge
 import com.github.andreyasadchy.xtra.model.chat.ChannelPointReward
+import com.github.andreyasadchy.xtra.model.chat.WatchStreakInfo
 import com.github.andreyasadchy.xtra.model.chat.ChatMessage
 import com.github.andreyasadchy.xtra.model.chat.Chatter
 import com.github.andreyasadchy.xtra.model.chat.CheerEmote
@@ -142,6 +143,7 @@ class ChatViewModel(
     private val _streamInfo = MutableStateFlow<PubSubUtils.StreamInfo?>(null)
     val sharedChatParticipants = MutableStateFlow<List<String>>(emptyList())
     val channelPointsBalance = MutableStateFlow<Int?>(null)
+    val watchStreak = MutableStateFlow<WatchStreakInfo?>(null)
     val pinnedChatMessage = MutableStateFlow<PinnedChatMessageResponse.PinnedMessage?>(null)
     val moderationLogs = MutableStateFlow<List<String>>(emptyList())
     val sharedChatParticipantUsers = MutableStateFlow<List<User>>(emptyList())
@@ -184,6 +186,7 @@ class ChatViewModel(
             startLiveChat(channelId, channelLogin)
             loadSharedChatParticipants(channelId)
             refreshChannelPointsBalance(channelLogin)
+            refreshWatchStreak(channelId)
             refreshPinnedChatMessage(channelId)
             addChatter(channelName)
             loadEmotes(channelId, channelLogin)
@@ -218,6 +221,44 @@ class ChatViewModel(
                 }
                 channelPointsBalance.value = response.data?.community?.channel?.self?.communityPoints?.balance
             } catch (e: Exception) {
+            }
+        }
+    }
+
+    private fun refreshWatchStreak(channelId: String?) {
+        if (channelId.isNullOrBlank()) return
+        val headers = TwitchApiHelper.getGQLHeaders(applicationContext, true).toMutableMap().apply {
+            put(C.HEADER_CLIENT_ID, "kimne78kx3ncx6brgo4mv6wki5h1ko")
+        }
+        if (headers[C.HEADER_TOKEN].isNullOrBlank()) return
+        viewModelScope.launch {
+            try {
+                val response = graphQLRepository.loadWatchStreak(
+                    applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                    headers,
+                    channelId,
+                )
+                if (applicationContext.prefs().getBoolean(C.ENABLE_INTEGRITY, false)) {
+                    response.errors?.find { it.message == C.FAILED_INTEGRITY_CHECK }?.let {
+                        integrity.emit("refresh")
+                        return@launch
+                    }
+                }
+                val milestone = response.data?.channel?.self?.watchStreakMilestone
+                val count = milestone?.watchStreakMilestone?.value?.toIntOrNull()
+                watchStreak.value = if (count != null) {
+                    WatchStreakInfo(
+                        count = count,
+                        threshold = milestone.watchStreakThreshold,
+                        bonusPoints = milestone.watchStreakCopoBonus,
+                        state = milestone.state,
+                        expiresAt = milestone.expiresAt,
+                    )
+                } else {
+                    null
+                }
+            } catch (_: Exception) {
+                watchStreak.value = null
             }
         }
     }
