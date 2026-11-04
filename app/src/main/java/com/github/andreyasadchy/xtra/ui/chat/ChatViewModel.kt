@@ -198,13 +198,17 @@ class ChatViewModel(
                     }
                     .distinct()
                 sharedChatParticipants.value = participantIds
-                sharedChatParticipantUsers.value = if (participantIds.isNotEmpty()) {
-                    helixRepository.getUsers(
-                        applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
-                        TwitchApiHelper.getHelixHeaders(applicationContext),
-                        ids = participantIds
-                    ).data
-                } else {
+                sharedChatParticipantUsers.value = try {
+                    if (participantIds.isNotEmpty()) {
+                        helixRepository.getUsers(
+                            applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                            TwitchApiHelper.getHelixHeaders(applicationContext),
+                            ids = participantIds
+                        ).data
+                    } else {
+                        emptyList()
+                    }
+                } catch (_: Exception) {
                     emptyList()
                 }
             } catch (_: Exception) {
