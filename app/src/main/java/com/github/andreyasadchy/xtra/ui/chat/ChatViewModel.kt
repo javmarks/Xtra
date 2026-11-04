@@ -91,6 +91,8 @@ class ChatViewModel(
     private var chatReadJob: Job? = null
     private var chatWriteJob: Job? = null
     private var eventSub: EventSubWebSocket? = null
+    private var moderationEventSub: EventSubWebSocket? = null
+    private var moderationEventSubJob: Job? = null
     private var hermesWebSocket: HermesWebSocket? = null
     private var pubSubJob: Job? = null
     private var stvEventApi: STVEventApiWebSocket? = null
