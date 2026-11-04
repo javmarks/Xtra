@@ -1222,7 +1222,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     val initialMessages = synchronized(sourceViewModel.chatMessages) {
                         sourceViewModel.chatMessages.toList()
                     }
-                    merged.addSource(sourceAdapter, initialMessages)
+                    merged.addSource(sourceAdapter, fragment.mergedChatChannelId, initialMessages)
                     launch {
                         sourceViewModel.newMessage.collect { result ->
                             if (result.third > 0) merged.removeOldestMessages(sourceAdapter, result.third)
