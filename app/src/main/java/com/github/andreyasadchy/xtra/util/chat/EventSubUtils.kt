@@ -70,8 +70,8 @@ object EventSubUtils {
             timestamp = timestamp?.let { Instant.parseOrNull(it)?.toEpochMilliseconds()?.takeIf { ms -> ms > 0 } },
             fullMsg = json.toString(),
             roomId = if (!json.isNull("broadcaster_user_id")) json.optString("broadcaster_user_id").takeIf { it.isNotBlank() } else null,
-            sourceRoomId = if (!json.isNull("source_broadcaster_user_id")) json.optString("source_broadcaster_user_id").takeIf { it.isNotBlank() } else null
-                ?: if (!json.isNull("broadcaster_user_id")) json.optString("broadcaster_user_id").takeIf { it.isNotBlank() } else null,
+            sourceRoomId = if (!json.isNull("source_broadcaster_user_id")) json.optString("source_broadcaster_user_id").takeIf { it.isNotBlank() }
+                else if (!json.isNull("broadcaster_user_id")) json.optString("broadcaster_user_id").takeIf { it.isNotBlank() } else null,
             sourceMessageId = if (!json.isNull("source_message_id")) json.optString("source_message_id").takeIf { it.isNotBlank() } else null,
             isSourceOnly = if (json.has("is_source_only") && !json.isNull("is_source_only")) json.optBoolean("is_source_only") else null
         )
@@ -109,7 +109,7 @@ object EventSubUtils {
                 }
             }
             val badgesList = mutableListOf<Badge>()
-            val badges = json.optJSONArray("badges")
+            val badges = json.optJSONArray("source_badges") ?: json.optJSONArray("badges")
             if (badges != null) {
                 for (i in 0 until badges.length()) {
                     val badge = badges.get(i) as? JSONObject
@@ -136,8 +136,8 @@ object EventSubUtils {
                 timestamp = timestamp?.let { Instant.parseOrNull(it)?.toEpochMilliseconds()?.takeIf { ms -> ms > 0 } },
                 fullMsg = json.toString(),
                 roomId = if (!json.isNull("broadcaster_user_id")) json.optString("broadcaster_user_id").takeIf { it.isNotBlank() } else null,
-                sourceRoomId = if (!json.isNull("source_broadcaster_user_id")) json.optString("source_broadcaster_user_id").takeIf { it.isNotBlank() } else null
-                    ?: if (!json.isNull("broadcaster_user_id")) json.optString("broadcaster_user_id").takeIf { it.isNotBlank() } else null,
+                sourceRoomId = if (!json.isNull("source_broadcaster_user_id")) json.optString("source_broadcaster_user_id").takeIf { it.isNotBlank() }
+                    else if (!json.isNull("broadcaster_user_id")) json.optString("broadcaster_user_id").takeIf { it.isNotBlank() } else null,
                 sourceMessageId = if (!json.isNull("source_message_id")) json.optString("source_message_id").takeIf { it.isNotBlank() } else null,
                 isSourceOnly = if (json.has("is_source_only") && !json.isNull("is_source_only")) json.optBoolean("is_source_only") else null
             )
@@ -149,7 +149,12 @@ object EventSubUtils {
                 userName = if (!json.isNull("chatter_user_name")) json.optString("chatter_user_name").takeIf { it.isNotBlank() } else null,
                 systemMsg = systemMsg,
                 timestamp = timestamp?.let { Instant.parseOrNull(it)?.toEpochMilliseconds()?.takeIf { ms -> ms > 0 } },
-                fullMsg = json.toString()
+                fullMsg = json.toString(),
+                roomId = if (!json.isNull("broadcaster_user_id")) json.optString("broadcaster_user_id").takeIf { it.isNotBlank() } else null,
+                sourceRoomId = if (!json.isNull("source_broadcaster_user_id")) json.optString("source_broadcaster_user_id").takeIf { it.isNotBlank() }
+                    else if (!json.isNull("broadcaster_user_id")) json.optString("broadcaster_user_id").takeIf { it.isNotBlank() } else null,
+                sourceMessageId = if (!json.isNull("source_message_id")) json.optString("source_message_id").takeIf { it.isNotBlank() } else null,
+                isSourceOnly = if (json.has("is_source_only") && !json.isNull("is_source_only")) json.optBoolean("is_source_only") else null
             )
         }
     }
