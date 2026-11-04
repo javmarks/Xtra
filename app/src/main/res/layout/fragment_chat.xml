@@ -12,6 +12,26 @@
         tools:visibility="visible">
 
         <LinearLayout
+            android:id="@+id/moderationLogsBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="end|center_vertical"
+            android:paddingStart="6dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="2dp"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/moderationLogsButton"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="36dp"
+                android:text="Mod Logs" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/pinnedChatBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
