@@ -1,5 +1,7 @@
 package com.github.andreyasadchy.xtra.ui.chat
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
@@ -10,6 +12,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
+import android.widget.Toast
 import android.widget.LinearLayout
 import android.widget.MultiAutoCompleteTextView
 import android.widget.TextView
@@ -160,9 +163,56 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 viewModel.pinnedChatMessage.collectLatest { pinned ->
                     binding.pinnedChatBar.isVisible = pinned != null && !isMergedRendererOnly
                     binding.pinnedChatText.text = pinned?.message?.text.orEmpty()
-                    binding.pinnedChatBy.text = pinned?.let { "Pinned by ${it.pinnedByName ?: it.pinnedByLogin ?: "moderator"}" }.orEmpty()
+                    binding.pinnedChatBy.text = pinned?.let {
+                        val pinnedBy = it.pinnedByName ?: it.pinnedByLogin ?: "moderator"
+                        val sender = it.senderName ?: it.senderLogin ?: "viewer"
+                        "Pinned by $pinnedBy · Sent by $sender"
+                    }.orEmpty()
+                    binding.pinnedChatExpiry.text = pinned?.expiresAt?.let { expiry ->
+                        runCatching {
+                            val time = java.time.Instant.parse(expiry).toEpochMilli()
+                            "Expires " + DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
+                        }.getOrNull()
+                    }.orEmpty()
                 }
             }
+        }
+        binding.pinnedChatBar.setOnClickListener {
+            val pinned = viewModel.pinnedChatMessage.value ?: return@setOnClickListener
+            val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
+                ?: requireArguments().getString(KEY_CHANNEL_LOGIN) ?: "channel"
+            val pinnedBy = pinned.pinnedByName ?: pinned.pinnedByLogin ?: "moderator"
+            val sender = pinned.senderName ?: pinned.senderLogin ?: "viewer"
+            val expiry = pinned.expiresAt?.let { value ->
+                runCatching {
+                    val time = java.time.Instant.parse(value).toEpochMilli()
+                    "Expires " + DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
+                }.getOrNull()
+            }
+            requireContext().getAlertDialogBuilder()
+                .setTitle("Pinned message · #$channelName")
+                .setMessage(buildString {
+                    append(pinned.message?.text.orEmpty())
+                    append("\\n\\nSent by $sender")
+                    append("\\nPinned by $pinnedBy")
+                    expiry?.let { append("\\n$it") }
+                })
+                .setPositiveButton("Copy message") { _, _ ->
+                    val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Pinned chat message", pinned.message?.text.orEmpty()))
+                    Toast.makeText(requireContext(), "Pinned message copied", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+        binding.pinnedChatBar.setOnLongClickListener {
+            val message = viewModel.pinnedChatMessage.value?.message?.text.orEmpty()
+            if (message.isNotBlank()) {
+                val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Pinned chat message", message))
+                Toast.makeText(requireContext(), "Pinned message copied", Toast.LENGTH_SHORT).show()
+                true
+            } else false
         }
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
