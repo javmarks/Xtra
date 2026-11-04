@@ -74,6 +74,7 @@ import com.github.andreyasadchy.xtra.model.gql.chat.ChannelPointContextResponse
 import com.github.andreyasadchy.xtra.model.gql.chat.EmoteCardResponse
 import com.github.andreyasadchy.xtra.model.gql.chat.GlobalCheerEmotesResponse
 import com.github.andreyasadchy.xtra.model.gql.chat.ModeratorsResponse
+import com.github.andreyasadchy.xtra.model.gql.chat.PinnedChatResponse
 import com.github.andreyasadchy.xtra.model.gql.chat.UserEmotesResponse
 import com.github.andreyasadchy.xtra.model.gql.chat.VipsResponse
 import com.github.andreyasadchy.xtra.model.gql.clip.ClipDataResponse
@@ -1459,6 +1460,23 @@ class GraphQLRepository(
             }
         }.toString()
         json.decodeFromString<ErrorResponse>(sendPersistedQuery(networkLibrary, headers, body))
+    }
+
+    suspend fun loadPinnedChatMessage(networkLibrary: String?, headers: Map<String, String>, channelId: String): PinnedChatResponse = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            putJsonObject("extensions") {
+                putJsonObject("persistedQuery") {
+                    put("sha256Hash", "2d099d4c9b6af80a07d8440140c4f3dbb04d516b35c401aab7ce8f60765308d5")
+                    put("version", 1)
+                }
+            }
+            put("operationName", "GetPinnedChat")
+            putJsonObject("variables") {
+                put("channelID", channelId)
+                put("count", 1)
+            }
+        }.toString()
+        json.decodeFromString<PinnedChatResponse>(sendPersistedQuery(networkLibrary, headers, body))
     }
 
     suspend fun loadChannelPointsContext(networkLibrary: String?, headers: Map<String, String>, channelLogin: String?): ChannelPointContextResponse = withContext(Dispatchers.IO) {
