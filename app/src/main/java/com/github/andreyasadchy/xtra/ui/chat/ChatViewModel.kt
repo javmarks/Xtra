@@ -133,6 +133,7 @@ class ChatViewModel(
     var predictionTimer: Timer? = null
     private val _streamInfo = MutableStateFlow<PubSubUtils.StreamInfo?>(null)
     val sharedChatParticipants = MutableStateFlow<List<String>>(emptyList())
+    val channelPointsBalance = MutableStateFlow<Int?>(null)
     val sharedChatParticipantUsers = MutableStateFlow<List<User>>(emptyList())
     val streamInfo: StateFlow<PubSubUtils.StreamInfo?> = _streamInfo
     private val _playbackMessage = MutableStateFlow<PubSubUtils.PlaybackMessage?>(null)
@@ -170,6 +171,7 @@ class ChatViewModel(
             this.streamId = streamId
             startLiveChat(channelId, channelLogin)
             loadSharedChatParticipants(channelId)
+            refreshChannelPointsBalance(channelLogin)
             addChatter(channelName)
             loadEmotes(channelId, channelLogin)
             if (applicationContext.prefs().getBoolean(C.CHAT_RECENT, true)) {
@@ -180,6 +182,29 @@ class ChatViewModel(
                             !TwitchApiHelper.getHelixHeaders(applicationContext)[C.HEADER_TOKEN].isNullOrBlank())
             if (isLoggedIn) {
                 loadUserEmotes(channelId)
+            }
+        }
+    }
+
+    private fun refreshChannelPointsBalance(channelLogin: String?) {
+        if (channelLogin.isNullOrBlank()) return
+        val headers = TwitchApiHelper.getGQLHeaders(applicationContext, true)
+        if (headers[C.HEADER_TOKEN].isNullOrBlank()) return
+        viewModelScope.launch {
+            try {
+                val response = graphQLRepository.loadChannelPointsContext(
+                    applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                    headers,
+                    channelLogin,
+                )
+                if (applicationContext.prefs().getBoolean(C.ENABLE_INTEGRITY, false)) {
+                    response.errors?.find { it.message == C.FAILED_INTEGRITY_CHECK }?.let {
+                        integrity.emit("refresh")
+                        return@launch
+                    }
+                }
+                channelPointsBalance.value = response.data?.community?.channel?.self?.communityPoints?.balance
+            } catch (e: Exception) {
             }
         }
     }
@@ -1486,11 +1511,19 @@ class ChatViewModel(
         }
 
         override suspend fun onPointsEarned(message: JSONObject) {
-            if (notifyPoints) {
-                val result = PubSubUtils.parsePointsEarned(message)
-                val points = result.first
-                val messageChannelId = result.second
-                if (channelId == messageChannelId) {
+            val result = PubSubUtils.parsePointsEarned(message)
+            val points = result.first
+            val messageChannelId = result.second
+            if (channelId == messageChannelId) {
+                val gained = points.pointsGained
+                if (gained != null) {
+                    val current = channelPointsBalance.value
+                    if (current != null) channelPointsBalance.value = current + gained
+                    else refreshChannelPointsBalance(channelLogin)
+                } else {
+                    refreshChannelPointsBalance(channelLogin)
+                }
+                if (notifyPoints) {
                     onMessage(ChatMessage(
                         type = ChatMessage.NOTICE_MESSAGE,
                         systemMsg = ContextCompat.getString(applicationContext, R.string.points_earned).format(points.pointsGained),
@@ -1502,29 +1535,29 @@ class ChatViewModel(
         }
 
         override suspend fun onClaimAvailable() {
-            if (collectPoints) {
-                if (!gqlHeaders[C.HEADER_TOKEN].isNullOrBlank()) {
-                    viewModelScope.launch {
-                        try {
-                            val response = graphQLRepository.loadChannelPointsContext(networkLibrary, gqlHeaders, channelLogin)
+            if (collectPoints && !gqlHeaders[C.HEADER_TOKEN].isNullOrBlank()) {
+                viewModelScope.launch {
+                    try {
+                        val contextResponse = graphQLRepository.loadChannelPointsContext(networkLibrary, gqlHeaders, channelLogin)
+                        if (enableIntegrity) {
+                            contextResponse.errors?.find { it.message == C.FAILED_INTEGRITY_CHECK }?.let {
+                                integrity.emit("refresh")
+                                return@launch
+                            }
+                        }
+                        val pointsContext = contextResponse.data?.community?.channel?.self?.communityPoints
+                        channelPointsBalance.value = pointsContext?.balance
+                        pointsContext?.availableClaim?.id?.let { claimId ->
+                            val claimResponse = graphQLRepository.loadClaimPoints(networkLibrary, gqlHeaders, channelId, claimId)
                             if (enableIntegrity) {
-                                response.errors?.find { it.message == C.FAILED_INTEGRITY_CHECK }?.let {
+                                claimResponse.errors?.find { it.message == C.FAILED_INTEGRITY_CHECK }?.let {
                                     integrity.emit("refresh")
                                     return@launch
                                 }
                             }
-                            response.data?.community?.channel?.self?.communityPoints?.availableClaim?.id?.let { claimId ->
-                                val response = graphQLRepository.loadClaimPoints(networkLibrary, gqlHeaders, channelId, claimId)
-                                if (enableIntegrity) {
-                                    response.errors?.find { it.message == C.FAILED_INTEGRITY_CHECK }?.let {
-                                        integrity.emit("refresh")
-                                        return@launch
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-
+                            refreshChannelPointsBalance(channelLogin)
                         }
+                    } catch (e: Exception) {
                     }
                 }
             }
