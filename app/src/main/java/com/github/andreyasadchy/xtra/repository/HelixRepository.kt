@@ -10,6 +10,7 @@ import com.github.andreyasadchy.xtra.model.helix.chat.CheerEmotesResponse
 import com.github.andreyasadchy.xtra.model.helix.chat.EmoteSetsResponse
 import com.github.andreyasadchy.xtra.model.helix.chat.UserEmotesResponse
 import com.github.andreyasadchy.xtra.model.helix.chat.SharedChatSessionResponse
+import com.github.andreyasadchy.xtra.model.helix.chat.PinnedChatMessageResponse
 import com.github.andreyasadchy.xtra.model.helix.clip.ClipsResponse
 import com.github.andreyasadchy.xtra.model.helix.follow.FollowsResponse
 import com.github.andreyasadchy.xtra.model.helix.follower.FollowersResponse
