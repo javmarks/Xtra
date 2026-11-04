@@ -130,6 +130,7 @@ class ChatViewModel(
     val predictionSecondsLeft = MutableStateFlow<Int?>(null)
     var predictionTimer: Timer? = null
     private val _streamInfo = MutableStateFlow<PubSubUtils.StreamInfo?>(null)
+    val sharedChatParticipants = MutableStateFlow<List<String>>(emptyList())
     val streamInfo: StateFlow<PubSubUtils.StreamInfo?> = _streamInfo
     private val _playbackMessage = MutableStateFlow<PubSubUtils.PlaybackMessage?>(null)
     val playbackMessage: StateFlow<PubSubUtils.PlaybackMessage?> = _playbackMessage
@@ -165,6 +166,7 @@ class ChatViewModel(
             messageLimit = applicationContext.prefs().getInt(C.CHAT_LIMIT, 600)
             this.streamId = streamId
             startLiveChat(channelId, channelLogin)
+            loadSharedChatParticipants(channelId)
             addChatter(channelName)
             loadEmotes(channelId, channelLogin)
             if (applicationContext.prefs().getBoolean(C.CHAT_RECENT, true)) {
@@ -175,6 +177,26 @@ class ChatViewModel(
                             !TwitchApiHelper.getHelixHeaders(applicationContext)[C.HEADER_TOKEN].isNullOrBlank())
             if (isLoggedIn) {
                 loadUserEmotes(channelId)
+            }
+        }
+    }
+
+    private fun loadSharedChatParticipants(channelId: String?) {
+        if (channelId.isNullOrBlank()) return
+        viewModelScope.launch {
+            try {
+                val response = helixRepository.getSharedChatSession(
+                    applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                    TwitchApiHelper.getHelixHeaders(applicationContext),
+                    channelId,
+                )
+                sharedChatParticipants.value = response.data
+                    .flatMap { session ->
+                        session.participants.mapNotNull { it.broadcasterId }
+                    }
+                    .distinct()
+            } catch (_: Exception) {
+                sharedChatParticipants.value = emptyList()
             }
         }
     }
