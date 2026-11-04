@@ -450,6 +450,61 @@ class HelixRepository(
         }
     }
 
+    suspend fun getPinnedChatMessage(networkLibrary: String?, headers: Map<String, String>, broadcasterId: String?, moderatorId: String?): PinnedChatMessageResponse = withContext(Dispatchers.IO) {
+        val url = "https://api.twitch.tv/helix/chat/pins".toUri().buildUpon().apply {
+            broadcasterId?.let { appendQueryParameter("broadcaster_id", it) }
+            moderatorId?.let { appendQueryParameter("moderator_id", it) }
+        }.build().toString()
+        when {
+            networkLibrary == C.HTTP_ENGINE && httpEngine.value != null -> @SuppressLint("NewApi") {
+                val response = suspendCancellableCoroutine { continuation ->
+                    val timeout = NetworkUtils.HttpEngineTimeout()
+                    val request = httpEngine.value!!.newUrlRequestBuilder(
+                        url,
+                        cronetExecutor.value,
+                        NetworkUtils.ByteArrayUrlCallback(continuation, timeout)
+                    ).apply {
+                        headers.forEach { addHeader(it.key, it.value) }
+                    }.build()
+                    timeout.start(request, continuation)
+                    request.start()
+                    continuation.invokeOnCancellation {
+                        request.cancel()
+                        timeout.stop()
+                    }
+                }
+                json.decodeFromString<PinnedChatMessageResponse>(response.body.decodeToString())
+            }
+            networkLibrary == C.CRONET && cronetEngine.value != null -> {
+                val response = suspendCancellableCoroutine { continuation ->
+                    val timeout = NetworkUtils.CronetTimeout()
+                    val request = cronetEngine.value!!.newUrlRequestBuilder(
+                        url,
+                        NetworkUtils.ByteArrayCronetCallback(continuation, timeout),
+                        cronetExecutor.value
+                    ).apply {
+                        headers.forEach { addHeader(it.key, it.value) }
+                    }.build()
+                    timeout.start(request, continuation)
+                    request.start()
+                    continuation.invokeOnCancellation {
+                        request.cancel()
+                        timeout.stop()
+                    }
+                }
+                json.decodeFromString<PinnedChatMessageResponse>(response.body.decodeToString())
+            }
+            else -> {
+                okHttpClient.value.newCall(Request.Builder().apply {
+                    url(url)
+                    headers(headers.toHeaders())
+                }.build()).executeAsync().use { response ->
+                    json.decodeFromString<PinnedChatMessageResponse>(response.body.string())
+                }
+            }
+        }
+    }
+
     suspend fun getSharedChatSession(networkLibrary: String?, headers: Map<String, String>, broadcasterId: String?): SharedChatSessionResponse = withContext(Dispatchers.IO) {
         val url = "https://api.twitch.tv/helix/shared_chat/session".toUri().buildUpon().apply {
             broadcasterId?.let { appendQueryParameter("broadcaster_id", it) }
