@@ -107,6 +107,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private var isAllChatsSelected = false
     private val observedChatSources = mutableSetOf<ChatFragment>()
     private val chatSourceJobs = mutableMapOf<ChatFragment, Job>()
+    private val sharedChatRendererFragments = mutableMapOf<String, ChatFragment>()
     protected open val playbackService: BasePlaybackService? = null
     protected var started = false
 
@@ -1146,9 +1147,32 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     }
 
     private fun getChatFragments(): List<ChatFragment> {
-        val fragments = childFragmentManager.fragments.filterIsInstance<ChatFragment>().toMutableList()
-        chatFragment?.let { if (it !in fragments) fragments.add(it) }
+        val fragments = childFragmentManager.fragments
+            .filterIsInstance<ChatFragment>()
+            .filterNot { it.isMergedRendererOnly }
+            .toMutableList()
+        chatFragment?.let { if (!it.isMergedRendererOnly && it !in fragments) fragments.add(it) }
         return fragments
+    }
+
+    private fun ensureSharedChatRenderers(users: List<User>) {
+        val openChannelIds = getChatFragments().mapNotNull { it.mergedChatChannelId }.toSet()
+        users.forEach { user ->
+            val channelId = user.id?.takeIf { it.isNotBlank() } ?: return@forEach
+            if (channelId in openChannelIds || sharedChatRendererFragments.containsKey(channelId)) return@forEach
+            val login = user.login?.takeIf { it.isNotBlank() } ?: return@forEach
+            val tag = "shared_renderer_$channelId"
+            val existing = childFragmentManager.findFragmentByTag(tag) as? ChatFragment
+            val renderer = existing ?: ChatFragment.newRendererOnlyInstance(channelId, login, user.name ?: login)
+            sharedChatRendererFragments[channelId] = renderer
+            if (!renderer.isAdded) {
+                childFragmentManager.beginTransaction()
+                    .add(R.id.chatFragmentContainer, renderer, tag)
+                    .hide(renderer)
+                    .commit()
+            }
+            observeChatSource(renderer)
+        }
     }
 
     private fun refreshChatTabs(extraFragment: ChatFragment? = null) {
@@ -1226,6 +1250,11 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     val sourceViewModel = fragment.mergedChatViewModel
                     ensureMergedChatView()
                     val merged = mergedChatAdapter ?: return@repeatOnLifecycle
+                    launch {
+                        sourceViewModel.sharedChatParticipantUsers.collect { users ->
+                            ensureSharedChatRenderers(users)
+                        }
+                    }
                     val initialMessages = synchronized(sourceViewModel.chatMessages) {
                         sourceViewModel.chatMessages.toList()
                     }
@@ -2548,6 +2577,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         chatSourceJobs.values.forEach { it.cancel() }
         chatSourceJobs.clear()
         observedChatSources.clear()
+        sharedChatRendererFragments.clear()
         mergedChatRecyclerView = null
         mergedChatAdapter = null
         isAllChatsSelected = false
