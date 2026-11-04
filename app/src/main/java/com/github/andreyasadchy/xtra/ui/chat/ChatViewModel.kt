@@ -1493,7 +1493,7 @@ class ChatViewModel(
                 if (reason != null) append(" · ").append(reason)
                 if (sourceChannel != null) append(" · via ").append(sourceChannel)
             }
-            onMessage(ChatMessage(type = ChatMessage.NOTICE_MESSAGE, systemMsg = details, timestamp = timestamp, fullMsg = event.toString(), sourceRoomId = event.optString("source_broadcaster_user_id").takeIf { it.isNotBlank() } ?: channelId, roomId = channelId))
+            onMessage(ChatMessage(type = ChatMessage.NOTICE_MESSAGE, systemMsg = details, timestamp = timestamp?.let { Instant.parseOrNull(it)?.toEpochMilliseconds()?.takeIf { ms -> ms > 0 } }, fullMsg = event.toString(), sourceRoomId = event.optString("source_broadcaster_user_id").takeIf { it.isNotBlank() && it != "null" } ?: channelId, roomId = channelId))
         }
 
         override suspend fun onDisconnect(message: String, fullMsg: String?) {
