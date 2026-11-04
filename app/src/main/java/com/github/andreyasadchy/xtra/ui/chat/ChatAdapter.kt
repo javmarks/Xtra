@@ -98,6 +98,10 @@ class ChatAdapter(
         val chatMessage = synchronized(messages) {
             messages.getOrNull(position)
         } ?: return
+        bindMessage(holder, chatMessage)
+    }
+
+    fun bindMessage(holder: ViewHolder, chatMessage: ChatMessage) {
         val result = ChatAdapterUtils.prepareChatMessage(
             chatMessage, fragment.requireContext(), holder.textView, enableTimestamps, timestampFormat, firstMsgVisibility, firstChatMsg,
             redeemedChatMsg, redeemedNoMsg, rewardChatMsg, replyMessage, null, useRandomColors, random, useReadableColors, isLightTheme,
