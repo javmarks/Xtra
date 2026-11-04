@@ -1213,9 +1213,11 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         if (!observedChatSources.add(fragment)) return
         fragment.viewLifecycleOwnerLiveData.observe(viewLifecycleOwner) { owner ->
             if (owner == null || chatSourceJobs.containsKey(fragment)) return@observe
-            chatSourceJobs[fragment] = owner.lifecycleScope.launch {
+            var attachedAdapter: ChatAdapter? = null
+            val job = owner.lifecycleScope.launch {
                 owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                     val sourceAdapter = fragment.mergedChatAdapter ?: return@repeatOnLifecycle
+                    attachedAdapter = sourceAdapter
                     val sourceViewModel = fragment.mergedChatViewModel
                     ensureMergedChatView()
                     val merged = mergedChatAdapter ?: return@repeatOnLifecycle
@@ -1239,6 +1241,13 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                             merged.clearSource(sourceAdapter)
                         }
                     }
+                }
+            }
+            chatSourceJobs[fragment] = job
+            job.invokeOnCompletion {
+                if (chatSourceJobs[fragment] === job) {
+                    chatSourceJobs.remove(fragment)
+                    attachedAdapter?.let { mergedChatAdapter?.removeSource(it) }
                 }
             }
         }
