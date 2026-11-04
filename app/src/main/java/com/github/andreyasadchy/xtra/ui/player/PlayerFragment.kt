@@ -1254,7 +1254,17 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     val merged = mergedChatAdapter ?: return@repeatOnLifecycle
                     launch {
                         sourceViewModel.sharedChatParticipantUsers.collect { users ->
-                            ensureSharedChatRenderers(users)
+                            ensureSharedChatRenderers(users.map { user ->
+                                User(
+                                    id = user.id,
+                                    login = user.login,
+                                    name = user.displayName,
+                                    profileImageURL = user.profileImageURL,
+                                    type = user.type,
+                                    broadcasterType = user.broadcasterType,
+                                    createdAt = user.createdAt,
+                                )
+                            })
                         }
                     }
                     launch {
