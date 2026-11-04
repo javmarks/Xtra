@@ -1433,18 +1433,18 @@ class ChatViewModel(
 
         override suspend fun onWelcomeMessage(sessionId: String) {
             listOf(
-                "channel.chat.clear",
-                "channel.chat.message",
-                "channel.chat.notification",
-                "channel.chat_settings.update",
-            ).forEach {
+                Triple("channel.chat.clear", "1", false),
+                Triple("channel.chat.message", "1", false),
+                Triple("channel.chat.notification", "1", false),
+                Triple("channel.chat_settings.update", "1", false),
+                Triple("channel.moderate", "2", true),
+            ).forEach { (type, version, moderatorCondition) ->
                 viewModelScope.launch {
                     try {
-                        helixRepository.createEventSubSubscription(networkLibrary, helixHeaders, accountId, channelId, it, sessionId)?.let {
-                            onMessage(ChatMessage(systemMsg = it))
+                        helixRepository.createEventSubSubscription(networkLibrary, helixHeaders, accountId, channelId, type, sessionId, version, moderatorCondition)?.let {
+                            if (type != "channel.moderate") onMessage(ChatMessage(systemMsg = it))
                         }
                     } catch (e: Exception) {
-
                     }
                 }
             }
@@ -1473,6 +1473,27 @@ class ChatViewModel(
 
         override suspend fun onRoomState(event: JSONObject, timestamp: String?) {
             roomState.value = EventSubUtils.parseRoomState(event)
+        }
+
+        override suspend fun onModerate(event: JSONObject, timestamp: String?) {
+            val moderator = event.optString("moderator_user_name").takeIf { it.isNotBlank() } ?: event.optString("moderator_user_login")
+            val action = event.optString("action").takeIf { it.isNotBlank() } ?: "moderation action"
+            val sourceChannel = event.optString("source_broadcaster_user_name").takeIf { it.isNotBlank() } ?: event.optString("source_broadcaster_user_login").takeIf { it.isNotBlank() }
+            val actionData = event.optJSONObject(action)
+            val target = actionData?.optString("user_name")?.takeIf { it.isNotBlank() } ?: actionData?.optString("user_login")?.takeIf { it.isNotBlank() }
+            val reason = actionData?.optString("reason")?.takeIf { it.isNotBlank() }
+            val duration = actionData?.optInt("duration", 0)?.takeIf { it > 0 }
+            val details = buildString {
+                append("MOD LOG · ")
+                append(moderator ?: "Moderator")
+                append(" · ")
+                append(action.replace('_', ' '))
+                if (target != null) append(" · ").append(target)
+                if (duration != null) append(" · ").append(duration).append("s")
+                if (reason != null) append(" · ").append(reason)
+                if (sourceChannel != null) append(" · via ").append(sourceChannel)
+            }
+            onMessage(ChatMessage(type = ChatMessage.NOTICE_MESSAGE, systemMsg = details, timestamp = timestamp, fullMsg = event.toString(), sourceRoomId = event.optString("source_broadcaster_user_id").takeIf { it.isNotBlank() } ?: channelId, roomId = channelId))
         }
 
         override suspend fun onDisconnect(message: String, fullMsg: String?) {
