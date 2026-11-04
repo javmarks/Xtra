@@ -912,6 +912,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             return
         }
         if (args.getBoolean(KEY_IS_LIVE)) {
+            viewModel.refreshPinnedChatMessage(channelId)
             viewModel.resumeLive(channelId, channelLogin)
         } else {
             viewModel.resumeReplay(
