@@ -422,44 +422,62 @@ object ChatAdapterUtils {
     }
 
     private fun getSubscriptionNoticeDetails(noticeType: String?, fullMsg: String?): String? {
-        val type = noticeType?.removePrefix("shared_chat_") ?: return null
+        val rawType = noticeType ?: return null
+        val type = rawType.removePrefix("shared_chat_")
         val json = try { fullMsg?.let { JSONObject(it) } } catch (_: Exception) { null } ?: return null
-        val tierValue = sequenceOf("sub", "resub", "sub_gift", "community_sub_gift")
-            .mapNotNull { json.optJSONObject(it)?.let { event -> event.optString("sub_tier").takeIf { value -> value.isNotBlank() && value != "null" } } }
-            .firstOrNull()
+        val event = json.optJSONObject(rawType) ?: json.optJSONObject(type)
+        val details = mutableListOf<String>()
+        val tierValue = event?.optString("sub_tier")?.takeIf { !it.isNullOrBlank() && it != "null" }
+            ?: event?.optString("sub_plan")?.takeIf { !it.isNullOrBlank() && it != "null" }
             ?: json.optString("sub_tier").takeIf { it.isNotBlank() && it != "null" }
+            ?: json.optString("sub_plan").takeIf { it.isNotBlank() && it != "null" }
         val tier = when (tierValue) {
             "1000" -> "Tier 1"
             "2000" -> "Tier 2"
             "3000" -> "Tier 3"
             else -> null
         }
-        val details = mutableListOf<String>()
-        if (tier != null && type in setOf("sub", "resub", "sub_gift", "community_sub_gift")) {
+        if (tier != null && type in setOf("sub", "resub", "sub_gift", "community_sub_gift", "prime_paid_upgrade")) {
             details.add(tier)
         }
         when (type) {
+            "sub" -> {
+                val duration = event?.optInt("duration_months", 0) ?: 0
+                if (duration > 0) details.add("$duration months")
+                if (event?.optBoolean("is_prime") == true) details.add("Prime")
+            }
             "resub" -> {
-                val resub = json.optJSONObject("resub")
-                val months = resub?.optInt("cumulative_months", 0) ?: 0
-                val streak = resub?.optInt("streak_months", 0) ?: 0
+                val months = event?.optInt("cumulative_months", 0) ?: 0
+                val streak = event?.optInt("streak_months", 0) ?: 0
                 if (months > 0) details.add("$months months total")
                 if (streak > 0) details.add("$streak-month streak")
+                if (event?.optBoolean("is_prime") == true) details.add("Prime")
+                if (event?.optBoolean("is_gift") == true) {
+                    val gifter = event.optString("gifter_user_name").takeIf { it.isNotBlank() && it != "null" }
+                    details.add(if (gifter != null) "Gifted by $gifter" else "Gift subscription")
+                }
             }
             "sub_gift" -> {
-                val gift = json.optJSONObject("sub_gift")
-                val recipient = gift?.optString("recipient_user_name")?.takeIf { !it.isNullOrBlank() && it != "null" }
-                val duration = gift?.optInt("duration_months", 0) ?: 0
+                val recipient = event?.optString("recipient_user_name")?.takeIf { !it.isNullOrBlank() && it != "null" }
+                val duration = event?.optInt("duration_months", 0) ?: 0
+                val cumulative = event?.optInt("cumulative_total", 0) ?: 0
                 if (recipient != null) details.add("to $recipient")
                 if (duration > 0) details.add("$duration months")
+                if (cumulative > 0) details.add("$cumulative gifts given")
             }
             "community_sub_gift" -> {
-                val gift = json.optJSONObject("community_sub_gift")
-                val total = gift?.optInt("total", 0) ?: 0
+                val total = event?.optInt("total", 0) ?: 0
+                val cumulative = event?.optInt("cumulative_total", 0) ?: 0
                 if (total > 0) details.add("$total gifted")
+                if (cumulative > 0) details.add("$cumulative gifts given")
+            }
+            "prime_paid_upgrade" -> details.add("Prime upgrade")
+            "gift_paid_upgrade" -> {
+                val gifter = event?.optString("gifter_user_name")?.takeIf { !it.isNullOrBlank() && it != "null" }
+                if (gifter != null) details.add("Gifted by $gifter")
             }
         }
-        return details.takeIf { it.isNotEmpty() }?.joinToString(" • ")
+        return details.distinct().takeIf { it.isNotEmpty() }?.joinToString(" • ")
     }
 
     private fun getSubscriptionNoticeLabel(noticeType: String?): String? {
