@@ -225,6 +225,20 @@ class ChatViewModel(
         }
     }
 
+    private suspend fun <T> loadSTVWithRetry(request: suspend () -> T): T {
+        var lastError: Exception? = null
+        repeat(3) { attempt ->
+            try {
+                return request()
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                lastError = e
+                if (attempt < 2) delay(400L * (attempt + 1))
+            }
+        }
+        throw lastError ?: IllegalStateException("7TV request failed")
+    }
+
     private fun refreshWatchStreak(channelId: String?) {
         if (channelId.isNullOrBlank()) return
         val headers = TwitchApiHelper.getGQLHeaders(applicationContext, true).toMutableMap().apply {
@@ -460,7 +474,7 @@ class ChatViewModel(
             } else {
                 viewModelScope.launch {
                     val pair = try {
-                        playerRepository.loadGlobalSTVEmoteSetResponse(networkLibrary) to true
+                        loadSTVWithRetry { playerRepository.loadGlobalSTVEmoteSetResponse(networkLibrary) } to true
                     } catch (e: Exception) {
                         try {
                             val compressedBytes = FileInputStream("${applicationContext.cacheDir}/emote_responses/global.stv").use {
@@ -522,7 +536,7 @@ class ChatViewModel(
                     var emotes: List<Emote>? = null
                     var online = false
                     try {
-                        val userResponse = playerRepository.loadSTVUserResponse(networkLibrary, channelId)
+                        val userResponse = loadSTVWithRetry { playerRepository.loadSTVUserResponse(networkLibrary, channelId) }
                         val user = playerRepository.loadSTVUser(userResponse, useWebp)
                         val userSetId = user.first
                         val userEmotes = user.second
@@ -533,7 +547,7 @@ class ChatViewModel(
                             online = true
                         } else {
                             if (!userSetId.isNullOrBlank()) {
-                                val emoteSetResponse = playerRepository.loadSTVEmoteSetResponse(networkLibrary, userSetId)
+                                val emoteSetResponse = loadSTVWithRetry { playerRepository.loadSTVEmoteSetResponse(networkLibrary, userSetId) }
                                 val emoteSet = playerRepository.loadSTVEmoteSet(emoteSetResponse, useWebp, false)
                                 response = emoteSetResponse
                                 setId = userSetId
