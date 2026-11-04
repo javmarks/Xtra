@@ -1165,6 +1165,16 @@ class ChatViewModel(
                 }
             }
         }
+        if (!applicationContext.prefs().getBoolean(C.DEBUG_EVENT_SUB_CHAT, false) &&
+            !channelId.isNullOrBlank() && !accountId.isNullOrBlank() &&
+            !helixHeaders[C.HEADER_TOKEN].isNullOrBlank()
+        ) {
+            moderationEventSub = EventSubWebSocket(EventSubListener(
+                helixHeaders, channelLogin, showUserNotice, showClearChat, usePubSub,
+                networkLibrary, isLoggedIn, accountId, channelId, moderationOnly = true
+            ))
+            moderationEventSubJob = moderationEventSub?.connect(viewModelScope)
+        }
         if (usePubSub && !channelId.isNullOrBlank()) {
             val collectPoints = applicationContext.prefs().getBoolean(C.CHAT_POINTS_COLLECT, true)
             val gqlWebClientId = applicationContext.prefs().getString(C.GQL_CLIENT_ID_WEB, "kimne78kx3ncx6brgo4mv6wki5h1ko")
@@ -1248,6 +1258,13 @@ class ChatViewModel(
                     MainScope().launch(Dispatchers.IO) {
                         chatWriteWebSocket?.disconnect(chatWriteJob)
                     }
+                }
+            }
+            if (moderationEventSub != null) {
+                MainScope().launch(Dispatchers.IO) {
+                    moderationEventSub?.disconnect(moderationEventSubJob)
+                    moderationEventSub = null
+                    moderationEventSubJob = null
                 }
             }
             if (hermesWebSocket != null) {
