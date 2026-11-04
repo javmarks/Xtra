@@ -1471,22 +1471,32 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     }
 
     private fun switchChatFragment(fragment: ChatFragment) {
-        if (fragment === chatFragment && !isAllChatsSelected) {
+        val alreadyAdded = fragment.isAdded
+        if (alreadyAdded && fragment === chatFragment && !isAllChatsSelected) {
             if (fragment.isActive() == false) fragment.reconnect()
             return
         }
-        if (fragment.isActive() == false) fragment.reconnect()
+
         val transaction = childFragmentManager.beginTransaction()
         getChatFragments().forEach {
             if (it.isAdded && it !== fragment) transaction.hide(it)
         }
-        if (fragment.isAdded) {
+        if (alreadyAdded) {
             transaction.show(fragment)
         } else {
             val login = fragment.arguments?.getString("channel_login") ?: "extra"
             transaction.add(R.id.chatFragmentContainer, fragment, "chat_${login.lowercase()}")
         }
+        transaction.runOnCommit {
+            // A newly-created Fragment cannot safely use requireContext()/its ViewModel
+            // until FragmentManager has attached it. Start its chat only after that point.
+            if (fragment.isAdded && fragment.isActive() == false) {
+                fragment.reconnect()
+            }
+            refreshChatTabs()
+        }
         transaction.commit()
+
         mergedChatRecyclerView?.visibility = View.GONE
         isAllChatsSelected = false
         chatFragment = fragment
