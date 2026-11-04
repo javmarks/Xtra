@@ -766,6 +766,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     }
                     viewLifecycleOwner.lifecycleScope.launch {
                         repeatOnLifecycle(Lifecycle.State.STARTED) {
+                            // Messages can continue arriving while this tab is stopped, when
+                            // the SharedFlow has no collector. Re-sync the adapter on resume.
+                            adapter?.notifyDataSetChanged()
                             viewModel.newMessage.collect { result ->
                                 val message = result.first
                                 val lastIndex = result.second
