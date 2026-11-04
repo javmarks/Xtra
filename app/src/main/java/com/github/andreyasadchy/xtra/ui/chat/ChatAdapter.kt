@@ -196,7 +196,7 @@ class ChatAdapter(
 
     override fun onViewRecycled(holder: ViewHolder) {
         stopAnimations(holder.textView)
-        holder.boundMessage = null
+        holder.clearBoundMessage()
         super.onViewRecycled(holder)
     }
 
@@ -274,6 +274,10 @@ class ChatAdapter(
         val textView = itemView as TextView
         var boundMessage: ChatMessage? = null
             private set
+
+        fun clearBoundMessage() {
+            boundMessage = null
+        }
 
         fun bind(chatMessage: ChatMessage, formattedMessage: SpannableStringBuilder) {
             boundMessage = chatMessage
