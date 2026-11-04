@@ -116,7 +116,7 @@ object ChatAdapterUtils {
                     builderIndex = builder.length
                     val subscriptionDetails = getSubscriptionNoticeDetails(chatMessage.msgId, chatMessage.fullMsg)
                     if (!subscriptionDetails.isNullOrBlank()) {
-                        val detailsText = "\\n$subscriptionDetails"
+                        val detailsText = "\n$subscriptionDetails"
                         builder.append(detailsText)
                         builder.setSpan(ForegroundColorSpan(getSavedColor("#B8A0D8", savedColors, useReadableColors, isLightTheme)), builderIndex, builderIndex + detailsText.length, SPAN_EXCLUSIVE_EXCLUSIVE)
                         builderIndex = builder.length
@@ -424,7 +424,11 @@ object ChatAdapterUtils {
     private fun getSubscriptionNoticeDetails(noticeType: String?, fullMsg: String?): String? {
         val type = noticeType?.removePrefix("shared_chat_") ?: return null
         val json = try { fullMsg?.let { JSONObject(it) } } catch (_: Exception) { null } ?: return null
-        val tier = when (json.optString("sub_tier")) {
+        val tierValue = sequenceOf("sub", "resub", "sub_gift", "community_sub_gift")
+            .mapNotNull { json.optJSONObject(it)?.let { event -> event.optString("sub_tier").takeIf { value -> value.isNotBlank() && value != "null" } } }
+            .firstOrNull()
+            ?: json.optString("sub_tier").takeIf { it.isNotBlank() && it != "null" }
+        val tier = when (tierValue) {
             "1000" -> "Tier 1"
             "2000" -> "Tier 2"
             "3000" -> "Tier 3"
