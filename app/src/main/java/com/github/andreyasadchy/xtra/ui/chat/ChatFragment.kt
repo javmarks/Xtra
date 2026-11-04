@@ -83,7 +83,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         get() = adapter
 
     val mergedChatChannelId: String?
-        get() = arguments?.getString("channel_id")
+        get() = arguments?.getString(KEY_CHANNEL_ID)
+
+    val isMergedRendererOnly: Boolean
+        get() = arguments?.getBoolean(KEY_RENDERER_ONLY) == true
 
     private var isChatTouched = false
     private var showChatStatus = false
@@ -133,7 +136,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 !TwitchApiHelper.getHelixHeaders(requireContext())[C.HEADER_TOKEN].isNullOrBlank())
                 val chatUrl = args.getString(KEY_CHAT_URL)
                 if (isLive || (args.getString(KEY_VIDEO_ID) != null && args.getInt(KEY_START_TIME) != -1) || chatUrl != null) {
-                    val enableMessaging = isLive && isLoggedIn
+                    val enableMessaging = isLive && isLoggedIn && !isMergedRendererOnly
                     val sizeModifier = (requireContext().prefs().getInt(C.CHAT_SIZE_MODIFIER, 100).toFloat() / 100f)
                     adapter = ChatAdapter(
                         messages = viewModel.chatMessages,
@@ -826,7 +829,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             val args = requireArguments()
             val channelId = args.getString(KEY_CHANNEL_ID)
             val channelLogin = args.getString(KEY_CHANNEL_LOGIN)
-            if (args.getBoolean(KEY_IS_LIVE)) {
+            if (isMergedRendererOnly) {
+                viewModel.loadRendererResources(channelId, channelLogin)
+            } else if (args.getBoolean(KEY_IS_LIVE)) {
                 viewModel.startLive(
                     requireContext().prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
                     requireContext().prefs().getString(C.CHAT_RECENT_MESSAGES_URL, "https://recent-messages.robotty.de/api/v2/recent-messages/\$channel"),
@@ -858,6 +863,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         val args = requireArguments()
         val channelId = args.getString(KEY_CHANNEL_ID)
         val channelLogin = args.getString(KEY_CHANNEL_LOGIN)
+        if (isMergedRendererOnly) {
+            return
+        }
         if (args.getBoolean(KEY_IS_LIVE)) {
             viewModel.resumeLive(channelId, channelLogin)
         } else {
@@ -1245,7 +1253,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
 
     override fun onStop() {
         super.onStop()
-        if (!requireArguments().getBoolean(KEY_IS_LIVE) || !requireContext().prefs().getBoolean(C.PLAYER_KEEP_CHAT_OPEN, false)) {
+        if (!isMergedRendererOnly && (!requireArguments().getBoolean(KEY_IS_LIVE) || !requireContext().prefs().getBoolean(C.PLAYER_KEEP_CHAT_OPEN, false))) {
             viewModel.stopLiveChat()
             viewModel.stopReplayChat()
         }
@@ -1301,6 +1309,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
 
     companion object {
         private const val KEY_IS_LIVE = "isLive"
+        private const val KEY_RENDERER_ONLY = "rendererOnly"
         private const val KEY_CHANNEL_ID = "channel_id"
         private const val KEY_CHANNEL_LOGIN = "channel_login"
         private const val KEY_CHANNEL_NAME = "channel_name"
@@ -1318,6 +1327,18 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     putString(KEY_CHANNEL_LOGIN, channelLogin)
                     putString(KEY_CHANNEL_NAME, channelName)
                     putString(KEY_STREAM_ID, streamId)
+                }
+            }
+        }
+
+        fun newRendererOnlyInstance(channelId: String?, channelLogin: String?, channelName: String?): ChatFragment {
+            return ChatFragment().apply {
+                arguments = Bundle().apply {
+                    putBoolean(KEY_IS_LIVE, true)
+                    putBoolean(KEY_RENDERER_ONLY, true)
+                    putString(KEY_CHANNEL_ID, channelId)
+                    putString(KEY_CHANNEL_LOGIN, channelLogin)
+                    putString(KEY_CHANNEL_NAME, channelName)
                 }
             }
         }
