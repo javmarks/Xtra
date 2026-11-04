@@ -1435,13 +1435,14 @@ class ChatViewModel(
         }
 
         override suspend fun onWelcomeMessage(sessionId: String) {
-            listOf(
+            val subscriptions = if (moderationOnly) listOf(Triple("channel.moderate", "2", true)) else listOf(
                 Triple("channel.chat.clear", "1", false),
                 Triple("channel.chat.message", "1", false),
                 Triple("channel.chat.notification", "1", false),
                 Triple("channel.chat_settings.update", "1", false),
                 Triple("channel.moderate", "2", true),
-            ).forEach { (type, version, moderatorCondition) ->
+            )
+            subscriptions.forEach { (type, version, moderatorCondition) ->
                 viewModelScope.launch {
                     try {
                         helixRepository.createEventSubSubscription(networkLibrary, helixHeaders, accountId, channelId, type, sessionId, version, moderatorCondition)?.let {
