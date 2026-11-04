@@ -82,6 +82,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
     val mergedChatAdapter: ChatAdapter?
         get() = adapter
 
+    val mergedChatChannelId: String?
+        get() = arguments?.getString("channel_id")
+
     private var isChatTouched = false
     private var showChatStatus = false
     private var hasRecentEmotes = false
