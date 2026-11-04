@@ -1090,7 +1090,10 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     }
                 }
             }
-            val currentChatFragment = (childFragmentManager.findFragmentById(R.id.chatFragmentContainer) as? ChatFragment)
+            val currentChatFragment = childFragmentManager.fragments
+                .filterIsInstance<ChatFragment>()
+                .firstOrNull { !it.isHidden }
+                ?: (childFragmentManager.findFragmentById(R.id.chatFragmentContainer) as? ChatFragment)
             if (currentChatFragment != null) {
                 chatFragment = currentChatFragment
             } else {
@@ -1128,12 +1131,67 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 }
                 chatFragment = fragment
             }
+            refreshChatTabs()
         }
     }
 
+    private fun getChatFragments(): List<ChatFragment> {
+        val fragments = childFragmentManager.fragments.filterIsInstance<ChatFragment>().toMutableList()
+        chatFragment?.let { if (it !in fragments) fragments.add(it) }
+        return fragments
+    }
+
+    private fun refreshChatTabs(extraFragment: ChatFragment? = null) {
+        val fragments = (getChatFragments() + listOfNotNull(extraFragment)).distinct()
+        binding.chatTabsContainer.removeAllViews()
+        fragments.forEach { fragment ->
+            val label = fragment.arguments?.getString("channel_name")
+                ?: fragment.arguments?.getString("channel_login")
+                ?: "Chat"
+            val tab = Button(requireContext()).apply {
+                text = label
+                isAllCaps = false
+                isSelected = fragment === chatFragment
+                setOnClickListener { switchChatFragment(fragment) }
+            }
+            binding.chatTabsContainer.addView(
+                tab,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+    }
+
+    private fun switchChatFragment(fragment: ChatFragment) {
+        if (fragment === chatFragment) return
+        val transaction = childFragmentManager.beginTransaction()
+        getChatFragments().forEach {
+            if (it.isAdded && it !== fragment) transaction.hide(it)
+        }
+        if (fragment.isAdded) {
+            transaction.show(fragment)
+        } else {
+            val login = fragment.arguments?.getString("channel_login") ?: "extra"
+            transaction.add(R.id.chatFragmentContainer, fragment, "chat_${login.lowercase()}")
+        }
+        transaction.commit()
+        chatFragment = fragment
+        refreshChatTabs(fragment)
+    }
+
     override fun onChannelSelected(user: User) {
-        val channelName = user.name ?: user.login ?: "channel"
-        Toast.makeText(requireContext(), "Selected $channelName", Toast.LENGTH_SHORT).show()
+        val login = user.login?.takeIf { it.isNotBlank() } ?: return
+        val existing = getChatFragments().firstOrNull {
+            it.arguments?.getString("channel_login").equals(login, ignoreCase = true)
+        }
+        if (existing != null) {
+            switchChatFragment(existing)
+            return
+        }
+        val fragment = ChatFragment.newInstance(user.id, login, user.name ?: login, null)
+        switchChatFragment(fragment)
     }
 
     private fun initLayout() {
