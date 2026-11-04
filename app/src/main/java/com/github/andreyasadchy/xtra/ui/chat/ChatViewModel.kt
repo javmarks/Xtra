@@ -1448,7 +1448,7 @@ class ChatViewModel(
         private val moderationOnly: Boolean = false,
     ) : EventSubWebSocket.Listener {
         override suspend fun onConnect() {
-            onMessage(ChatMessage(systemMsg = ContextCompat.getString(applicationContext, R.string.chat_join).format(channelLogin)))
+            if (!moderationOnly) onMessage(ChatMessage(systemMsg = ContextCompat.getString(applicationContext, R.string.chat_join).format(channelLogin)))
         }
 
         override suspend fun onWelcomeMessage(sessionId: String) {
