@@ -32,6 +32,7 @@ import com.github.andreyasadchy.xtra.model.chat.TwitchBadge
 import com.github.andreyasadchy.xtra.model.chat.TwitchEmote
 import com.github.andreyasadchy.xtra.model.chat.VideoChatMessage
 import com.github.andreyasadchy.xtra.model.ui.TranslatedChannel
+import com.github.andreyasadchy.xtra.model.helix.user.User
 import com.github.andreyasadchy.xtra.repository.GraphQLRepository
 import com.github.andreyasadchy.xtra.repository.HelixRepository
 import com.github.andreyasadchy.xtra.repository.PlayerRepository
@@ -131,6 +132,7 @@ class ChatViewModel(
     var predictionTimer: Timer? = null
     private val _streamInfo = MutableStateFlow<PubSubUtils.StreamInfo?>(null)
     val sharedChatParticipants = MutableStateFlow<List<String>>(emptyList())
+    val sharedChatParticipantUsers = MutableStateFlow<List<User>>(emptyList())
     val streamInfo: StateFlow<PubSubUtils.StreamInfo?> = _streamInfo
     private val _playbackMessage = MutableStateFlow<PubSubUtils.PlaybackMessage?>(null)
     val playbackMessage: StateFlow<PubSubUtils.PlaybackMessage?> = _playbackMessage
@@ -190,13 +192,24 @@ class ChatViewModel(
                     TwitchApiHelper.getHelixHeaders(applicationContext),
                     channelId,
                 )
-                sharedChatParticipants.value = response.data
+                val participantIds = response.data
                     .flatMap { session ->
                         session.participants.mapNotNull { it.broadcasterId }
                     }
                     .distinct()
+                sharedChatParticipants.value = participantIds
+                sharedChatParticipantUsers.value = if (participantIds.isNotEmpty()) {
+                    helixRepository.getUsers(
+                        applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                        TwitchApiHelper.getHelixHeaders(applicationContext),
+                        ids = participantIds
+                    ).data
+                } else {
+                    emptyList()
+                }
             } catch (_: Exception) {
                 sharedChatParticipants.value = emptyList()
+                sharedChatParticipantUsers.value = emptyList()
             }
         }
     }
