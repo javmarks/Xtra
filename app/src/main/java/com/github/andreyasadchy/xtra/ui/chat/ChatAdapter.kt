@@ -102,6 +102,7 @@ class ChatAdapter(
     }
 
     fun bindMessage(holder: ViewHolder, chatMessage: ChatMessage) {
+        stopAnimations(holder.textView)
         val result = ChatAdapterUtils.prepareChatMessage(
             chatMessage, fragment.requireContext(), holder.textView, enableTimestamps, timestampFormat, firstMsgVisibility, firstChatMsg,
             redeemedChatMsg, redeemedNoMsg, rewardChatMsg, replyMessage, null, useRandomColors, random, useReadableColors, isLightTheme,
@@ -120,7 +121,8 @@ class ChatAdapter(
                 }
             }, result.images, result.imagePaint, result.userName, result.userNameStartIndex,
             backgroundColor, imageLibrary, result.builder, result.translated, emoteSize, badgeSize, gifSize, emoteQuality, animateGifs, enableOverlayEmotes,
-            chatMessage, savedColors, useReadableColors, isLightTheme, showLanguageDownloadDialog, true
+            chatMessage, savedColors, useReadableColors, isLightTheme, showLanguageDownloadDialog, true,
+            { holder.boundMessage === chatMessage }
         )
     }
 
@@ -168,6 +170,34 @@ class ChatAdapter(
 
     override fun getItemCount(): Int = synchronized(messages) {
         messages.size
+    }
+
+    private fun stopAnimations(textView: TextView) {
+        (textView.text as? Spannable)?.let { text ->
+            text.getSpans<ImageSpan>().forEach { span ->
+                val drawable = span.drawable
+                (drawable as? Animatable)?.stop()
+                drawable.callback = null
+                if (drawable is LayerDrawable) {
+                    for (index in 0 until drawable.numberOfLayers) {
+                        drawable.getDrawable(index)?.let { child ->
+                            (child as? Animatable)?.stop()
+                            child.callback = null
+                        }
+                    }
+                }
+            }
+            text.getSpans<NamePaintImageSpan>().forEach { span ->
+                (span.drawable as? Animatable)?.stop()
+                span.drawable.callback = null
+            }
+        }
+    }
+
+    override fun onViewRecycled(holder: ViewHolder) {
+        stopAnimations(holder.textView)
+        holder.boundMessage = null
+        super.onViewRecycled(holder)
     }
 
     override fun onViewAttachedToWindow(holder: ViewHolder) {
