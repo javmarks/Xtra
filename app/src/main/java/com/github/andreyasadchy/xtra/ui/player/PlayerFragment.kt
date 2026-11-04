@@ -110,6 +110,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private val chatSourceJobs = mutableMapOf<ChatFragment, Job>()
     private val sharedChatRendererFragments = mutableMapOf<String, ChatFragment>()
     private val channelPointsBalances = mutableMapOf<ChatFragment, Int>()
+    private val moderationLogSources = mutableMapOf<ChatFragment, List<String>>()
     protected open val playbackService: BasePlaybackService? = null
     protected var started = false
 
@@ -1197,6 +1198,22 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
             )
+            if (isAllChatsSelected) {
+                val logCount = fragments.sumOf { moderationLogSources[it]?.size ?: 0 }
+                val logsTab = Button(requireContext()).apply {
+                    text = if (logCount == 0) "Mod Logs" else "Mod Logs ($logCount)"
+                    isAllCaps = false
+                    contentDescription = "Show moderation logs from all open chats"
+                    setOnClickListener { showAllModerationLogs(fragments) }
+                }
+                binding.chatTabsContainer.addView(
+                    logsTab,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                )
+            }
         }
         fragments.forEach { fragment ->
             val label = fragment.arguments?.getString("channel_name")
@@ -1306,6 +1323,15 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                             if (!fragment.isMergedRendererOnly && _binding != null) refreshChatTabs()
                         }
                     }
+                    if (!fragment.isMergedRendererOnly) {
+                        launch {
+                            sourceViewModel.moderationLogs.collect { entries ->
+                                if (entries.isEmpty()) moderationLogSources.remove(fragment)
+                                else moderationLogSources[fragment] = entries
+                                if (_binding != null) refreshChatTabs()
+                            }
+                        }
+                    }
                     val initialMessages = if (fragment.isMergedRendererOnly) {
                         emptyList()
                     } else {
@@ -1353,6 +1379,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         fragment.mergedChatAdapter?.let { mergedChatAdapter?.removeSource(it) }
         observedChatSources.remove(fragment)
         channelPointsBalances.remove(fragment)
+        moderationLogSources.remove(fragment)
 
         childFragmentManager.beginTransaction()
             .remove(fragment)
@@ -1374,6 +1401,35 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 }
         }
         refreshChatTabs()
+    }
+
+    private fun showAllModerationLogs(fragments: List<ChatFragment>) {
+        val entries = fragments
+            .filterNot { it.isMergedRendererOnly }
+            .sortedBy {
+                (it.arguments?.getString("channel_name")
+                    ?: it.arguments?.getString("channel_login")
+                    ?: "channel").lowercase()
+            }
+            .flatMap { fragment ->
+                val channelName = fragment.arguments?.getString("channel_name")
+                    ?: fragment.arguments?.getString("channel_login")
+                    ?: "channel"
+                moderationLogSources[fragment].orEmpty().map { entry ->
+                    "#$channelName · $entry"
+                }
+            }
+        requireContext().getAlertDialogBuilder()
+            .setTitle("Mod Logs · All Chats")
+            .apply {
+                if (entries.isEmpty()) {
+                    setMessage("No moderation events have been recorded for the open channels yet. Logs begin when the app is connected and Twitch grants the required moderation permissions.")
+                } else {
+                    setItems(entries.toTypedArray(), null)
+                }
+            }
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     private fun showAllChats() {
