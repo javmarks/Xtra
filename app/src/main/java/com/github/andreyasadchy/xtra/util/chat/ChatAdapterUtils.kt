@@ -101,7 +101,7 @@ object ChatAdapterUtils {
                 }
                 val noticeLabel = getSubscriptionNoticeLabel(chatMessage.msgId)
                 if (noticeLabel != null) {
-                    builder.append("$noticeLabel\\n")
+                    builder.append("$noticeLabel\n")
                     builder.setSpan(StyleSpan(Typeface.BOLD), builderIndex, builderIndex + noticeLabel.length, SPAN_EXCLUSIVE_EXCLUSIVE)
                     builder.setSpan(ForegroundColorSpan(getSavedColor("#A970FF", savedColors, useReadableColors, isLightTheme)), builderIndex, builderIndex + noticeLabel.length, SPAN_EXCLUSIVE_EXCLUSIVE)
                     builderIndex += noticeLabel.length + 1
