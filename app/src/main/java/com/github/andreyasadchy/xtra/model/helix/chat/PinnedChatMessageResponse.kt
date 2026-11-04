@@ -21,11 +21,11 @@ class PinnedChatMessageResponse(
         val senderName: String? = null,
         @SerialName("sender_login")
         val senderLogin: String? = null,
-        @SerialName("pinned_by_id")
+        @SerialName("pinned_by_user_id")
         val pinnedById: String? = null,
-        @SerialName("pinned_by_name")
+        @SerialName("pinned_by_user_name")
         val pinnedByName: String? = null,
-        @SerialName("pinned_by_login")
+        @SerialName("pinned_by_user_login")
         val pinnedByLogin: String? = null,
         val message: Message? = null,
         @SerialName("pinned_at")
