@@ -1026,16 +1026,20 @@ class ChatViewModel(
                         }
                     }
                     if (list.isNotEmpty()) {
-                        synchronized(chatMessages) {
-                            val left = messageLimit - chatMessages.size
-                            if (left > 0) {
-                                val items = list.takeLast(left)
-                                chatMessages.addAll(0, items)
-                                Pair(items, chatMessages.lastIndex)
-                            } else null
-                        }.let {
-                            if (it != null) {
-                                addMessages.emit(it)
+                        // Serialize history insertion with live messages so adapter positions
+                        // always match the order of backing-list mutations and notifications.
+                        messageMutex.withLock {
+                            synchronized(chatMessages) {
+                                val left = messageLimit - chatMessages.size
+                                if (left > 0) {
+                                    val items = list.takeLast(left)
+                                    chatMessages.addAll(0, items)
+                                    Pair(items, chatMessages.lastIndex)
+                                } else null
+                            }.let {
+                                if (it != null) {
+                                    addMessages.emit(it)
+                                }
                             }
                         }
                     }
@@ -1340,12 +1344,14 @@ class ChatViewModel(
         predictionSecondsLeft.value = null
         predictionTimer?.cancel()
         viewModelScope.launch {
-            synchronized(chatMessages) {
-                val size = chatMessages.size
-                chatMessages.clear()
-                size
-            }.let {
-                removeMessages.emit(it)
+            messageMutex.withLock {
+                synchronized(chatMessages) {
+                    val size = chatMessages.size
+                    chatMessages.clear()
+                    size
+                }.let {
+                    removeMessages.emit(it)
+                }
             }
             onMessage(ChatMessage(systemMsg = ContextCompat.getString(applicationContext, R.string.disconnected)))
         }
@@ -2858,7 +2864,7 @@ class ChatViewModel(
             onMessage(message)
         }
 
-        override suspend fun clearMessages() {
+        override suspend fun clearMessages() = messageMutex.withLock {
             synchronized(chatMessages) {
                 val size = chatMessages.size
                 chatMessages.clear()
