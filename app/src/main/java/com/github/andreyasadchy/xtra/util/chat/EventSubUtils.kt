@@ -148,6 +148,7 @@ object EventSubUtils {
                 userLogin = if (!json.isNull("chatter_user_login")) json.optString("chatter_user_login").takeIf { it.isNotBlank() } else null,
                 userName = if (!json.isNull("chatter_user_name")) json.optString("chatter_user_name").takeIf { it.isNotBlank() } else null,
                 systemMsg = systemMsg,
+                msgId = if (!json.isNull("notice_type")) json.optString("notice_type").takeIf { it.isNotBlank() } else null,
                 timestamp = timestamp?.let { Instant.parseOrNull(it)?.toEpochMilliseconds()?.takeIf { ms -> ms > 0 } },
                 fullMsg = json.toString(),
                 roomId = if (!json.isNull("broadcaster_user_id")) json.optString("broadcaster_user_id").takeIf { it.isNotBlank() } else null,
