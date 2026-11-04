@@ -103,6 +103,7 @@ class ChatViewModel(
     private var usedPredictionId: String? = null
     private var predictionTimeoutJob: Job? = null
     private var started = false
+    private var rendererResourcesLoaded = false
     var autoReconnect = true
 
     private var chatReplayManager: ChatReplayManager? = null
@@ -248,6 +249,12 @@ class ChatViewModel(
         predictionSecondsLeft.value = null
         predictionTimer?.cancel()
         super.onCleared()
+    }
+
+    fun loadRendererResources(channelId: String?, channelLogin: String?) {
+        if (rendererResourcesLoaded) return
+        rendererResourcesLoaded = true
+        loadEmotes(channelId, channelLogin)
     }
 
     private fun loadEmotes(channelId: String?, channelLogin: String?) {
