@@ -1099,18 +1099,20 @@ class ChatViewModel(
         val update = synchronized(chatMessages) {
             chatMessages.add(message)
             val removeCount = (chatMessages.size - messageLimit).coerceAtLeast(0)
-            if (newMessage.subscriptionCount.value > 0) {
-                Triple(message, chatMessages.lastIndex, removeCount)
-            } else {
-                if (removeCount > 0) {
-                    repeat(removeCount) {
-                        chatMessages.removeAt(0)
-                    }
+            // Keep the backing list bounded before notifying the UI. The collector must never
+            // mutate this list later, because another live message may already have arrived.
+            if (removeCount > 0) {
+                repeat(removeCount) {
+                    chatMessages.removeAt(0)
                 }
+            }
+            if (newMessage.subscriptionCount.value > 0) {
+                Triple(message, chatMessages.size, removeCount)
+            } else {
                 null
             }
         }
-        // Keep append/trim notifications in the same order as the underlying list mutations.
+        // The adapter receives append then trim notifications in the same order as mutations.
         update?.let { newMessage.emit(it) }
     }
 
