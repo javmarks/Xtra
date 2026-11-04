@@ -1114,14 +1114,14 @@ class HelixRepository(
         }
     }
 
-    suspend fun createEventSubSubscription(networkLibrary: String?, headers: Map<String, String>, userId: String?, channelId: String?, type: String?, sessionId: String?): String? = withContext(Dispatchers.IO) {
+    suspend fun createEventSubSubscription(networkLibrary: String?, headers: Map<String, String>, userId: String?, channelId: String?, type: String?, sessionId: String?, version: String = "1", useModeratorCondition: Boolean = false): String? = withContext(Dispatchers.IO) {
         val url = "https://api.twitch.tv/helix/eventsub/subscriptions"
         val body = buildJsonObject {
             put("type", type)
-            put("version", "1")
+            put("version", version)
             putJsonObject("condition") {
                 put("broadcaster_user_id", channelId)
-                put("user_id", userId)
+                if (useModeratorCondition) put("moderator_user_id", userId) else put("user_id", userId)
             }
             putJsonObject("transport") {
                 put("method", "websocket")
