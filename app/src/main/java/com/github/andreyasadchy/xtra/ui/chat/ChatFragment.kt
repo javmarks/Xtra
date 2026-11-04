@@ -206,7 +206,12 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     if (streak.bonusPoints > 0) append("\nMilestone bonus: +${NumberFormat.getIntegerInstance().format(streak.bonusPoints)} Channel Points")
                     expiry?.let { append("\n$it") }
                 })
-                .setPositiveButton(android.R.string.ok, null)
+                .setPositiveButton("Share in chat") { _, _ ->
+                    val shareMessage = "🔥 I've watched ${streak.count} consecutive streams of #${channelName}!"
+                    binding.editText.setText(shareMessage)
+                    sendMessage()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
                 .show()
         }
         binding.pinnedChatBar.setOnClickListener {
