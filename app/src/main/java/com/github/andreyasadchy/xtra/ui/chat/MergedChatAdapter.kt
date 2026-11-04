@@ -43,12 +43,21 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
 
     fun addMessage(owner: ChatAdapter, message: ChatMessage) {
-        if (entries.any { it.owner === owner && it.message.id != null && it.message.id == message.id }) return
-        val oldSize = entries.size
-        entries.add(Entry(owner, rendererFor(owner, message), message))
-        entries.sortBy { it.message.timestamp ?: Long.MAX_VALUE }
-        val index = entries.indexOfFirst { it.owner === owner && it.message === message }
-        if (index >= 0 && index == oldSize) notifyItemInserted(index) else notifyDataSetChanged()
+        val messageId = message.id
+        if (messageId != null && entries.any { it.owner === owner && it.message.id == messageId }) return
+
+        val entry = Entry(owner, rendererFor(owner, message), message)
+        val timestamp = message.timestamp ?: Long.MAX_VALUE
+        // Find the insertion point without sorting and rebinding the entire combined feed.
+        var low = 0
+        var high = entries.size
+        while (low < high) {
+            val mid = (low + high) ushr 1
+            val midTimestamp = entries[mid].message.timestamp ?: Long.MAX_VALUE
+            if (midTimestamp <= timestamp) low = mid + 1 else high = mid
+        }
+        entries.add(low, entry)
+        notifyItemInserted(low)
     }
 
     fun addOlderMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
@@ -98,12 +107,15 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     override fun onViewAttachedToWindow(holder: RecyclerView.ViewHolder) {
         super.onViewAttachedToWindow(holder)
-        val entry = entries.getOrNull(holder.bindingAdapterPosition) ?: return
+        val position = holder.bindingAdapterPosition
+        if (position == RecyclerView.NO_POSITION) return
+        val entry = entries.getOrNull(position) ?: return
         (holder as? ChatAdapter.ViewHolder)?.let { entry.renderer.onViewAttachedToWindow(it) }
     }
 
     override fun onViewDetachedFromWindow(holder: RecyclerView.ViewHolder) {
-        val entry = entries.getOrNull(holder.bindingAdapterPosition)
+        val position = holder.bindingAdapterPosition
+        val entry = if (position == RecyclerView.NO_POSITION) null else entries.getOrNull(position)
         if (entry != null) {
             (holder as? ChatAdapter.ViewHolder)?.let { entry.renderer.onViewDetachedFromWindow(it) }
         }
