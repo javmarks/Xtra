@@ -453,7 +453,7 @@ object ChatAdapterUtils {
                 if (streak > 0) details.add("$streak-month streak")
                 if (event?.optBoolean("is_prime") == true) details.add("Prime")
                 if (event?.optBoolean("is_gift") == true) {
-                    val gifter = event.optString("gifter_user_name").takeIf { it.isNotBlank() && it != "null" }
+                    val gifter = event?.optString("gifter_user_name")?.takeIf { it.isNotBlank() && it != "null" }
                     details.add(if (gifter != null) "Gifted by $gifter" else "Gift subscription")
                 }
             }
