@@ -108,6 +108,7 @@ class ChatViewModel(
     private var pollTimeoutJob: Job? = null
     private var usedPredictionId: String? = null
     private var predictionTimeoutJob: Job? = null
+    private var pinnedChatExpiryJob: Job? = null
     private var started = false
     private var rendererResourcesLoaded = false
     var autoReconnect = true
@@ -225,6 +226,7 @@ class ChatViewModel(
         val headers = TwitchApiHelper.getHelixHeaders(applicationContext)
         val moderatorId = applicationContext.tokenPrefs().getString(C.USER_ID, null)
         if (headers[C.HEADER_TOKEN].isNullOrBlank() || moderatorId.isNullOrBlank()) {
+            pinnedChatExpiryJob?.cancel()
             pinnedChatMessage.value = null
             return
         }
@@ -236,9 +238,27 @@ class ChatViewModel(
                     channelId,
                     moderatorId,
                 )
-                pinnedChatMessage.value = response.data.firstOrNull()
+                val pinned = response.data.firstOrNull()
+                pinnedChatExpiryJob?.cancel()
+                pinnedChatMessage.value = pinned
+                val expiresAt = pinned?.expiresAt
+                val expiryTime = expiresAt?.let {
+                    runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull()
+                }
+                if (pinned != null && expiryTime != null) {
+                    val messageId = pinned.messageId
+                    pinnedChatExpiryJob = viewModelScope.launch {
+                        delay((expiryTime - System.currentTimeMillis()).coerceAtLeast(0L))
+                        if (pinnedChatMessage.value?.messageId == messageId) {
+                            pinnedChatMessage.value = null
+                            // Check whether another message was pinned after this one expired.
+                            refreshPinnedChatMessage(channelId)
+                        }
+                    }
+                }
             } catch (_: Exception) {
                 // A viewer without the required moderator scope cannot read pinned chat.
+                pinnedChatExpiryJob?.cancel()
                 pinnedChatMessage.value = null
             }
         }
