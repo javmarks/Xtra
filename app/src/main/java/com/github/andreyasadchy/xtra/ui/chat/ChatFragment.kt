@@ -773,11 +773,6 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 adapter?.let { adapter ->
                                     adapter.notifyItemInserted(lastIndex)
                                     if (removeCount > 0) {
-                                        synchronized(viewModel.chatMessages) {
-                                            repeat(removeCount) {
-                                                viewModel.chatMessages.removeAt(0)
-                                            }
-                                        }
                                         adapter.notifyItemRangeRemoved(0, removeCount)
                                     }
                                     if (!isChatTouched && binding.btnDown.isGone) {
