@@ -719,7 +719,7 @@ object ChatAdapterUtils {
         }
     }
 
-    fun loadImages(fragment: Fragment, itemView: View, bind: (SpannableStringBuilder) -> Unit, images: List<Image>, imagePaint: NamePaint?, userName: String?, userNameStartIndex: Int?, backgroundColor: Int, imageLibrary: String?, builder: SpannableStringBuilder, translated: Boolean, emoteSize: Int, badgeSize: Int, gifSize: Int, emoteQuality: String, animateGifs: Boolean, enableOverlayEmotes: Boolean, chatMessage: ChatMessage, savedColors: HashMap<String, Int>, useReadableColors: Boolean, isLightTheme: Boolean, showLanguageDownloadDialog: (ChatMessage, String) -> Unit, hideErrors: Boolean) {
+    fun loadImages(fragment: Fragment, itemView: View, bind: (SpannableStringBuilder) -> Unit, images: List<Image>, imagePaint: NamePaint?, userName: String?, userNameStartIndex: Int?, backgroundColor: Int, imageLibrary: String?, builder: SpannableStringBuilder, translated: Boolean, emoteSize: Int, badgeSize: Int, gifSize: Int, emoteQuality: String, animateGifs: Boolean, enableOverlayEmotes: Boolean, chatMessage: ChatMessage, savedColors: HashMap<String, Int>, useReadableColors: Boolean, isLightTheme: Boolean, showLanguageDownloadDialog: (ChatMessage, String) -> Unit, hideErrors: Boolean, isCurrent: () -> Boolean = { true }) {
         if (imagePaint != null) {
             if (imageLibrary == "0") {
                 fragment.requireContext().imageLoader.enqueue(
@@ -730,6 +730,7 @@ object ChatAdapterUtils {
                         }.build())
                         target(
                             onSuccess = {
+                                if (isCurrent()) {
                                 (it.asDrawable(fragment.resources)).let { result ->
                                     if (result is Animatable && animateGifs) {
                                         result.callback = object : Drawable.Callback {
@@ -767,6 +768,7 @@ object ChatAdapterUtils {
                                     }
                                     bind(builder)
                                 }
+                                }
                             },
                         )
                     }.build()
@@ -777,6 +779,7 @@ object ChatAdapterUtils {
                     .diskCacheStrategy(DiskCacheStrategy.DATA)
                     .into(object : CustomTarget<Drawable>() {
                         override fun onResourceReady(resource: Drawable, transition: Transition<in Drawable>?) {
+                            if (!isCurrent()) return
                             if (resource is Animatable && animateGifs) {
                                 resource.callback = object : Drawable.Callback {
                                     override fun unscheduleDrawable(who: Drawable, what: Runnable) {
@@ -821,6 +824,7 @@ object ChatAdapterUtils {
         }
         images.forEach { image ->
             loadImage(imageLibrary, fragment, image, emoteQuality) { result ->
+                if (!isCurrent()) return@loadImage
                 val imageSize = when (image.size) {
                     Image.IMAGE_SIZE_EMOTE -> emoteSize
                     Image.IMAGE_SIZE_GIF -> gifSize
@@ -851,7 +855,7 @@ object ChatAdapterUtils {
                 }
                 if (image.overlayEmote != null) {
                     val drawables = arrayOf(result)
-                    nextOverlayEmote(imageLibrary, fragment, drawables, image.overlayEmote!!, image, itemView, bind, builder, translated, emoteSize, emoteQuality, animateGifs, enableOverlayEmotes, chatMessage, savedColors, useReadableColors, isLightTheme, showLanguageDownloadDialog, hideErrors)
+                    nextOverlayEmote(imageLibrary, fragment, drawables, image.overlayEmote!!, image, itemView, bind, builder, translated, emoteSize, emoteQuality, animateGifs, enableOverlayEmotes, chatMessage, savedColors, useReadableColors, isLightTheme, showLanguageDownloadDialog, hideErrors, isCurrent)
                 } else {
                     builder.setSpan(CenteredImageSpan(result), image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE)
                     if (!translated && chatMessage.translatedMessage != null) {
@@ -863,8 +867,9 @@ object ChatAdapterUtils {
         }
     }
 
-    private fun nextOverlayEmote(imageLibrary: String?, fragment: Fragment, drawables: Array<Drawable>, image: Image, bottomImage: Image, itemView: View, bind: (SpannableStringBuilder) -> Unit, builder: SpannableStringBuilder, translated: Boolean, emoteSize: Int, emoteQuality: String, animateGifs: Boolean, enableOverlayEmotes: Boolean, chatMessage: ChatMessage, savedColors: HashMap<String, Int>, useReadableColors: Boolean, isLightTheme: Boolean, showLanguageDownloadDialog: (ChatMessage, String) -> Unit, hideErrors: Boolean) {
+    private fun nextOverlayEmote(imageLibrary: String?, fragment: Fragment, drawables: Array<Drawable>, image: Image, bottomImage: Image, itemView: View, bind: (SpannableStringBuilder) -> Unit, builder: SpannableStringBuilder, translated: Boolean, emoteSize: Int, emoteQuality: String, animateGifs: Boolean, enableOverlayEmotes: Boolean, chatMessage: ChatMessage, savedColors: HashMap<String, Int>, useReadableColors: Boolean, isLightTheme: Boolean, showLanguageDownloadDialog: (ChatMessage, String) -> Unit, hideErrors: Boolean, isCurrent: () -> Boolean) {
         loadImage(imageLibrary, fragment, image, emoteQuality) { result ->
+            if (!isCurrent()) return@loadImage
             val widthRatio = result.intrinsicWidth.toFloat() / result.intrinsicHeight.toFloat()
             val size = if (widthRatio == 1f) {
                 emoteSize to emoteSize
@@ -890,7 +895,7 @@ object ChatAdapterUtils {
             }
             val array = drawables.plus(result)
             if (image.overlayEmote != null) {
-                nextOverlayEmote(imageLibrary, fragment, array, image.overlayEmote!!, bottomImage, itemView, bind, builder, translated, emoteSize, emoteQuality, animateGifs, enableOverlayEmotes, chatMessage, savedColors, useReadableColors, isLightTheme, showLanguageDownloadDialog, hideErrors)
+                nextOverlayEmote(imageLibrary, fragment, array, image.overlayEmote!!, bottomImage, itemView, bind, builder, translated, emoteSize, emoteQuality, animateGifs, enableOverlayEmotes, chatMessage, savedColors, useReadableColors, isLightTheme, showLanguageDownloadDialog, hideErrors, isCurrent)
             } else {
                 val layer = LayerDrawable(array)
                 val width = array.maxOf { it.bounds.right }
