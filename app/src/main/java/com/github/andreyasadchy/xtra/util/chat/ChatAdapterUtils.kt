@@ -99,6 +99,13 @@ object ChatAdapterUtils {
                         builderIndex += timestamp.length + 1
                     }
                 }
+                val noticeLabel = getSubscriptionNoticeLabel(chatMessage.msgId)
+                if (noticeLabel != null) {
+                    builder.append("$noticeLabel\\n")
+                    builder.setSpan(StyleSpan(Typeface.BOLD), builderIndex, builderIndex + noticeLabel.length, SPAN_EXCLUSIVE_EXCLUSIVE)
+                    builder.setSpan(ForegroundColorSpan(getSavedColor("#A970FF", savedColors, useReadableColors, isLightTheme)), builderIndex, builderIndex + noticeLabel.length, SPAN_EXCLUSIVE_EXCLUSIVE)
+                    builderIndex += noticeLabel.length + 1
+                }
                 if (chatMessage.systemMsg != null) {
                     builder.append(chatMessage.systemMsg)
                     builder.setSpan(ForegroundColorSpan(getSavedColor("#999999", savedColors, useReadableColors, isLightTheme)), builderIndex, builderIndex + chatMessage.systemMsg.length, SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -404,6 +411,20 @@ object ChatAdapterUtils {
             }
         }
         return MessageResult(builder, images, imagePaint, userName, userNameStartIndex, translated)
+    }
+
+    private fun getSubscriptionNoticeLabel(noticeType: String?): String? {
+        val type = noticeType?.removePrefix("shared_chat_") ?: return null
+        return when (type) {
+            "sub" -> "NEW SUBSCRIBER"
+            "resub" -> "RESUBSCRIPTION"
+            "sub_gift" -> "GIFTED SUB"
+            "community_sub_gift" -> "GIFT BOMB"
+            "gift_paid_upgrade" -> "GIFT SUB UPGRADE"
+            "prime_paid_upgrade" -> "PRIME UPGRADE"
+            "pay_it_forward" -> "GIFT FORWARD"
+            else -> null
+        }
     }
 
     class MessageResult(
