@@ -50,12 +50,14 @@ import androidx.core.view.updateLayoutParams
 import androidx.core.view.updatePadding
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.Job
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.TimeBar
 import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.github.andreyasadchy.xtra.R
 import com.github.andreyasadchy.xtra.databinding.FragmentPlayerBinding
@@ -64,6 +66,7 @@ import com.github.andreyasadchy.xtra.model.ui.Video
 import com.github.andreyasadchy.xtra.model.ui.User
 import com.github.andreyasadchy.xtra.ui.channel.ChannelPagerFragmentDirections
 import com.github.andreyasadchy.xtra.ui.chat.ChatFragment
+import com.github.andreyasadchy.xtra.ui.chat.MergedChatAdapter
 import com.github.andreyasadchy.xtra.ui.search.channels.AddChatDialogFragment
 import com.github.andreyasadchy.xtra.ui.common.BaseNetworkFragment
 import com.github.andreyasadchy.xtra.ui.common.IntegrityDialog
@@ -83,7 +86,9 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.timepicker.MaterialTimePicker
 import com.google.android.material.timepicker.TimeFormat
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.max
@@ -97,6 +102,11 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     protected val binding get() = _binding!!
     protected val viewModel: PlayerViewModel by viewModels { PlayerViewModelFactory }
     protected var chatFragment: ChatFragment? = null
+    private var mergedChatRecyclerView: RecyclerView? = null
+    private var mergedChatAdapter: MergedChatAdapter? = null
+    private var isAllChatsSelected = false
+    private val observedChatSources = mutableSetOf<ChatFragment>()
+    private val chatSourceJobs = mutableMapOf<ChatFragment, Job>()
     protected open val playbackService: BasePlaybackService? = null
     protected var started = false
 
@@ -1144,6 +1154,22 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private fun refreshChatTabs(extraFragment: ChatFragment? = null) {
         val fragments = (getChatFragments() + listOfNotNull(extraFragment)).distinct()
         binding.chatTabsContainer.removeAllViews()
+        fragments.forEach { observeChatSource(it) }
+        if (fragments.size > 1) {
+            val allTab = Button(requireContext()).apply {
+                text = "All"
+                isAllCaps = false
+                isSelected = isAllChatsSelected
+                setOnClickListener { showAllChats() }
+            }
+            binding.chatTabsContainer.addView(
+                allTab,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
         fragments.forEach { fragment ->
             val label = fragment.arguments?.getString("channel_name")
                 ?: fragment.arguments?.getString("channel_login")
@@ -1151,7 +1177,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             val tab = Button(requireContext()).apply {
                 text = label
                 isAllCaps = false
-                isSelected = fragment === chatFragment
+                isSelected = !isAllChatsSelected && fragment === chatFragment
                 setOnClickListener { switchChatFragment(fragment) }
             }
             binding.chatTabsContainer.addView(
@@ -1164,8 +1190,75 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         }
     }
 
+    private fun ensureMergedChatView() {
+        if (mergedChatRecyclerView != null) return
+        val adapter = MergedChatAdapter()
+        val recyclerView = RecyclerView(requireContext()).apply {
+            layoutManager = LinearLayoutManager(context).apply { stackFromEnd = true }
+            itemAnimator = null
+            this.adapter = adapter
+            visibility = View.GONE
+        }
+        binding.chatFragmentContainer.addView(
+            recyclerView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        mergedChatAdapter = adapter
+        mergedChatRecyclerView = recyclerView
+    }
+
+    private fun observeChatSource(fragment: ChatFragment) {
+        if (!observedChatSources.add(fragment)) return
+        fragment.viewLifecycleOwnerLiveData.observe(viewLifecycleOwner) { owner ->
+            if (owner == null || chatSourceJobs.containsKey(fragment)) return@observe
+            chatSourceJobs[fragment] = owner.lifecycleScope.launch {
+                owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    val sourceAdapter = fragment.mergedChatAdapter ?: return@repeatOnLifecycle
+                    val sourceViewModel = fragment.mergedChatViewModel
+                    ensureMergedChatView()
+                    val merged = mergedChatAdapter ?: return@repeatOnLifecycle
+                    val initialMessages = synchronized(sourceViewModel.chatMessages) {
+                        sourceViewModel.chatMessages.toList()
+                    }
+                    merged.addSource(sourceAdapter, initialMessages)
+                    launch {
+                        sourceViewModel.newMessage.collect { result ->
+                            if (result.third > 0) merged.removeOldestMessages(sourceAdapter, result.third)
+                            merged.addMessage(sourceAdapter, result.first)
+                        }
+                    }
+                    launch {
+                        sourceViewModel.addMessages.collect { result ->
+                            merged.addOlderMessages(sourceAdapter, result.first)
+                        }
+                    }
+                    launch {
+                        sourceViewModel.removeMessages.collect {
+                            merged.clearSource(sourceAdapter)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showAllChats() {
+        val fragments = getChatFragments()
+        if (fragments.size < 2) return
+        ensureMergedChatView()
+        val transaction = childFragmentManager.beginTransaction()
+        fragments.filter { it.isAdded }.forEach { transaction.hide(it) }
+        transaction.commit()
+        mergedChatRecyclerView?.visibility = View.VISIBLE
+        isAllChatsSelected = true
+        refreshChatTabs()
+    }
+
     private fun switchChatFragment(fragment: ChatFragment) {
-        if (fragment === chatFragment) return
+        if (fragment === chatFragment && !isAllChatsSelected) return
         val transaction = childFragmentManager.beginTransaction()
         getChatFragments().forEach {
             if (it.isAdded && it !== fragment) transaction.hide(it)
@@ -1177,6 +1270,8 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             transaction.add(R.id.chatFragmentContainer, fragment, "chat_${login.lowercase()}")
         }
         transaction.commit()
+        mergedChatRecyclerView?.visibility = View.GONE
+        isAllChatsSelected = false
         chatFragment = fragment
         refreshChatTabs(fragment)
     }
@@ -2437,6 +2532,12 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     }
 
     override fun onDestroyView() {
+        chatSourceJobs.values.forEach { it.cancel() }
+        chatSourceJobs.clear()
+        observedChatSources.clear()
+        mergedChatRecyclerView = null
+        mergedChatAdapter = null
+        isAllChatsSelected = false
         super.onDestroyView()
         _binding = null
     }
