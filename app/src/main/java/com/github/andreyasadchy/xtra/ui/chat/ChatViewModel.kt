@@ -61,6 +61,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -138,6 +139,7 @@ class ChatViewModel(
     val sharedChatParticipants = MutableStateFlow<List<String>>(emptyList())
     val channelPointsBalance = MutableStateFlow<Int?>(null)
     val pinnedChatMessage = MutableStateFlow<PinnedChatMessageResponse.PinnedMessage?>(null)
+    val moderationLogs = MutableStateFlow<List<String>>(emptyList())
     val sharedChatParticipantUsers = MutableStateFlow<List<User>>(emptyList())
     val streamInfo: StateFlow<PubSubUtils.StreamInfo?> = _streamInfo
     private val _playbackMessage = MutableStateFlow<PubSubUtils.PlaybackMessage?>(null)
@@ -1110,7 +1112,44 @@ class ChatViewModel(
         }
     }
 
+    private fun loadModerationLogs(channelId: String?) {
+        if (channelId.isNullOrBlank()) {
+            moderationLogs.value = emptyList()
+            return
+        }
+        val saved = applicationContext.prefs().getString("moderation_logs_$channelId", null)
+        moderationLogs.value = runCatching {
+            val array = JSONArray(saved ?: "[]")
+            (0 until array.length()).mapNotNull { index ->
+                array.optString(index).takeIf { it.isNotBlank() && it != "null" }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun saveModerationLog(channelId: String?, entry: String) {
+        if (channelId.isNullOrBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            synchronized(moderationLogs) {
+                val key = "moderation_logs_$channelId"
+                val saved = applicationContext.prefs().getString(key, null)
+                val entries = runCatching {
+                    val array = JSONArray(saved ?: "[]")
+                    (0 until array.length()).mapNotNull { index ->
+                        array.optString(index).takeIf { it.isNotBlank() && it != "null" }
+                    }
+                }.getOrDefault(emptyList()).toMutableList()
+                entries.add(0, entry)
+                val bounded = entries.take(300)
+                val json = JSONArray()
+                bounded.forEach(json::put)
+                applicationContext.prefs().edit().putString(key, json.toString()).apply()
+                moderationLogs.value = bounded
+            }
+        }
+    }
+
     fun startLiveChat(channelId: String?, channelLogin: String) {
+        loadModerationLogs(channelId)
         stopLiveChat()
         started = true
         val gqlHeaders = TwitchApiHelper.getGQLHeaders(applicationContext, true)
@@ -1514,7 +1553,15 @@ class ChatViewModel(
                 if (reason != null) append(" · ").append(reason)
                 if (sourceChannel != null) append(" · via ").append(sourceChannel)
             }
-            onMessage(ChatMessage(type = ChatMessage.NOTICE_MESSAGE, systemMsg = details, timestamp = timestamp?.let { Instant.parseOrNull(it)?.toEpochMilliseconds()?.takeIf { ms -> ms > 0 } }, fullMsg = event.toString(), sourceRoomId = event.optString("source_broadcaster_user_id").takeIf { it.isNotBlank() && it != "null" } ?: channelId, roomId = channelId))
+            val eventTime = timestamp?.let { Instant.parseOrNull(it)?.toEpochMilliseconds()?.takeIf { ms -> ms > 0 } }
+            val timeLabel = eventTime?.let { java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it)) }
+            val sourceLabel = sourceChannel ?: channelLogin
+            val logLine = buildString {
+                if (timeLabel != null) append(timeLabel).append(" · ")
+                append(details.removePrefix("MOD LOG · "))
+                if (sourceLabel.isNotBlank()) append(" · #").append(sourceLabel)
+            }
+            saveModerationLog(channelId, logLine)
         }
 
         override suspend fun onDisconnect(message: String, fullMsg: String?) {
