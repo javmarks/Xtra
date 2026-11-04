@@ -1242,11 +1242,26 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 val closeTab = Button(requireContext()).apply {
                     text = "×"
                     isAllCaps = false
-                    contentDescription = "Remove $label chat"
+                    contentDescription = "Tab options for $label"
+                    tooltipText = "Tab options"
                     minWidth = 0
                     minimumWidth = 0
                     setPadding(0, 0, 0, 0)
-                    setOnClickListener { removeChatFragment(fragment) }
+                    setOnClickListener { anchor ->
+                        val menu = android.widget.PopupMenu(requireContext(), anchor)
+                        val connected = fragment.isActive() == true
+                        menu.menu.add(if (connected) "Disconnect" else "Reconnect")
+                            .setOnMenuItemClickListener {
+                                if (connected) fragment.disconnect() else fragment.reconnect()
+                                refreshChatTabs()
+                                true
+                            }
+                        menu.menu.add("Remove").setOnMenuItemClickListener {
+                            removeChatFragment(fragment)
+                            true
+                        }
+                        menu.show()
+                    }
                 }
                 tabContainer.addView(
                     closeTab,
@@ -1456,7 +1471,11 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     }
 
     private fun switchChatFragment(fragment: ChatFragment) {
-        if (fragment === chatFragment && !isAllChatsSelected) return
+        if (fragment === chatFragment && !isAllChatsSelected) {
+            if (fragment.isActive() == false) fragment.reconnect()
+            return
+        }
+        if (fragment.isActive() == false) fragment.reconnect()
         val transaction = childFragmentManager.beginTransaction()
         getChatFragments().forEach {
             if (it.isAdded && it !== fragment) transaction.hide(it)
