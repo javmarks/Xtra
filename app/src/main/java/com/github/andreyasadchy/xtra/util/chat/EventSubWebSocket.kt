@@ -49,6 +49,7 @@ class EventSubWebSocket(
         suspend fun onUserNotice(event: JSONObject, timestamp: String?) {}
         suspend fun onClearChat(event: JSONObject, timestamp: String?) {}
         suspend fun onRoomState(event: JSONObject, timestamp: String?) {}
+        suspend fun onModerate(event: JSONObject, timestamp: String?) {}
         suspend fun onDisconnect(message: String, fullMsg: String?) {}
     }
 
@@ -86,6 +87,7 @@ class EventSubWebSocket(
                                     "channel.chat.notification" -> listener.onUserNotice(event, timestamp)
                                     "channel.chat.clear" -> listener.onClearChat(event, timestamp)
                                     "channel.chat_settings.update" -> listener.onRoomState(event, timestamp)
+                                    "channel.moderate" -> listener.onModerate(event, timestamp)
                                 }
                             }
                         }
