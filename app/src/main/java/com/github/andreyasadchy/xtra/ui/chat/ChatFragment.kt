@@ -119,6 +119,14 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         super.onViewCreated(view, savedInstanceState)
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.channelPointsBalance.collectLatest { balance ->
+                    binding.channelPointsBar.isVisible = balance != null && !isMergedRendererOnly
+                    binding.channelPointsBalance.text = balance?.let { NumberFormat.getIntegerInstance().format(it) } ?: ""
+                }
+            }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.integrity.collect {
                     (requireActivity() as? MainActivity)?.getNewIntegrityToken(it, childFragmentManager)
                 }
