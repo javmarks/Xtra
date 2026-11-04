@@ -60,6 +60,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import org.json.JSONArray
 import org.json.JSONObject
@@ -167,6 +169,8 @@ class ChatViewModel(
     val thirdPartyEmotesUpdated = MutableSharedFlow<Unit>()
 
     private var messageLimit = 600
+    // Serializes list mutation and adapter notifications when IRC/EventSub callbacks overlap.
+    private val messageMutex = Mutex()
     val chatMessages = mutableListOf<ChatMessage>()
     val autoCompleteList = mutableListOf<Any?>()
     private val chatters = ConcurrentHashMap<String, Chatter>()
@@ -1091,12 +1095,10 @@ class ChatViewModel(
         )
     }
 
-    suspend fun onMessage(message: ChatMessage) {
-        synchronized(chatMessages) {
+    suspend fun onMessage(message: ChatMessage) = messageMutex.withLock {
+        val update = synchronized(chatMessages) {
             chatMessages.add(message)
-            val removeCount = if (chatMessages.size > messageLimit) {
-                chatMessages.size - messageLimit
-            } else 0
+            val removeCount = (chatMessages.size - messageLimit).coerceAtLeast(0)
             if (newMessage.subscriptionCount.value > 0) {
                 Triple(message, chatMessages.lastIndex, removeCount)
             } else {
@@ -1107,9 +1109,9 @@ class ChatViewModel(
                 }
                 null
             }
-        }?.let {
-            newMessage.emit(it)
         }
+        // Keep append/trim notifications in the same order as the underlying list mutations.
+        update?.let { newMessage.emit(it) }
     }
 
     private fun loadModerationLogs(channelId: String?) {
