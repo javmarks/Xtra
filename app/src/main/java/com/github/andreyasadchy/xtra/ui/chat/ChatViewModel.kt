@@ -230,7 +230,10 @@ class ChatViewModel(
                 // Twitch's viewer-facing web client exposes pinned chat through this public GQL query.
                 val response = graphQLRepository.loadPinnedChatMessage(
                     networkLibrary,
-                    TwitchApiHelper.getGQLHeaders(applicationContext),
+                    TwitchApiHelper.getGQLHeaders(applicationContext).toMutableMap().apply {
+                        // GetPinnedChat is a Twitch web-client persisted query; use the web Client-ID.
+                        put(C.HEADER_CLIENT_ID, "kimne78kx3ncx6brgo4mv6wki5h1ko")
+                    },
                     channelId,
                 )
                 response.data?.channel?.pinnedChatMessages?.edges?.firstOrNull()?.node?.let { node ->
