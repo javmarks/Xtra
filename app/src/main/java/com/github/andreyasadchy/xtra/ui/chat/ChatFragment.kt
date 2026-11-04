@@ -117,6 +117,36 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val isLiveChannel = requireArguments().getBoolean(KEY_IS_LIVE)
+        binding.moderationLogsBar.isVisible = isLiveChannel && !isMergedRendererOnly
+        binding.moderationLogsButton.setOnClickListener {
+            val entries = viewModel.moderationLogs.value
+            val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
+                ?: requireArguments().getString(KEY_CHANNEL_LOGIN)
+                ?: "channel"
+            requireContext().getAlertDialogBuilder()
+                .setTitle("Mod Logs · #$channelName")
+                .apply {
+                    if (entries.isEmpty()) {
+                        setMessage("No moderation events have been recorded for this channel yet. Logs begin when the app is connected and Twitch grants the required moderation permissions.")
+                    } else {
+                        setItems(entries.toTypedArray(), null)
+                    }
+                }
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.moderationLogs.collectLatest { entries ->
+                    binding.moderationLogsButton.text = if (entries.isEmpty()) {
+                        "Mod Logs"
+                    } else {
+                        "Mod Logs (${entries.size})"
+                    }
+                }
+            }
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.channelPointsBalance.collectLatest { balance ->
