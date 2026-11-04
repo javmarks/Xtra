@@ -245,17 +245,16 @@ class ChatViewModel(
                     }
                 }
                 val milestone = response.data?.channel?.self?.watchStreakMilestone
-                val count = milestone?.watchStreakMilestone?.value?.toIntOrNull()
-                watchStreak.value = if (count != null) {
-                    WatchStreakInfo(
-                        count = count,
-                        threshold = milestone.watchStreakThreshold,
-                        bonusPoints = milestone.watchStreakCopoBonus,
-                        state = milestone.state,
-                        expiresAt = milestone.expiresAt,
-                    )
-                } else {
-                    null
+                watchStreak.value = milestone?.let { value ->
+                    value.watchStreakMilestone?.value?.toIntOrNull()?.let { count ->
+                        WatchStreakInfo(
+                            count = count,
+                            threshold = value.watchStreakThreshold,
+                            bonusPoints = value.watchStreakCopoBonus,
+                            state = value.state,
+                            expiresAt = value.expiresAt,
+                        )
+                    }
                 }
             } catch (_: Exception) {
                 watchStreak.value = null
