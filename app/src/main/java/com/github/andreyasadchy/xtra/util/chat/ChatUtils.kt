@@ -112,7 +112,7 @@ object ChatUtils {
                 }
             }
         }
-        val badges = message.tags["badges"]?.let { value ->
+        val badges = (message.tags["source-badges"] ?: message.tags["badges"])?.let { value ->
             value.split(',').mapNotNull { badge ->
                 val split = badge.split("/")
                 val id = split.getOrNull(0)
@@ -157,7 +157,11 @@ object ChatUtils {
                 )
             },
             timestamp = message.tags["tmi-sent-ts"]?.toLongOrNull(),
-            fullMsg = message.fullMessage
+            fullMsg = message.fullMessage,
+            roomId = message.tags["room-id"],
+            sourceRoomId = message.tags["source-room-id"],
+            sourceMessageId = message.tags["source-id"],
+            isSourceOnly = message.tags["source-only"]?.let { it == "1" || it.equals("true", true) }
         )
     }
 
