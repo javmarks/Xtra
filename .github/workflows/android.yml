@@ -3,7 +3,7 @@ name: Build
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, multi-chat ]
   workflow_dispatch:
 
 jobs:
@@ -37,6 +37,7 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
 
       - name: Generate release notes
+        if: github.ref == 'refs/heads/master'
         run: |
           if git rev-parse refs/tags/latest >/dev/null 2>&1; then
             git log refs/tags/latest..HEAD --oneline --decorate=no > notes.txt
@@ -45,17 +46,20 @@ jobs:
           fi
 
       - name: Update tag
+        if: github.ref == 'refs/heads/master'
         run: |
           git tag -f latest
           git push -f origin tag latest
 
       - name: Delete release
+        if: github.ref == 'refs/heads/master'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release delete latest -y
 
       - name: Create release
+        if: github.ref == 'refs/heads/master'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create latest --title "Latest" --notes-file notes.txt --latest=true app/build/outputs/apk/release/*.apk
