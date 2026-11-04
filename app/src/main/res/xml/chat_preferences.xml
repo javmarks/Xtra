@@ -216,6 +216,13 @@
         app:singleLineTitle="false" />
 
     <SwitchPreferenceCompat
+        android:defaultValue="true"
+        android:key="chat_watch_streaks"
+        android:title="@string/watch_streaks_show"
+        app:iconSpaceReserved="false"
+        app:singleLineTitle="false" />
+
+    <SwitchPreferenceCompat
         android:defaultValue="false"
         android:key="chat_points_notify"
         android:title="@string/points_notify"

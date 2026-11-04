@@ -1541,7 +1541,12 @@ class ChatViewModel(
         }
 
         override suspend fun onWelcomeMessage(sessionId: String) {
-            val subscriptions = if (moderationOnly) listOf(Triple("channel.moderate", "2", true)) else listOf(
+            val subscriptions = if (moderationOnly) buildList {
+                add(Triple("channel.moderate", "2", true))
+                if (applicationContext.prefs().getBoolean(C.CHAT_WATCH_STREAKS, true)) {
+                    add(Triple("channel.chat.notification", "1", false))
+                }
+            } else listOf(
                 Triple("channel.chat.clear", "1", false),
                 Triple("channel.chat.message", "1", false),
                 Triple("channel.chat.notification", "1", false),
@@ -1570,7 +1575,22 @@ class ChatViewModel(
         }
 
         override suspend fun onUserNotice(event: JSONObject, timestamp: String?) {
-            if (showUserNotice) {
+            if (moderationOnly && event.optString("notice_type") == "watch_streak" &&
+                applicationContext.prefs().getBoolean(C.CHAT_WATCH_STREAKS, true)
+            ) {
+                val streak = event.optJSONObject("watch_streak")
+                val count = streak?.optInt("streak_count", 0)?.takeIf { it > 0 }
+                val points = streak?.optInt("points_awarded", 0)?.takeIf { it > 0 }
+                if (count != null) {
+                    val message = buildString {
+                        append("Watch streak · ")
+                        append(count)
+                        append(if (count == 1) " stream" else " streams")
+                        if (points != null) append(" · +").append(points).append(" Channel Points")
+                    }
+                    onMessage(ChatMessage(systemMsg = message, fullMsg = event.toString()))
+                }
+            } else if (showUserNotice) {
                 onChatMessage(EventSubUtils.parseUserNotice(event, timestamp), networkLibrary, isLoggedIn, accountId, channelId)
             }
         }
