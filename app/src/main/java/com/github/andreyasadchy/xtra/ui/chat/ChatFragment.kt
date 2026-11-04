@@ -127,6 +127,15 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         }
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.pinnedChatMessage.collectLatest { pinned ->
+                    binding.pinnedChatBar.isVisible = pinned != null && !isMergedRendererOnly
+                    binding.pinnedChatText.text = pinned?.message?.text.orEmpty()
+                    binding.pinnedChatBy.text = pinned?.let { "Pinned by ${it.pinnedByName ?: it.pinnedByLogin ?: "moderator"}" }.orEmpty()
+                }
+            }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.integrity.collect {
                     (requireActivity() as? MainActivity)?.getNewIntegrityToken(it, childFragmentManager)
                 }
