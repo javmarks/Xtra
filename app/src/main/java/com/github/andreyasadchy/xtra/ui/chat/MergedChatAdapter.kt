@@ -78,7 +78,11 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
 
     private fun rendererFor(owner: ChatAdapter, message: ChatMessage): ChatAdapter {
-        val originId = message.sourceRoomId ?: message.roomId
+        // Synthetic reply-preview rows may not carry their own room/channel IDs.
+        // Resolve them through the real message they preview so All Chats uses the
+        // same channel-specific adapter and rendering settings as the individual chat.
+        val sourceMessage = if (message.type == ChatMessage.REPLY_MESSAGE) message.replyParent ?: message else message
+        val originId = sourceMessage.sourceRoomId ?: sourceMessage.roomId
         return if (originId.isNullOrBlank()) owner else sourcesByChannelId[originId] ?: owner
     }
 
