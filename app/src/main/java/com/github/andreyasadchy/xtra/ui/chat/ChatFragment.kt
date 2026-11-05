@@ -92,7 +92,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
     val isMergedRendererOnly: Boolean
         get() = arguments?.getBoolean(KEY_RENDERER_ONLY) == true
 
-    private var isChatTouched = false
+    // Keep following state independent of the finger's current touch state. A reader
+    // who scrolls upward must not be pulled back to the newest message when a new row arrives.
+    private var isFollowingChat = true
     private var showChatStatus = false
     private var hasRecentEmotes = false
     private var messagingEnabled = false
@@ -454,19 +456,24 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         it.itemAnimator = null
                         it.layoutManager = LinearLayoutManager(context).apply { stackFromEnd = true }
                         it.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                                super.onScrolled(recyclerView, dx, dy)
+                                val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
+                                val lastVisible = layoutManager?.findLastVisibleItemPosition() ?: -1
+                                val itemCount = recyclerView.adapter?.itemCount ?: 0
+                                val atBottom = itemCount == 0 || lastVisible >= itemCount - 1
+                                if (atBottom) {
+                                    isFollowingChat = true
+                                    btnDown.isGone = true
+                                } else {
+                                    if (dy < 0) isFollowingChat = false
+                                    btnDown.isVisible = !isFollowingChat
+                                }
+                            }
+
                             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                                 super.onScrollStateChanged(recyclerView, newState)
-                                isChatTouched = newState == RecyclerView.SCROLL_STATE_DRAGGING
-                                val offset = recyclerView.computeVerticalScrollOffset()
-                                if (offset < 0) {
-                                    btnDown.isVisible = false
-                                } else {
-                                    val extent = recyclerView.computeVerticalScrollExtent()
-                                    val range = recyclerView.computeVerticalScrollRange()
-                                    val percentage = (100f * offset / (range - extent).toFloat())
-                                    btnDown.isVisible = percentage < 100f
-                                }
-                                if (showChatStatus && chatStatus.isGone) {
+                                if (showChatStatus && chatStatus.isGone && newState == RecyclerView.SCROLL_STATE_DRAGGING) {
                                     chatStatus.visibility = View.VISIBLE
                                     chatStatus.postDelayed({ chatStatus.visibility = View.GONE }, 5000)
                                 }
@@ -474,12 +481,13 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         })
                     }
                     btnDown.setOnClickListener {
+                        isFollowingChat = true
                         view.post {
                             val lastIndex = synchronized(viewModel.chatMessages) {
                                 viewModel.chatMessages.lastIndex
                             }
                             recyclerView.scrollToPosition(lastIndex)
-                            it.visibility = View.GONE
+                            btnDown.isGone = true
                         }
                     }
                     if (enableMessaging) {
@@ -984,7 +992,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     } else if (newLastIndex >= 0) {
                                         adapter.notifyItemInserted(newLastIndex)
                                     }
-                                    if (!isChatTouched && wasAtBottom && newLastIndex >= 0) {
+                                    if (isFollowingChat && wasAtBottom && newLastIndex >= 0) {
                                         binding.recyclerView.scrollToPosition(newLastIndex)
                                         binding.btnDown.isGone = true
                                     }
@@ -1001,7 +1009,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 val lastIndex = result.second
                                 adapter?.let { adapter ->
                                     adapter.notifyItemRangeInserted(0, messages.size)
-                                    if (!isChatTouched && binding.btnDown.isGone) {
+                                    if (isFollowingChat && binding.btnDown.isGone) {
                                         binding.recyclerView.scrollToPosition(lastIndex)
                                     }
                                 }
@@ -1251,6 +1259,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 val lastIndex = synchronized(viewModel.chatMessages) {
                     viewModel.chatMessages.lastIndex
                 }
+                isFollowingChat = true
+                btnDown.isGone = true
                 recyclerView.scrollToPosition(lastIndex)
                 true
             } else {
