@@ -967,12 +967,20 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 val lastIndex = result.second
                                 val removeCount = result.third
                                 adapter?.let { adapter ->
+                                    // Decide whether the reader was following the newest message
+                                    // before changing the adapter. The down-button visibility can
+                                    // be stale during VOD replay because scrollToPosition() does
+                                    // not always trigger a scroll-state callback.
+                                    val layoutManager = binding.recyclerView.layoutManager as? LinearLayoutManager
+                                    val wasAtBottom = adapter.itemCount == 0 ||
+                                        (layoutManager?.findLastVisibleItemPosition() ?: -1) >= adapter.itemCount - 1
                                     adapter.notifyItemInserted(lastIndex)
                                     if (removeCount > 0) {
                                         adapter.notifyItemRangeRemoved(0, removeCount)
                                     }
-                                    if (!isChatTouched && binding.btnDown.isGone) {
+                                    if (!isChatTouched && wasAtBottom) {
                                         binding.recyclerView.scrollToPosition(lastIndex - removeCount)
+                                        binding.btnDown.isGone = true
                                     }
                                 }
                                 messageDialog?.newMessage(message)
