@@ -1457,12 +1457,28 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         val fragments = getChatFragments()
         if (fragments.size < 2) return
         ensureMergedChatView()
+
+        // Re-sync each source's retained messages before showing the merged feed.
+        // SharedFlow has no replay, so a tab that was stopped can miss live notifications.
+        val merged = mergedChatAdapter
+        fragments.forEach { fragment ->
+            val sourceAdapter = fragment.mergedChatAdapter ?: return@forEach
+            val messages = synchronized(fragment.mergedChatViewModel.chatMessages) {
+                fragment.mergedChatViewModel.chatMessages.toList()
+            }
+            merged?.addSource(sourceAdapter, fragment.mergedChatChannelId, messages)
+        }
+
         val transaction = childFragmentManager.beginTransaction()
         fragments.filter { it.isAdded }.forEach { transaction.hide(it) }
         transaction.commit()
         mergedChatRecyclerView?.visibility = View.VISIBLE
         isAllChatsSelected = true
         refreshChatTabs()
+        mergedChatRecyclerView?.post {
+            val count = mergedChatAdapter?.itemCount ?: 0
+            if (count > 0) mergedChatRecyclerView?.scrollToPosition(count - 1)
+        }
     }
 
     private fun switchChatFragment(fragment: ChatFragment) {
