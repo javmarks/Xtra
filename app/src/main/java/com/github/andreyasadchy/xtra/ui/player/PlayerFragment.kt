@@ -67,6 +67,7 @@ import com.github.andreyasadchy.xtra.ui.channel.ChannelPagerFragmentDirections
 import com.github.andreyasadchy.xtra.ui.chat.ChatFragment
 import com.github.andreyasadchy.xtra.ui.chat.ChatAdapter
 import com.github.andreyasadchy.xtra.ui.chat.MergedChatAdapter
+import com.github.andreyasadchy.xtra.ui.chat.ModerationLogDialog
 import com.github.andreyasadchy.xtra.ui.search.channels.AddChatDialogFragment
 import com.github.andreyasadchy.xtra.ui.common.BaseNetworkFragment
 import com.github.andreyasadchy.xtra.ui.common.IntegrityDialog
