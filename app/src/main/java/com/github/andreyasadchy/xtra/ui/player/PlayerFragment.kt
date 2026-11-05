@@ -112,6 +112,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private val sharedChatRendererFragments = mutableMapOf<String, ChatFragment>()
     private val channelPointsBalances = mutableMapOf<ChatFragment, Int>()
     private val moderationLogSources = mutableMapOf<ChatFragment, List<String>>()
+    private var mergedModerationLogDialog: ModerationLogDialog.Handle? = null
     protected open val playbackService: BasePlaybackService? = null
     protected var started = false
 
@@ -1345,6 +1346,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                             sourceViewModel.moderationLogs.collect { entries ->
                                 if (entries.isEmpty()) moderationLogSources.remove(fragment)
                                 else moderationLogSources[fragment] = entries
+                                mergedModerationLogDialog?.update(collectAllModerationLogEntries())
                                 if (_binding != null) refreshChatTabs()
                             }
                         }
@@ -1429,8 +1431,8 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             .commit()
     }
 
-    private fun showAllModerationLogs(fragments: List<ChatFragment>) {
-        val entries = fragments
+    private fun collectAllModerationLogEntries(): List<String> =
+        getChatFragments()
             .filterNot { it.isMergedRendererOnly }
             .sortedBy {
                 (it.arguments?.getString("channel_name")
@@ -1441,16 +1443,20 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 val channelName = fragment.arguments?.getString("channel_name")
                     ?: fragment.arguments?.getString("channel_login")
                     ?: "channel"
-                moderationLogSources[fragment].orEmpty().map { entry ->
-                    "#$channelName · $entry"
-                }
+                moderationLogSources[fragment].orEmpty().map { entry -> "#$channelName · $entry" }
             }
-        ModerationLogDialog.show(
+
+    private fun showAllModerationLogs(fragments: List<ChatFragment>) {
+        val handle = ModerationLogDialog.show(
             requireContext(),
             "Mod Logs · All Chats",
-            entries,
+            collectAllModerationLogEntries(),
             "No moderation events have been recorded for the open channels yet."
         )
+        mergedModerationLogDialog = handle
+        handle.dialog.setOnDismissListener {
+            if (mergedModerationLogDialog === handle) mergedModerationLogDialog = null
+        }
     }
 
     private fun showAllChats() {
