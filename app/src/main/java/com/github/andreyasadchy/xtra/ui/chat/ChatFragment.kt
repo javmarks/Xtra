@@ -176,7 +176,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             val message = if (rewards.isNotEmpty()) {
                 "Your balance: ${balance?.let { NumberFormat.getIntegerInstance().format(it) } ?: "—"} Channel Points"
             } else {
-                "Twitch didn't provide any custom rewards for this channel. The channel may have rewards disabled, or Twitch may not have returned them."
+                "No custom rewards were loaded.\n\nDiagnostic: \${viewModel.channelPointRewardsStatus.value}"
             }
             val dialog = requireContext().getAlertDialogBuilder()
                 .setTitle("Channel Points · #$channelName")
