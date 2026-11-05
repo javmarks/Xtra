@@ -1548,9 +1548,7 @@ class GraphQLRepository(
     ): ErrorResponse = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
             put("operationName", "RedeemCommunityPointsCustomReward")
-            put("query", """mutation RedeemCommunityPointsCustomReward(${': RedeemCommunityPointsCustomRewardInput!) {
-                redeemCommunityPointsCustomReward(input: \$input) { __typename }
-            }""")
+            put("query", "mutation RedeemCommunityPointsCustomReward(\$input: RedeemCommunityPointsCustomRewardInput!) { redeemCommunityPointsCustomReward(input: \$input) { __typename } }")
             putJsonObject("variables") {
                 putJsonObject("input") {
                     put("channelID", channelId)
