@@ -158,7 +158,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 }
             }
         }
-        binding.channelPointsBar.setOnClickListener {
+        val showChannelPointsRewards = {
             val rewards = viewModel.channelPointRewards.value
             val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
                 ?: requireArguments().getString(KEY_CHANNEL_LOGIN) ?: "channel"
@@ -184,10 +184,11 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             if (lines.isNotEmpty()) dialog.setItems(lines.toTypedArray(), null)
             dialog.setPositiveButton(android.R.string.ok, null).show()
         }
-        // Make every part of the Channel Points indicator open the same rewards panel.
-        binding.channelPointsIcon.setOnClickListener { binding.channelPointsBar.performClick() }
-        binding.channelPointsBalance.setOnClickListener { binding.channelPointsBar.performClick() }
-        binding.channelPointsLabel.setOnClickListener { binding.channelPointsBar.performClick() }
+        // Attach the action directly to each visible part instead of forwarding child taps.
+        binding.channelPointsBar.setOnClickListener { showChannelPointsRewards() }
+        binding.channelPointsIcon.setOnClickListener { showChannelPointsRewards() }
+        binding.channelPointsBalance.setOnClickListener { showChannelPointsRewards() }
+        binding.channelPointsLabel.setOnClickListener { showChannelPointsRewards() }
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.pinnedChatMessage.collectLatest { pinned ->
