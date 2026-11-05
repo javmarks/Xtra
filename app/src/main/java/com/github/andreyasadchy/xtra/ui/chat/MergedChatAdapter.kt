@@ -37,13 +37,19 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         message.id?.takeIf { it.isNotBlank() }
             ?: message.sourceMessageId?.takeIf { it.isNotBlank() }
 
+    // Reply preview rows inherit the timestamp of the real message they preview.
+    // Their own timestamp is intentionally null, so sorting only by it sent every
+    // preview to the bottom of All Chats instead of keeping it beside its reply.
+    private fun sortTimestamp(message: ChatMessage): Long =
+        message.timestamp ?: message.replyParent?.timestamp ?: Long.MAX_VALUE
+
     private fun insertSorted(entry: Entry): Int {
-        val timestamp = entry.message.timestamp ?: Long.MAX_VALUE
+        val timestamp = sortTimestamp(entry.message)
         var low = 0
         var high = entries.size
         while (low < high) {
             val mid = (low + high) ushr 1
-            val midTimestamp = entries[mid].message.timestamp ?: Long.MAX_VALUE
+            val midTimestamp = sortTimestamp(entries[mid].message)
             if (midTimestamp <= timestamp) low = mid + 1 else high = mid
         }
         entries.add(low, entry)
@@ -118,7 +124,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         sourceEntryCounts.remove(owner)
         rebuildMessageIds()
         messages.asSequence()
-            .sortedBy { it.timestamp ?: Long.MAX_VALUE }
+            .sortedBy { sortTimestamp(it) }
             .toList()
             .takeLast(MAX_LIVE_MESSAGES_PER_SOURCE)
             .forEach { message ->
