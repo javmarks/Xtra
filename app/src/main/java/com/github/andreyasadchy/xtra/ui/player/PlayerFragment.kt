@@ -1359,6 +1359,12 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                             sourceViewModel.chatMessages.toList()
                         }
                     }
+                    fragment.mergedChatChannelId?.let { channelId ->
+                        val channelName = fragment.arguments?.getString("channel_name")
+                            ?.takeIf { it.isNotBlank() }
+                            ?: fragment.arguments?.getString("channel_login")?.takeIf { it.isNotBlank() }
+                        merged.setSourceChannelInfo(channelId, channelName, null)
+                    }
                     merged.addSource(sourceAdapter, fragment.mergedChatChannelId, initialMessages)
                     if (!fragment.isMergedRendererOnly) {
                         launch {
