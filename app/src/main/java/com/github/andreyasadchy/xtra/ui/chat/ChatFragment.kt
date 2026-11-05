@@ -196,23 +196,31 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     "Recovery window ends " + DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
                 }.getOrNull()
             }
-            requireContext().getAlertDialogBuilder()
+            val dialog = requireContext().getAlertDialogBuilder()
                 .setTitle("Watch Streak · #$channelName")
                 .setMessage(buildString {
                     append("🔥  ")
                     append(streak.count)
                     append(if (streak.count == 1) " consecutive stream" else " consecutive streams")
-                    if (streak.threshold > 0) append("\nNext milestone: ${streak.threshold}")
-                    if (streak.bonusPoints > 0) append("\nMilestone bonus: +${NumberFormat.getIntegerInstance().format(streak.bonusPoints)} Channel Points")
-                    expiry?.let { append("\n$it") }
+                    if (streak.threshold > 0) append("\\nNext milestone: ${streak.threshold}")
+                    if (streak.bonusPoints > 0) append("\\nMilestone bonus: +${NumberFormat.getIntegerInstance().format(streak.bonusPoints)} Channel Points")
+                    expiry?.let { append("\\n$it") }
                 })
-                .setPositiveButton("Share in chat") { _, _ ->
-                    val shareMessage = "🔥 I've watched ${streak.count} consecutive streams of #${channelName}!"
-                    binding.editText.setText(shareMessage)
-                    sendMessage()
+            if (streak.shareStatus == "CAN_SHARE" && !streak.milestoneId.isNullOrBlank()) {
+                dialog.setPositiveButton("Share Watch Streak") { _, _ ->
+                    viewModel.shareWatchStreak(requireArguments().getString(KEY_CHANNEL_ID)) { success, error ->
+                        Toast.makeText(
+                            requireContext(),
+                            if (success) "Watch Streak shared in chat" else "Watch Streak wasn't shared: ${error ?: "Unknown error"}",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
                 }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+                dialog.setNegativeButton(android.R.string.cancel, null)
+            } else {
+                dialog.setPositiveButton(android.R.string.ok, null)
+            }
+            dialog.show()
         }
         binding.pinnedChatBar.setOnClickListener {
             val pinned = viewModel.pinnedChatMessage.value ?: return@setOnClickListener

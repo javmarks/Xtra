@@ -36,4 +36,19 @@ class WatchStreakResponse(
         val achievementTimestamp: String? = null,
         val shareStatus: String? = null,
     )
+
+    @Serializable
+    class ShareResponse(
+        val errors: List<Error>? = null,
+        val data: ShareData? = null,
+    )
+
+    @Serializable
+    class ShareData(val shareViewerMilestone: SharePayload? = null)
+
+    @Serializable
+    class SharePayload(val error: ShareError? = null)
+
+    @Serializable
+    class ShareError(val code: String? = null)
 }

@@ -1517,6 +1517,25 @@ class GraphQLRepository(
         json.decodeFromString<WatchStreakResponse>(sendPersistedQuery(networkLibrary, headers, body))
     }
 
+    suspend fun shareWatchStreak(networkLibrary: String?, headers: Map<String, String>, channelId: String?, milestoneId: String?): WatchStreakResponse.ShareResponse = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            putJsonObject("extensions") {
+                putJsonObject("persistedQuery") {
+                    put("sha256Hash", "25d20e60945d10123e8d466e30f21a1f1f578dfdea52c72095030b118eda9f39")
+                    put("version", 1)
+                }
+            }
+            put("operationName", "ShareMilestone")
+            putJsonObject("variables") {
+                putJsonObject("input") {
+                    put("channelID", channelId)
+                    put("milestoneID", milestoneId)
+                }
+            }
+        }.toString()
+        json.decodeFromString<WatchStreakResponse.ShareResponse>(sendPersistedQuery(networkLibrary, headers, body))
+    }
+
     suspend fun loadClaimPoints(networkLibrary: String?, headers: Map<String, String>, channelId: String?, claimId: String?): ErrorResponse = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
             putJsonObject("extensions") {

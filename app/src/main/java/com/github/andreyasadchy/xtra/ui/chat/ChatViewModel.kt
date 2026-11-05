@@ -267,11 +267,59 @@ class ChatViewModel(
                             bonusPoints = value.watchStreakCopoBonus,
                             state = value.state,
                             expiresAt = value.expiresAt,
+                            milestoneId = value.watchStreakMilestone?.id,
+                            shareStatus = value.watchStreakMilestone?.shareStatus.orEmpty(),
                         )
                     }
                 }
             } catch (_: Exception) {
                 watchStreak.value = null
+            }
+        }
+    }
+
+    fun shareWatchStreak(channelId: String?, onResult: (Boolean, String?) -> Unit) {
+        if (channelId.isNullOrBlank()) {
+            onResult(false, "Channel information is missing")
+            return
+        }
+        val streak = watchStreak.value
+        val milestoneId = streak?.milestoneId
+        if (streak == null || milestoneId.isNullOrBlank() || streak.shareStatus != "CAN_SHARE") {
+            onResult(false, "Twitch has not made this Watch Streak shareable")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val headers = TwitchApiHelper.getGQLHeaders(applicationContext, true).toMutableMap().apply {
+                    // ShareMilestone is an Android-client mutation; do not use the web client ID used by RewardList.
+                    put(C.HEADER_CLIENT_ID, "kd1unb4b3q4t58fwlpcbzcbnm76a8fp")
+                }
+                if (headers[C.HEADER_TOKEN].isNullOrBlank()) {
+                    onResult(false, "Please sign in to Twitch again")
+                    return@launch
+                }
+                val response = graphQLRepository.shareWatchStreak(
+                    applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                    headers,
+                    channelId,
+                    milestoneId,
+                )
+                val error = response.errors?.firstOrNull()?.message
+                val payload = response.data?.shareViewerMilestone
+                when {
+                    !error.isNullOrBlank() -> onResult(false, error)
+                    payload == null -> onResult(false, "Twitch did not confirm the share")
+                    !payload.error?.code.isNullOrBlank() -> onResult(false, payload.error?.code)
+                    else -> {
+                        watchStreak.value = streak.copy(shareStatus = "SHARED")
+                        onResult(true, null)
+                        refreshWatchStreak(channelId)
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                onResult(false, e.message ?: "Could not share Watch Streak")
             }
         }
     }

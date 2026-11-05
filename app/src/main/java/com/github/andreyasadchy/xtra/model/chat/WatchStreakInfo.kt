@@ -6,4 +6,6 @@ data class WatchStreakInfo(
     val bonusPoints: Int,
     val state: String,
     val expiresAt: String? = null,
+    val milestoneId: String? = null,
+    val shareStatus: String = "",
 )
