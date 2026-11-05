@@ -1304,6 +1304,38 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         mergedChatRecyclerView = recyclerView
     }
 
+    /** Preserve the reader's visible message while live sources insert or trim rows. */
+    private fun updateMergedChatPreservingScroll(update: (MergedChatAdapter) -> Unit) {
+        val recyclerView = mergedChatRecyclerView
+        val merged = mergedChatAdapter
+        if (recyclerView == null || merged == null) return
+        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
+        val firstPosition = layoutManager?.findFirstVisibleItemPosition() ?: RecyclerView.NO_POSITION
+        val anchorMessage = if (firstPosition != RecyclerView.NO_POSITION) merged.messageAt(firstPosition) else null
+        val anchorTop = if (firstPosition != RecyclerView.NO_POSITION) {
+            layoutManager?.findViewByPosition(firstPosition)?.top ?: 0
+        } else 0
+        val wasAtBottom = merged.itemCount == 0 ||
+            (layoutManager?.findLastVisibleItemPosition() ?: -1) >= merged.itemCount - 1
+
+        update(merged)
+
+        recyclerView.post {
+            if (mergedChatRecyclerView !== recyclerView || mergedChatAdapter !== merged ||
+                !isAllChatsSelected || merged.itemCount == 0) return@post
+            if (wasAtBottom) {
+                recyclerView.scrollToPosition(merged.itemCount - 1)
+            } else {
+                val newAnchorPosition = anchorMessage?.let(merged::positionOfMessage) ?: -1
+                when {
+                    newAnchorPosition >= 0 -> layoutManager?.scrollToPositionWithOffset(newAnchorPosition, anchorTop)
+                    firstPosition != RecyclerView.NO_POSITION ->
+                        layoutManager?.scrollToPositionWithOffset(firstPosition.coerceAtMost(merged.itemCount - 1), anchorTop)
+                }
+            }
+        }
+    }
+
     private fun observeChatSource(fragment: ChatFragment) {
         if (!observedChatSources.add(fragment)) return
         fragment.viewLifecycleOwnerLiveData.observe(viewLifecycleOwner) { owner ->
@@ -1369,13 +1401,17 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     if (!fragment.isMergedRendererOnly) {
                         launch {
                             sourceViewModel.newMessage.collect { result ->
-                                if (result.third > 0) merged.removeOldestMessages(sourceAdapter, result.third)
-                                merged.addMessage(sourceAdapter, result.first)
+                                updateMergedChatPreservingScroll { current ->
+                                    if (result.third > 0) current.removeOldestMessages(sourceAdapter, result.third)
+                                    current.addMessage(sourceAdapter, result.first)
+                                }
                             }
                         }
                         launch {
                             sourceViewModel.addMessages.collect { result ->
-                                merged.addOlderMessages(sourceAdapter, result.first)
+                                updateMergedChatPreservingScroll { current ->
+                                    current.addOlderMessages(sourceAdapter, result.first)
+                                }
                             }
                         }
                         launch {
