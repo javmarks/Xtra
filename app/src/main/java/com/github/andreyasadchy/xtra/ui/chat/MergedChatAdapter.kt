@@ -19,11 +19,12 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     fun setSourceChannelInfo(channelId: String, channelName: String?, imageUrl: String?) {
         if (channelId.isBlank()) return
         sourceChannelInfo[channelId] = channelName to imageUrl
-        entries.forEach { entry ->
+        entries.forEachIndexed { index, entry ->
             val sourceMessage = if (entry.message.type == ChatMessage.REPLY_MESSAGE) entry.message.replyParent ?: entry.message else entry.message
             if ((sourceMessage.sourceRoomId ?: sourceMessage.roomId) == channelId) {
                 entry.message.sourceChannelName = channelName
                 entry.message.sourceChannelImageUrl = imageUrl
+                notifyItemChanged(index)
             }
         }
     }
