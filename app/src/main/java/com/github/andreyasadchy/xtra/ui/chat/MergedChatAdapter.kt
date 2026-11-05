@@ -42,7 +42,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val entry = entries.getOrNull(position) ?: return
-        (holder as? ChatAdapter.ViewHolder)?.let { entry.renderer.bindMessage(it, entry.message) }
+        (holder as? ChatAdapter.ViewHolder)?.let { entry.renderer.bindMessage(it, entry.message, showSourceChannel = true) }
     }
 
     override fun getItemCount(): Int = entries.size
