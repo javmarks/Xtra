@@ -101,7 +101,7 @@ class ChatAdapter(
         bindMessage(holder, chatMessage)
     }
 
-    fun bindMessage(holder: ViewHolder, chatMessage: ChatMessage) {
+    fun bindMessage(holder: ViewHolder, chatMessage: ChatMessage, showSourceChannel: Boolean = false) {
         stopAnimations(holder.textView)
         val result = ChatAdapterUtils.prepareChatMessage(
             chatMessage, fragment.requireContext(), holder.textView, enableTimestamps, timestampFormat, firstMsgVisibility, firstChatMsg,
@@ -109,7 +109,7 @@ class ChatAdapter(
             nameDisplay, useBoldNames, showNamePaints, namePaints, showSTVBadges, stvBadges, showGifMessages, showPersonalEmotes, personalEmoteSets,
             stvUsers, enableOverlayEmotes, showSystemMessageEmotes, loggedInUser, chatUrl, getEmoteBytes, userColors, savedColors, translateAllMessages,
             translateMessage, showLanguageDownloadDialog, true, localTwitchEmotes, thirdPartyEmotes, globalBadges, channelBadges, cheerEmotes,
-            savedLocalTwitchEmotes, savedLocalBadges, savedLocalCheerEmotes, savedLocalEmotes
+            savedLocalTwitchEmotes, savedLocalBadges, savedLocalCheerEmotes, savedLocalEmotes, showSourceChannel
         )
         holder.bind(chatMessage, result.builder)
         ChatAdapterUtils.loadImages(
