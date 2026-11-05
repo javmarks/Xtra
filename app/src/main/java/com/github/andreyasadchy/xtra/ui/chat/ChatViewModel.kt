@@ -1350,6 +1350,30 @@ class ChatViewModel(
         }.getOrDefault(emptyList())
     }
 
+    private fun findRecentModeratedMessage(
+        login: String?,
+        userId: String?,
+        eventTimestamp: Long?,
+        targetMessageId: String?,
+    ): String? {
+        synchronized(chatMessages) {
+            val exact = targetMessageId?.takeIf { it.isNotBlank() }?.let { id ->
+                chatMessages.lastOrNull { it.id == id || it.msgId == id }
+            }
+            if (!exact?.message.isNullOrBlank()) return exact?.message?.take(500)
+            val normalizedLogin = login?.lowercase()
+            val candidate = chatMessages.asReversed().firstOrNull { chat ->
+                chat.type == ChatMessage.USER_MESSAGE &&
+                    ((userId != null && chat.userId == userId) ||
+                        (normalizedLogin != null && chat.userLogin.equals(normalizedLogin, ignoreCase = true))) &&
+                    chat.message?.isNotBlank() == true &&
+                    (eventTimestamp == null || chat.timestamp == null ||
+                        (eventTimestamp - chat.timestamp!! in 0L..600_000L))
+            }
+            return candidate?.message?.take(500)
+        }
+    }
+
     private fun saveModerationLog(channelId: String?, entry: String) {
         if (channelId.isNullOrBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
@@ -1649,18 +1673,32 @@ class ChatViewModel(
 
         override suspend fun onClearChat(message: ChatUtils.IRCMessage) {
             val target = message.params.lastOrNull()?.takeIf { it.isNotBlank() }
+            val targetUserId = message.tags["target-user-id"]?.takeIf { it.isNotBlank() }
             val duration = message.tags["ban-duration"]?.toLongOrNull()
             val action = when {
                 target == null -> "Chat cleared"
-                duration != null -> "Timeout · $target · " + TwitchApiHelper.getDurationFromSeconds(applicationContext, duration.toString())
-                else -> "Ban · $target"
+                duration != null -> "Timeout"
+                else -> "Ban"
             }
-            val eventAt = message.tags["tmi-sent-ts"]?.toLongOrNull()
-                ?.let { java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it)) }
-            saveModerationLog(channelId, buildString {
-                if (eventAt != null) append(eventAt).append(" · ")
-                append("7TV LOG · ").append(action).append(" · #").append(channelLogin)
-            })
+            val eventTimestamp = message.tags["tmi-sent-ts"]?.toLongOrNull()
+            val eventAt = eventTimestamp?.let {
+                java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it))
+            }
+            val associatedMessage = findRecentModeratedMessage(
+                target, targetUserId, eventTimestamp, message.tags["target-msg-id"]
+            )
+            val log = JSONObject().apply {
+                put("action", action)
+                put("target", target ?: JSONObject.NULL)
+                put("duration", duration ?: JSONObject.NULL)
+                put("durationLabel", duration?.let {
+                    TwitchApiHelper.getDurationFromSeconds(applicationContext, it.toString())
+                } ?: JSONObject.NULL)
+                put("time", eventAt ?: JSONObject.NULL)
+                put("channel", channelLogin)
+                put("message", associatedMessage ?: JSONObject.NULL)
+            }
+            saveModerationLog(channelId, log.toString())
             if (showClearChat) {
                 onMessage(ChatUtils.parseClearChat(applicationContext, message))
             }
@@ -1832,25 +1870,23 @@ class ChatViewModel(
             val target = actionData?.optString("user_name")?.takeIf { it.isNotBlank() } ?: actionData?.optString("user_login")?.takeIf { it.isNotBlank() }
             val reason = actionData?.optString("reason")?.takeIf { it.isNotBlank() }
             val duration = actionData?.optInt("duration", 0)?.takeIf { it > 0 }
-            val details = buildString {
-                append("MOD LOG · ")
-                append(moderator ?: "Moderator")
-                append(" · ")
-                append(action.replace('_', ' '))
-                if (target != null) append(" · ").append(target)
-                if (duration != null) append(" · ").append(duration).append("s")
-                if (reason != null) append(" · ").append(reason)
-                if (sourceChannel != null) append(" · via ").append(sourceChannel)
-            }
             val eventTime = timestamp?.let { Instant.parseOrNull(it)?.toEpochMilliseconds()?.takeIf { ms -> ms > 0 } }
             val timeLabel = eventTime?.let { java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it)) }
             val sourceLabel = sourceChannel ?: channelLogin
-            val logLine = buildString {
-                if (timeLabel != null) append(timeLabel).append(" · ")
-                append(details.removePrefix("MOD LOG · "))
-                if (sourceLabel.isNotBlank()) append(" · #").append(sourceLabel)
+            val actionMessage = actionData?.optString("message")?.takeIf { it.isNotBlank() && it != "null" }
+                ?: actionData?.optString("text")?.takeIf { it.isNotBlank() && it != "null" }
+                ?: findRecentModeratedMessage(target, actionData?.optString("user_id"), eventTime, null)
+            val logEntry = JSONObject().apply {
+                put("action", action.replace('_', ' '))
+                put("target", target ?: JSONObject.NULL)
+                put("moderator", moderator ?: JSONObject.NULL)
+                put("duration", duration ?: JSONObject.NULL)
+                put("reason", reason ?: JSONObject.NULL)
+                put("time", timeLabel ?: JSONObject.NULL)
+                put("channel", sourceLabel)
+                put("message", actionMessage ?: JSONObject.NULL)
             }
-            saveModerationLog(channelId, logLine)
+            saveModerationLog(channelId, logEntry.toString())
         }
 
         override suspend fun onDisconnect(message: String, fullMsg: String?) {
