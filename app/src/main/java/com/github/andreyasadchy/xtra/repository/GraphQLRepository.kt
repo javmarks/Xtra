@@ -1936,4 +1936,4 @@ class GraphQLRepository(
         json.decodeFromString<ErrorResponse>(sendPersistedQuery(networkLibrary, headers, body))
     }
 
-    }
+}
