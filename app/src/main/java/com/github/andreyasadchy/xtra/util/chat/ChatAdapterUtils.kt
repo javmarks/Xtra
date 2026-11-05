@@ -2,6 +2,7 @@ package com.github.andreyasadchy.xtra.util.chat
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Canvas
 import android.graphics.Typeface
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.ColorDrawable
@@ -12,6 +13,7 @@ import android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
 import android.text.TextPaint
 import android.text.style.ClickableSpan
 import android.text.style.ForegroundColorSpan
+import android.text.style.ReplacementSpan
 import android.text.style.StyleSpan
 import android.text.style.URLSpan
 import android.util.Patterns
@@ -657,6 +659,7 @@ object ChatAdapterUtils {
                             isAnimated = emote.isAnimated,
                             size = Image.IMAGE_SIZE_EMOTE,
                             thirdParty = emote.thirdParty,
+                            fallbackText = emote.name?.takeIf { emote.thirdParty },
                             start = previousImage.start,
                             end = previousImage.end
                         )
@@ -692,6 +695,7 @@ object ChatAdapterUtils {
                             isAnimated = emote.isAnimated,
                             size = Image.IMAGE_SIZE_EMOTE,
                             thirdParty = emote.thirdParty,
+                            fallbackText = emote.name?.takeIf { emote.thirdParty },
                             start = builderIndex,
                             end = builderIndex + 1
                         )
@@ -913,7 +917,22 @@ object ChatAdapterUtils {
             }
         }
         images.forEach { image ->
-            loadImage(imageLibrary, fragment, image, emoteQuality) { result ->
+            loadImage(imageLibrary, fragment, image, emoteQuality, onFailed = {
+                if (!isCurrent()) return@loadImage
+                val fallbackText = image.fallbackText ?: return@loadImage
+                builder.getSpans(image.start, image.end, ForegroundColorSpan::class.java).forEach {
+                    builder.removeSpan(it)
+                }
+                builder.setSpan(object : ReplacementSpan() {
+                    override fun getSize(paint: TextPaint, text: CharSequence?, start: Int, end: Int, fm: android.graphics.Paint.FontMetricsInt?): Int {
+                        return paint.measureText(fallbackText).toInt()
+                    }
+                    override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: android.graphics.Paint) {
+                        canvas.drawText(fallbackText, x, y.toFloat(), paint)
+                    }
+                }, image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE)
+                bind(builder)
+            }) { result ->
                 if (!isCurrent()) return@loadImage
                 val imageSize = when (image.size) {
                     Image.IMAGE_SIZE_EMOTE -> emoteSize
@@ -1000,15 +1019,15 @@ object ChatAdapterUtils {
         }
     }
 
-    private fun loadImage(imageLibrary: String?, fragment: Fragment, image: Image, emoteQuality: String, onLoaded: (Drawable) -> Unit) {
+    private fun loadImage(imageLibrary: String?, fragment: Fragment, image: Image, emoteQuality: String, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
         if (imageLibrary == "0" || (imageLibrary == "1" && !image.format.equals("webp", true))) {
-            loadCoil(fragment, image, emoteQuality, onLoaded)
+            loadCoil(fragment, image, emoteQuality, onFailed, onLoaded)
         } else {
-            loadGlide(fragment, image, emoteQuality, onLoaded)
+            loadGlide(fragment, image, emoteQuality, onFailed, onLoaded)
         }
     }
 
-    private fun loadCoil(fragment: Fragment, image: Image, emoteQuality: String, onLoaded: (Drawable) -> Unit) {
+    private fun loadCoil(fragment: Fragment, image: Image, emoteQuality: String, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
         fragment.requireContext().imageLoader.enqueue(
             ImageRequest.Builder(fragment.requireContext()).apply {
                 data(image.localData ?: when (emoteQuality) {
@@ -1026,12 +1045,15 @@ object ChatAdapterUtils {
                     onSuccess = {
                         onLoaded((it.asDrawable(fragment.resources)))
                     },
+                    onError = {
+                        onFailed()
+                    },
                 )
             }.build()
         )
     }
 
-    private fun loadGlide(fragment: Fragment, image: Image, emoteQuality: String, onLoaded: (Drawable) -> Unit) {
+    private fun loadGlide(fragment: Fragment, image: Image, emoteQuality: String, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
         Glide.with(fragment)
             .load(image.localData ?: when (emoteQuality) {
                 "4" -> image.url4x ?: image.url3x ?: image.url2x ?: image.url1x
@@ -1047,6 +1069,10 @@ object ChatAdapterUtils {
             .into(object : CustomTarget<Drawable>() {
                 override fun onResourceReady(resource: Drawable, transition: Transition<in Drawable>?) {
                     onLoaded(resource)
+                }
+
+                override fun onLoadFailed(errorDrawable: Drawable?) {
+                    onFailed()
                 }
 
                 override fun onLoadCleared(placeholder: Drawable?) {
