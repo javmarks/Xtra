@@ -238,7 +238,7 @@ class ChatViewModel(
                         ChannelPointReward(
                             id = id, title = title, cost = reward.cost, prompt = reward.prompt,
                             enabled = reward.isEnabled == true, inStock = reward.isInStock != false,
-                            paused = reward.isPaused == true, userInputRequired = !reward.prompt.isNullOrBlank(), url1x = reward.image?.url1x,
+                            paused = reward.isPaused == true, userInputRequired = reward.isUserInputRequired == true, url1x = reward.image?.url1x,
                             url2x = reward.image?.url2x, url4x = reward.image?.url4x,
                         )
                     }.sortedBy { it.cost ?: Int.MAX_VALUE }
