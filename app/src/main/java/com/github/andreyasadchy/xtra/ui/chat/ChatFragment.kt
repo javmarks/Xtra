@@ -176,7 +176,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             val message = if (rewards.isNotEmpty()) {
                 "Your balance: ${balance?.let { NumberFormat.getIntegerInstance().format(it) } ?: "—"} Channel Points"
             } else {
-                "No custom rewards were loaded.\n\nDiagnostic: \${viewModel.channelPointRewardsStatus.value}"
+                "No custom rewards were loaded.\n\nDiagnostic: ${viewModel.channelPointRewardsStatus.value}"
             }
             val dialog = requireContext().getAlertDialogBuilder()
                 .setTitle("Channel Points · #$channelName")
