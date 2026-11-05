@@ -71,21 +71,33 @@ object ChatAdapterUtils {
         var builderIndex = 0
         // Frosty/Twitch Shared Chat-style source marker: a compact channel avatar
         // before the message, separate from the chatter's own badges.
-        if (chatMessage.type != ChatMessage.REPLY_MESSAGE && !chatMessage.sourceChannelImageUrl.isNullOrBlank()) {
-            builder.append(". ")
-            builder.setSpan(ForegroundColorSpan(Color.TRANSPARENT), builderIndex, builderIndex + 1, SPAN_EXCLUSIVE_EXCLUSIVE)
+        if (chatMessage.type != ChatMessage.REPLY_MESSAGE) {
+            val sourceImage = chatMessage.sourceChannelImageUrl?.takeIf { it.isNotBlank() }
             val sourceLabel = chatMessage.sourceChannelName?.takeIf { it.isNotBlank() }?.let { "#${it.take(16)}" }
-            images.add(Image(
-                url1x = chatMessage.sourceChannelImageUrl,
-                url2x = chatMessage.sourceChannelImageUrl,
-                url3x = chatMessage.sourceChannelImageUrl,
-                url4x = chatMessage.sourceChannelImageUrl,
-                size = Image.IMAGE_SIZE_BADGE,
-                fallbackText = sourceLabel,
-                start = builderIndex,
-                end = builderIndex + 1
-            ))
-            builderIndex += 2
+            if (sourceImage != null) {
+                builder.append(". ")
+                builder.setSpan(ForegroundColorSpan(Color.TRANSPARENT), builderIndex, builderIndex + 1, SPAN_EXCLUSIVE_EXCLUSIVE)
+                images.add(Image(
+                    url1x = sourceImage,
+                    url2x = sourceImage,
+                    url3x = sourceImage,
+                    url4x = sourceImage,
+                    size = Image.IMAGE_SIZE_BADGE,
+                    fallbackText = sourceLabel,
+                    start = builderIndex,
+                    end = builderIndex + 1
+                ))
+                builderIndex += 2
+            } else if (sourceLabel != null) {
+                builder.append(sourceLabel).append(" ")
+                builder.setSpan(
+                    ForegroundColorSpan(getSavedColor("#999999", savedColors, useReadableColors, isLightTheme)),
+                    builderIndex,
+                    builderIndex + sourceLabel.length,
+                    SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                builderIndex += sourceLabel.length + 1
+            }
         }
         when {
             chatMessage.type == ChatMessage.REPLY_MESSAGE -> {
