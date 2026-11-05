@@ -128,17 +128,12 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
                 ?: requireArguments().getString(KEY_CHANNEL_LOGIN)
                 ?: "channel"
-            requireContext().getAlertDialogBuilder()
-                .setTitle("Mod Logs · #$channelName")
-                .apply {
-                    if (entries.isEmpty()) {
-                        setMessage("No moderation events have been recorded for this channel yet. Logs begin when the app is connected and Twitch grants the required moderation permissions.")
-                    } else {
-                        setItems(entries.toTypedArray(), null)
-                    }
-                }
-                .setPositiveButton(android.R.string.ok, null)
-                .show()
+            ModerationLogDialog.show(
+                requireContext(),
+                "Mod Logs · #$channelName",
+                entries,
+                "No moderation events have been recorded for this channel yet."
+            )
         }
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
