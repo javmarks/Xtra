@@ -27,12 +27,19 @@ object ModerationLogDialog {
         val dialog: AlertDialog, private val context: Context,
         private val list: LinearLayout, private val emptyMessage: String,
     ) {
+        private var renderedEntries: List<String> = emptyList()
+
         fun update(rawEntries: List<String>) {
             if (!dialog.isShowing) return
-            list.removeAllViews()
+            // Keep the dialog lightweight: the full history remains stored, but only the
+            // newest 60 cards are displayed. New live entries are inserted incrementally.
+            val visibleEntries = rawEntries.take(60)
+            if (visibleEntries == renderedEntries) return
             val density = context.resources.displayMetrics.density
             fun dp(value: Int) = (value * density).toInt()
-            if (rawEntries.isEmpty()) {
+            if (visibleEntries.isEmpty()) {
+                list.removeAllViews()
+                renderedEntries = emptyList()
                 list.addView(TextView(context).apply {
                     text = emptyMessage
                     textSize = 13f
@@ -45,7 +52,21 @@ object ModerationLogDialog {
             val onSurface = MaterialColors.getColor(context, com.google.android.material.R.attr.colorOnSurface, 0xFF222222.toInt())
             val secondary = MaterialColors.getColor(context, com.google.android.material.R.attr.colorOnSurfaceVariant, onSurface)
             val outline = MaterialColors.getColor(context, com.google.android.material.R.attr.colorOutlineVariant, secondary)
-            rawEntries.forEach { raw ->
+            var overlap = minOf(visibleEntries.size, renderedEntries.size)
+            while (overlap > 0 && visibleEntries.drop(visibleEntries.size - overlap) != renderedEntries.take(overlap)) {
+                overlap--
+            }
+            val canAppendIncrementally = overlap > 0
+            val entriesToRender = if (canAppendIncrementally) {
+                // Existing entries are the suffix of the new list; trim entries that
+                // fell outside the 60-entry window, then prepend only genuinely new cards.
+                while (list.childCount > overlap) list.removeViewAt(list.childCount - 1)
+                visibleEntries.take(visibleEntries.size - overlap)
+            } else {
+                list.removeAllViews()
+                visibleEntries
+            }
+            entriesToRender.forEachIndexed { index, raw ->
                 val entry = parse(raw)
                 val card = MaterialCardView(context).apply {
                     radius = dp(12).toFloat()
@@ -93,8 +114,9 @@ object ModerationLogDialog {
                     }
                     addView(inner)
                 }
-                list.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
+                list.addView(card, index, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
             }
+            renderedEntries = visibleEntries
         }
     }
 
