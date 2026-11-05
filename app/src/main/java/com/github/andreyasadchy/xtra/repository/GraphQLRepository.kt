@@ -1935,14 +1935,26 @@ class GraphQLRepository(
         }.toString()
         json.decodeFromString<ErrorResponse>(sendPersistedQuery(networkLibrary, headers, body))
     }
-}}input: RedeemCommunityPointsCustomRewardInput!) {
-                redeemCommunityPointsCustomReward(input: ${') { __typename }
-            }""")
+    }
+
+    suspend fun redeemChannelPointReward(
+        networkLibrary: String?,
+        headers: Map<String, String>,
+        channelId: String,
+        rewardId: String,
+        title: String,
+        cost: Int,
+        prompt: String?,
+        textInput: String,
+    ): ErrorResponse = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("operationName", "RedeemCommunityPointsCustomReward")
+            put("query", "mutation RedeemCommunityPointsCustomReward(\\$input: RedeemCommunityPointsCustomRewardInput!) { redeemCommunityPointsCustomReward(input: \\$input) { __typename } }")
             putJsonObject("variables") {
                 putJsonObject("input") {
                     put("channelID", channelId)
                     put("cost", cost)
-                    put("prompt", prompt ?: "")
+                    put("prompt", prompt)
                     put("rewardID", rewardId)
                     put("textInput", textInput)
                     put("title", title)
