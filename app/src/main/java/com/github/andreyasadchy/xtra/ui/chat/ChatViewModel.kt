@@ -1325,7 +1325,11 @@ class ChatViewModel(
 
     private fun isDuplicateChatMessage(message: ChatMessage): Boolean {
         if (message.type != ChatMessage.USER_MESSAGE) return false
-        val id = message.id?.takeIf { it.isNotBlank() } ?: return false
+        // Prefer Twitch's original Shared Chat message ID. Mirrored deliveries can
+        // have different room-local IDs while referring to the same original message.
+        val id = message.sourceMessageId?.takeIf { it.isNotBlank() }
+            ?: message.id?.takeIf { it.isNotBlank() }
+            ?: return false
         return synchronized(seenChatMessageIds) {
             if (seenChatMessageIds.containsKey(id)) {
                 true
