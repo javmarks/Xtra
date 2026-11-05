@@ -184,6 +184,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             if (lines.isNotEmpty()) dialog.setItems(lines.toTypedArray(), null)
             dialog.setPositiveButton(android.R.string.ok, null).show()
         }
+        // Make every part of the Channel Points indicator open the same rewards panel.
+        binding.channelPointsIcon.setOnClickListener { binding.channelPointsBar.performClick() }
+        binding.channelPointsBalance.setOnClickListener { binding.channelPointsBar.performClick() }
+        binding.channelPointsLabel.setOnClickListener { binding.channelPointsBar.performClick() }
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.pinnedChatMessage.collectLatest { pinned ->
