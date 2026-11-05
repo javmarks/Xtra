@@ -2324,23 +2324,6 @@ class GraphQLRepository(
         }.toString()
         json.decodeFromString<ErrorResponse>(sendPersistedQuery(networkLibrary, headers, body))
     }
-}}input) { __typename }
-            }""")
-            putJsonObject("variables") {
-                putJsonObject("input") {
-                    put("channelID", channelId)
-                    put("cost", cost)
-                    put("prompt", prompt ?: "")
-                    put("rewardID", rewardId)
-                    put("textInput", textInput)
-                    put("title", title)
-                    put("transactionID", Uuid.random().toString())
-                }
-            }
-        }.toString()
-        json.decodeFromString<ErrorResponse>(sendPersistedQuery(networkLibrary, headers, body))
-    }
-
     suspend fun loadClaimPoints(networkLibrary: String?, headers: Map<String, String>, channelId: String?, claimId: String?): ErrorResponse = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
             putJsonObject("extensions") {
