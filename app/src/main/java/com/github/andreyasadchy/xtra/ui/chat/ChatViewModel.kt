@@ -1624,6 +1624,17 @@ class ChatViewModel(
         }
 
         override suspend fun onClearMessage(message: ChatUtils.IRCMessage) {
+            val deletedLogin = message.tags["login"]?.takeIf { it.isNotBlank() }
+            val deletedText = message.params.lastOrNull()?.takeIf { it.isNotBlank() }
+            val deletedAt = message.tags["tmi-sent-ts"]?.toLongOrNull()
+                ?.let { java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it)) }
+            saveModerationLog(channelId, buildString {
+                if (deletedAt != null) append(deletedAt).append(" · ")
+                append("7TV LOG · Message deleted")
+                if (deletedLogin != null) append(" · ").append(deletedLogin)
+                if (deletedText != null) append(" · ").append(deletedText.take(120))
+                append(" · #").append(channelLogin)
+            })
             if (showClearMsg) {
                 val chatMessage = ChatUtils.parseClearMessage(message)
                 val deletedMessage = chatMessage.targetMsgId?.let { targetId ->
@@ -1637,6 +1648,19 @@ class ChatViewModel(
         }
 
         override suspend fun onClearChat(message: ChatUtils.IRCMessage) {
+            val target = message.params.lastOrNull()?.takeIf { it.isNotBlank() }
+            val duration = message.tags["ban-duration"]?.toLongOrNull()
+            val action = when {
+                target == null -> "Chat cleared"
+                duration != null -> "Timeout · $target · " + TwitchApiHelper.getDurationFromSeconds(applicationContext, duration.toString())
+                else -> "Ban · $target"
+            }
+            val eventAt = message.tags["tmi-sent-ts"]?.toLongOrNull()
+                ?.let { java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it)) }
+            saveModerationLog(channelId, buildString {
+                if (eventAt != null) append(eventAt).append(" · ")
+                append("7TV LOG · ").append(action).append(" · #").append(channelLogin)
+            })
             if (showClearChat) {
                 onMessage(ChatUtils.parseClearChat(applicationContext, message))
             }
