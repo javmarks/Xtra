@@ -70,7 +70,8 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         if (key != null && !messageIds.add(key)) return
 
         insertSorted(Entry(owner, rendererFor(owner, message), message))
-        notifyItemInserted(entries.indexOfFirst { it.owner === owner && it.message === message })
+        val insertedAt = entries.indexOfFirst { it.owner === owner && it.message === message }
+        if (insertedAt >= 0) notifyItemInserted(insertedAt)
         trimLiveMessages(owner)
     }
 
@@ -102,8 +103,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     fun replaceSourceMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
         entries.removeAll { it.owner === owner }
         rebuildMessageIds()
-        messages.asSequence()
-            .sortedBy { it.timestamp ?: Long.MAX_VALUE }
+        messages.sortedBy { it.timestamp ?: Long.MAX_VALUE }
             .takeLast(MAX_LIVE_MESSAGES_PER_SOURCE)
             .forEach { message ->
                 val key = messageKey(message)
