@@ -1546,50 +1546,47 @@ class ChatViewModel(
     fun stopLiveChat() {
         if (started) {
             started = false
-            if (chatReadIRCSocket != null) {
-                MainScope().launch(Dispatchers.IO) {
-                    chatReadIRCSocket?.disconnect(chatReadJob)
-                }
-            } else {
-                if (chatReadWebSocket != null) {
-                    MainScope().launch(Dispatchers.IO) {
-                        chatReadWebSocket?.disconnect(chatReadJob)
-                    }
-                } else {
-                    if (eventSub != null) {
-                        MainScope().launch(Dispatchers.IO) {
-                            eventSub?.disconnect(chatReadJob)
-                        }
-                    }
-                }
-            }
-            if (chatWriteIRCSocket != null) {
-                MainScope().launch(Dispatchers.IO) {
-                    chatWriteIRCSocket?.disconnect(chatWriteJob)
-                }
-            } else {
-                if (chatWriteWebSocket != null) {
-                    MainScope().launch(Dispatchers.IO) {
-                        chatWriteWebSocket?.disconnect(chatWriteJob)
-                    }
-                }
-            }
-            if (moderationEventSub != null) {
-                MainScope().launch(Dispatchers.IO) {
-                    moderationEventSub?.disconnect(moderationEventSubJob)
-                    moderationEventSub = null
-                    moderationEventSubJob = null
-                }
-            }
-            if (hermesWebSocket != null) {
-                MainScope().launch(Dispatchers.IO) {
-                    hermesWebSocket?.disconnect(pubSubJob)
-                }
-            }
-            if (stvEventApi != null) {
-                MainScope().launch(Dispatchers.IO) {
-                    stvEventApi?.disconnect(stvEventApiJob)
-                }
+
+            // Capture the exact connections being stopped before launching asynchronous cleanup.
+            // startLiveChat() may immediately install replacement sockets; cleanup must never
+            // accidentally disconnect the new socket while leaving the old reader alive.
+            val oldChatReadIRCSocket = chatReadIRCSocket
+            val oldChatWriteIRCSocket = chatWriteIRCSocket
+            val oldChatReadWebSocket = chatReadWebSocket
+            val oldChatWriteWebSocket = chatWriteWebSocket
+            val oldChatReadJob = chatReadJob
+            val oldChatWriteJob = chatWriteJob
+            val oldEventSub = eventSub
+            val oldModerationEventSub = moderationEventSub
+            val oldModerationEventSubJob = moderationEventSubJob
+            val oldHermesWebSocket = hermesWebSocket
+            val oldPubSubJob = pubSubJob
+            val oldStvEventApi = stvEventApi
+            val oldStvEventApiJob = stvEventApiJob
+
+            chatReadIRCSocket = null
+            chatWriteIRCSocket = null
+            chatReadWebSocket = null
+            chatWriteWebSocket = null
+            chatReadJob = null
+            chatWriteJob = null
+            eventSub = null
+            moderationEventSub = null
+            moderationEventSubJob = null
+            hermesWebSocket = null
+            pubSubJob = null
+            stvEventApi = null
+            stvEventApiJob = null
+
+            MainScope().launch(Dispatchers.IO) {
+                oldChatReadIRCSocket?.disconnect(oldChatReadJob)
+                oldChatReadWebSocket?.disconnect(oldChatReadJob)
+                oldEventSub?.disconnect(oldChatReadJob)
+                oldChatWriteIRCSocket?.disconnect(oldChatWriteJob)
+                oldChatWriteWebSocket?.disconnect(oldChatWriteJob)
+                oldModerationEventSub?.disconnect(oldModerationEventSubJob)
+                oldHermesWebSocket?.disconnect(oldPubSubJob)
+                oldStvEventApi?.disconnect(oldStvEventApiJob)
             }
         }
     }
