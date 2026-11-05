@@ -1219,10 +1219,9 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             val label = fragment.arguments?.getString("channel_name")
                 ?: fragment.arguments?.getString("channel_login")
                 ?: "Chat"
-            val points = channelPointsBalances[fragment]
             val tabContainer = FrameLayout(requireContext())
             val tab = Button(requireContext()).apply {
-                text = if (points != null) "$label · ${java.text.NumberFormat.getIntegerInstance().format(points)}" else label
+                text = label
                 isAllCaps = false
                 isSelected = !isAllChatsSelected && fragment === chatFragment
                 setOnClickListener { switchChatFragment(fragment) }
