@@ -48,8 +48,11 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     override fun getItemCount(): Int = entries.size
 
     private fun messageKey(message: ChatMessage): String? =
-        message.id?.takeIf { it.isNotBlank() }
-            ?: message.sourceMessageId?.takeIf { it.isNotBlank() }
+        // In Twitch Shared Chat, each destination room can have its own local message ID.
+        // sourceMessageId identifies the original message across all participating rooms,
+        // so it must take priority when merging channel feeds.
+        message.sourceMessageId?.takeIf { it.isNotBlank() }
+            ?: message.id?.takeIf { it.isNotBlank() }
 
     // Reply preview rows inherit the timestamp of the real message they preview.
     // Their own timestamp is intentionally null, so sorting only by it sent every
