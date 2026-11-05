@@ -165,6 +165,6 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
 
     companion object {
-        private const val MAX_LIVE_MESSAGES_PER_SOURCE = 100
+        private const val MAX_LIVE_MESSAGES_PER_SOURCE = 500
     }
 }
