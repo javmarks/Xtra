@@ -1673,6 +1673,25 @@ class ChatViewModel(
         }
 
         override suspend fun onRoomState(message: ChatUtils.IRCMessage) {
+            val modeChanges = buildList {
+                message.tags["emote-only"]?.let { add(if (it == "1") "Emote-only enabled" else "Emote-only disabled") }
+                message.tags["followers-only"]?.let { value ->
+                    add(if (value.toIntOrNull()?.let { it >= 0 } == true) "Followers-only enabled ($value m)" else "Followers-only disabled")
+                }
+                message.tags["r9k"]?.let { add(if (it == "1") "Unique chat enabled" else "Unique chat disabled") }
+                message.tags["slow"]?.let { value ->
+                    add(if (value.toIntOrNull()?.let { it > 0 } == true) "Slow mode enabled ($value s)" else "Slow mode disabled")
+                }
+                message.tags["subs-only"]?.let { add(if (it == "1") "Subscriber-only mode enabled" else "Subscriber-only mode disabled") }
+            }
+            if (modeChanges.isNotEmpty()) {
+                saveModerationLog(channelId, buildString {
+                    append(java.text.DateFormat.getDateTimeInstance().format(java.util.Date()))
+                    append(" · 7TV LOG · ")
+                    append(modeChanges.joinToString(", "))
+                    append(" · #").append(channelLogin)
+                })
+            }
             roomState.value = RoomState(
                 emote = message.tags["emote-only"],
                 followers = message.tags["followers-only"],
