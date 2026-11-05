@@ -47,6 +47,7 @@ class ChannelPointContextResponse(
         val isEnabled: Boolean? = null,
         val isInStock: Boolean? = null,
         val isPaused: Boolean? = null,
+        val isUserInputRequired: Boolean? = null,
         val image: RewardImage? = null,
     )
 
