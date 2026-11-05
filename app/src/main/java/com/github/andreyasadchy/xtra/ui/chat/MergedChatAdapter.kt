@@ -133,6 +133,11 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
     }
 
+    fun messageAt(position: Int): ChatMessage? = entries.getOrNull(position)?.message
+
+    fun positionOfMessage(message: ChatMessage): Int =
+        entries.indexOfFirst { it.message === message }
+
     fun addOlderMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
         var changed = false
         messages.forEach { message ->
