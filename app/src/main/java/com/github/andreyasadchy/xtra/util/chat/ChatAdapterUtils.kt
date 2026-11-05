@@ -924,7 +924,7 @@ object ChatAdapterUtils {
                     builder.removeSpan(it)
                 }
                 builder.setSpan(object : ReplacementSpan() {
-                    override fun getSize(paint: TextPaint, text: CharSequence?, start: Int, end: Int, fm: android.graphics.Paint.FontMetricsInt?): Int {
+                    override fun getSize(paint: android.graphics.Paint, text: CharSequence?, start: Int, end: Int, fm: android.graphics.Paint.FontMetricsInt?): Int {
                         return paint.measureText(fallbackText).toInt()
                     }
                     override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: android.graphics.Paint) {
@@ -977,7 +977,7 @@ object ChatAdapterUtils {
     }
 
     private fun nextOverlayEmote(imageLibrary: String?, fragment: Fragment, drawables: Array<Drawable>, image: Image, bottomImage: Image, itemView: View, bind: (SpannableStringBuilder) -> Unit, builder: SpannableStringBuilder, translated: Boolean, emoteSize: Int, emoteQuality: String, animateGifs: Boolean, enableOverlayEmotes: Boolean, chatMessage: ChatMessage, savedColors: HashMap<String, Int>, useReadableColors: Boolean, isLightTheme: Boolean, showLanguageDownloadDialog: (ChatMessage, String) -> Unit, hideErrors: Boolean, isCurrent: () -> Boolean) {
-        loadImage(imageLibrary, fragment, image, emoteQuality) { result ->
+        loadImage(imageLibrary, fragment, image, emoteQuality, onFailed = {}) { result ->
             if (!isCurrent()) return@loadImage
             val widthRatio = result.intrinsicWidth.toFloat() / result.intrinsicHeight.toFloat()
             val size = if (widthRatio == 1f) {
