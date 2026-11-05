@@ -967,19 +967,23 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 val lastIndex = result.second
                                 val removeCount = result.third
                                 adapter?.let { adapter ->
-                                    // Decide whether the reader was following the newest message
-                                    // before changing the adapter. The down-button visibility can
-                                    // be stale during VOD replay because scrollToPosition() does
-                                    // not always trigger a scroll-state callback.
+                                    // onMessage() has already changed the backing list before this
+                                    // collector runs, so adapter.itemCount includes the incoming row.
+                                    // Compare against the previous count, not the new count, or a reader
+                                    // who was at the bottom will incorrectly be treated as scrolled up.
                                     val layoutManager = binding.recyclerView.layoutManager as? LinearLayoutManager
-                                    val wasAtBottom = adapter.itemCount == 0 ||
-                                        (layoutManager?.findLastVisibleItemPosition() ?: -1) >= adapter.itemCount - 1
-                                    adapter.notifyItemInserted(lastIndex)
+                                    val previousItemCount = (lastIndex - 1 + removeCount).coerceAtLeast(0)
+                                    val wasAtBottom = previousItemCount == 0 ||
+                                        (layoutManager?.findLastVisibleItemPosition() ?: -1) >= previousItemCount - 1
                                     if (removeCount > 0) {
                                         adapter.notifyItemRangeRemoved(0, removeCount)
                                     }
-                                    if (!isChatTouched && wasAtBottom) {
-                                        binding.recyclerView.scrollToPosition(lastIndex - removeCount)
+                                    val newLastIndex = lastIndex - 1
+                                    if (newLastIndex >= 0) {
+                                        adapter.notifyItemInserted(newLastIndex)
+                                    }
+                                    if (!isChatTouched && wasAtBottom && newLastIndex >= 0) {
+                                        binding.recyclerView.scrollToPosition(newLastIndex)
                                         binding.btnDown.isGone = true
                                     }
                                 }
