@@ -124,16 +124,21 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         val isLiveChannel = requireArguments().getBoolean(KEY_IS_LIVE)
         binding.moderationLogsBar.isVisible = isLiveChannel && !isMergedRendererOnly
         binding.moderationLogsButton.setOnClickListener {
-            val entries = viewModel.moderationLogs.value
             val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
                 ?: requireArguments().getString(KEY_CHANNEL_LOGIN)
                 ?: "channel"
-            ModerationLogDialog.show(
+            val logDialog = ModerationLogDialog.show(
                 requireContext(),
                 "Mod Logs · #$channelName",
-                entries,
+                viewModel.moderationLogs.value,
                 "No moderation events have been recorded for this channel yet."
             )
+            val updateJob = viewLifecycleOwner.lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    viewModel.moderationLogs.collectLatest { entries -> logDialog.update(entries) }
+                }
+            }
+            logDialog.dialog.setOnDismissListener { updateJob.cancel() }
         }
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
