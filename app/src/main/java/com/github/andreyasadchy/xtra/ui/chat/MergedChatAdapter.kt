@@ -66,6 +66,8 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
 
     fun addMessage(owner: ChatAdapter, message: ChatMessage) {
+        // Reply previews are auxiliary rows; the actual chat message carries the reply metadata.
+        if (message.type == ChatMessage.REPLY_MESSAGE) return
         val key = messageKey(message)
         if (key != null && !messageIds.add(key)) return
 
@@ -91,6 +93,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     fun addOlderMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
         var changed = false
         messages.forEach { message ->
+            if (message.type == ChatMessage.REPLY_MESSAGE) return@forEach
             val key = messageKey(message)
             if (key == null || messageIds.add(key)) {
                 insertSorted(Entry(owner, rendererFor(owner, message), message))
@@ -103,7 +106,10 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     fun replaceSourceMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
         entries.removeAll { it.owner === owner }
         rebuildMessageIds()
-        messages.sortedBy { it.timestamp ?: Long.MAX_VALUE }
+        messages.asSequence()
+            .filter { it.type != ChatMessage.REPLY_MESSAGE }
+            .sortedBy { it.timestamp ?: Long.MAX_VALUE }
+            .toList()
             .takeLast(MAX_LIVE_MESSAGES_PER_SOURCE)
             .forEach { message ->
                 val key = messageKey(message)
