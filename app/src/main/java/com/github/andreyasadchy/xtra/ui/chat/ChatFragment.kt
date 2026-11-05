@@ -16,6 +16,7 @@ import android.widget.Toast
 import android.widget.LinearLayout
 import android.widget.MultiAutoCompleteTextView
 import android.widget.TextView
+import android.widget.EditText
 import androidx.activity.OnBackPressedCallback
 import androidx.core.content.res.use
 import androidx.core.view.ViewCompat
@@ -162,35 +163,91 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             val rewards = viewModel.channelPointRewards.value
             val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
                 ?: requireArguments().getString(KEY_CHANNEL_LOGIN) ?: "channel"
+            val channelId = requireArguments().getString(KEY_CHANNEL_ID)
             val balance = viewModel.channelPointsBalance.value
+            val balanceText = balance?.let { NumberFormat.getIntegerInstance().format(it) } ?: "—"
             val lines = rewards.map { reward ->
                 val cost = reward.cost?.let { NumberFormat.getIntegerInstance().format(it) } ?: "?"
                 val status = when {
                     reward.paused -> " · Paused"
                     !reward.enabled -> " · Unavailable"
                     !reward.inStock -> " · Out of stock"
+                    balance != null && reward.cost != null && balance < reward.cost -> " · Not enough points"
                     else -> ""
                 }
                 "${reward.title}  ·  ◆ $cost$status"
             }
-            val message = buildString {
-                append("Your balance: ")
-                append(balance?.let { NumberFormat.getIntegerInstance().format(it) } ?: "—")
-                append(" Channel Points")
-                if (lines.isNotEmpty()) {
-                    append("\n\nCustom rewards:\n")
-                    append(lines.joinToString("\n"))
-                } else {
-                    append("\n\nNo custom rewards were loaded.")
-                    append("\n\nDiagnostic: ")
-                    append(viewModel.channelPointRewardsStatus.value)
+            val builder = requireContext().getAlertDialogBuilder()
+                .setTitle("Channel Points · #$channelName")
+                .setMessage("Your balance: $balanceText Channel Points\n\nTap a reward to view its redemption details.")
+                .setPositiveButton(android.R.string.ok, null)
+            if (rewards.isEmpty()) {
+                builder.setMessage(
+                    "Your balance: $balanceText Channel Points\n\nNo custom rewards were loaded.\n\nDiagnostic: ${viewModel.channelPointRewardsStatus.value}"
+                )
+            } else {
+                builder.setItems(lines.toTypedArray()) { _, which ->
+                    val reward = rewards[which]
+                    val unavailableReason = when {
+                        reward.paused -> "This reward is paused by the channel."
+                        !reward.enabled -> "This reward is currently unavailable."
+                        !reward.inStock -> "This reward is out of stock."
+                        reward.cost == null -> "Twitch did not provide this reward's cost."
+                        balance != null && balance < reward.cost -> "You do not have enough Channel Points."
+                        channelId.isNullOrBlank() -> "The channel ID is missing."
+                        else -> null
+                    }
+                    if (unavailableReason != null) {
+                        Toast.makeText(requireContext(), unavailableReason, Toast.LENGTH_LONG).show()
+                    } else {
+                        val input = if (reward.userInputRequired) EditText(requireContext()).apply {
+                            hint = reward.prompt?.takeIf { it.isNotBlank() } ?: "Enter the required text"
+                            maxLines = 4
+                        } else null
+                        val confirmBuilder = requireContext().getAlertDialogBuilder()
+                            .setTitle(reward.title ?: "Redeem reward")
+                            .setMessage(buildString {
+                                append("Redeem this reward for ")
+                                append(NumberFormat.getIntegerInstance().format(reward.cost))
+                                append(" Channel Points?")
+                                reward.prompt?.takeIf { it.isNotBlank() && !reward.userInputRequired }?.let {
+                                    append("\n\n$it")
+                                }
+                            })
+                            .setNegativeButton(android.R.string.cancel, null)
+                            .setPositiveButton("Redeem", null)
+                        if (input != null) confirmBuilder.setView(input)
+                        val confirmDialog = confirmBuilder.create()
+                        confirmDialog.setOnShowListener {
+                            confirmDialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                                val textInput = input?.text?.toString()?.trim().orEmpty()
+                                if (reward.userInputRequired && textInput.isBlank()) {
+                                    input?.error = "Please enter the required text"
+                                    return@setOnClickListener
+                                }
+                                confirmDialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = false
+                                viewModel.redeemChannelPointReward(
+                                    channelId = channelId!!,
+                                    channelLogin = requireArguments().getString(KEY_CHANNEL_LOGIN),
+                                    reward = reward,
+                                    textInput = textInput,
+                                ) { success, error ->
+                                    if (!isAdded) return@redeemChannelPointReward
+                                    Toast.makeText(
+                                        requireContext(),
+                                        if (success) "Reward redeemed" else "Redemption failed: ${error ?: "Unknown error"}",
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                    if (success) confirmDialog.dismiss()
+                                    else confirmDialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).isEnabled = true
+                                }
+                            }
+                        }
+                        confirmDialog.show()
+                    }
                 }
             }
-            requireContext().getAlertDialogBuilder()
-                .setTitle("Channel Points · #$channelName")
-                .setMessage(message)
-                .setPositiveButton(android.R.string.ok, null)
-                .show()
+            builder.show()
         }
         // Attach the action directly to each visible part instead of forwarding child taps.
         binding.channelPointsBar.setOnClickListener { showChannelPointsRewards() }

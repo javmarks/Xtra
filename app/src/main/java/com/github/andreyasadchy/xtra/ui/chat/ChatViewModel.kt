@@ -238,7 +238,7 @@ class ChatViewModel(
                         ChannelPointReward(
                             id = id, title = title, cost = reward.cost, prompt = reward.prompt,
                             enabled = reward.isEnabled == true, inStock = reward.isInStock != false,
-                            paused = reward.isPaused == true, url1x = reward.image?.url1x,
+                            paused = reward.isPaused == true, userInputRequired = !reward.prompt.isNullOrBlank(), url1x = reward.image?.url1x,
                             url2x = reward.image?.url2x, url4x = reward.image?.url4x,
                         )
                     }.sortedBy { it.cost ?: Int.MAX_VALUE }
@@ -253,6 +253,48 @@ class ChatViewModel(
                 }
             } catch (e: Exception) {
                 channelPointRewardsStatus.value = "Request failed: ${e.javaClass.simpleName}: ${e.message ?: "no details"}"
+            }
+        }
+    }
+
+    fun redeemChannelPointReward(
+        channelId: String,
+        channelLogin: String?,
+        reward: ChannelPointReward,
+        textInput: String,
+        onResult: (Boolean, String?) -> Unit,
+    ) {
+        if (channelId.isBlank() || reward.id.isNullOrBlank() || reward.title.isNullOrBlank() || reward.cost == null) {
+            onResult(false, "Required reward information is missing")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val headers = TwitchApiHelper.getGQLHeaders(applicationContext, true)
+                if (headers[C.HEADER_TOKEN].isNullOrBlank()) {
+                    onResult(false, "Please sign in to Twitch again")
+                    return@launch
+                }
+                val response = graphQLRepository.redeemChannelPointReward(
+                    applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                    headers,
+                    channelId,
+                    reward.id,
+                    reward.title,
+                    reward.cost,
+                    reward.prompt,
+                    textInput,
+                )
+                val error = response.errors?.firstOrNull()?.message
+                if (!error.isNullOrBlank()) {
+                    onResult(false, error)
+                } else {
+                    onResult(true, null)
+                    refreshChannelPointsBalance(channelLogin)
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                onResult(false, e.message ?: "Could not redeem this reward")
             }
         }
     }
