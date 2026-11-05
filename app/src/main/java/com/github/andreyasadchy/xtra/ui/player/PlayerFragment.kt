@@ -1166,6 +1166,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         val openChannelIds = getChatFragments().mapNotNull { it.mergedChatChannelId }.toSet()
         users.forEach { user ->
             val channelId = user.id?.takeIf { it.isNotBlank() } ?: return@forEach
+            mergedChatAdapter?.setSourceChannelInfo(channelId, user.displayName ?: user.login, user.profileImageURL)
             if (channelId in openChannelIds || sharedChatRendererFragments.containsKey(channelId)) return@forEach
             val login = user.login?.takeIf { it.isNotBlank() } ?: return@forEach
             val tag = "shared_renderer_$channelId"
