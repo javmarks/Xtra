@@ -13,6 +13,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val sourcesByChannelId = mutableMapOf<String, ChatAdapter>()
     // Twitch message IDs are unique across channels, including copies delivered through Shared Chat.
     private val messageIds = mutableSetOf<String>()
+    private val sourceEntryCounts = mutableMapOf<ChatAdapter, Int>()
 
     override fun getItemViewType(position: Int): Int {
         val renderer = entries.getOrNull(position)?.renderer ?: return 0
@@ -36,7 +37,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         message.id?.takeIf { it.isNotBlank() }
             ?: message.sourceMessageId?.takeIf { it.isNotBlank() }
 
-    private fun insertSorted(entry: Entry) {
+    private fun insertSorted(entry: Entry): Int {
         val timestamp = entry.message.timestamp ?: Long.MAX_VALUE
         var low = 0
         var high = entries.size
@@ -46,6 +47,16 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             if (midTimestamp <= timestamp) low = mid + 1 else high = mid
         }
         entries.add(low, entry)
+        return low
+    }
+
+    private fun incrementSourceCount(owner: ChatAdapter) {
+        sourceEntryCounts[owner] = (sourceEntryCounts[owner] ?: 0) + 1
+    }
+
+    private fun decrementSourceCount(owner: ChatAdapter) {
+        val remaining = ((sourceEntryCounts[owner] ?: 0) - 1).coerceAtLeast(0)
+        if (remaining == 0) sourceEntryCounts.remove(owner) else sourceEntryCounts[owner] = remaining
     }
 
     private fun rebuildMessageIds() {
@@ -69,20 +80,21 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         val key = messageKey(message)
         if (key != null && !messageIds.add(key)) return
 
-        insertSorted(Entry(owner, rendererFor(owner, message), message))
-        val insertedAt = entries.indexOfFirst { it.owner === owner && it.message === message }
-        if (insertedAt >= 0) notifyItemInserted(insertedAt)
+        val insertedAt = insertSorted(Entry(owner, rendererFor(owner, message), message))
+        incrementSourceCount(owner)
+        notifyItemInserted(insertedAt)
         trimLiveMessages(owner)
     }
 
     // Keep the live tail light, while still allowing explicit history pagination to add older rows.
     private fun trimLiveMessages(owner: ChatAdapter) {
-        var count = entries.count { it.owner === owner }
+        var count = sourceEntryCounts[owner] ?: return
         while (count > MAX_LIVE_MESSAGES_PER_SOURCE) {
             val index = entries.indexOfFirst { it.owner === owner }
             if (index < 0) break
             val removed = entries.removeAt(index)
             messageKey(removed.message)?.let(messageIds::remove)
+            decrementSourceCount(owner)
             notifyItemRemoved(index)
             count--
         }
@@ -94,6 +106,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             val key = messageKey(message)
             if (key == null || messageIds.add(key)) {
                 insertSorted(Entry(owner, rendererFor(owner, message), message))
+                incrementSourceCount(owner)
                 changed = true
             }
         }
@@ -102,6 +115,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     fun replaceSourceMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
         entries.removeAll { it.owner === owner }
+        sourceEntryCounts.remove(owner)
         rebuildMessageIds()
         messages.asSequence()
             .sortedBy { it.timestamp ?: Long.MAX_VALUE }
@@ -111,6 +125,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 val key = messageKey(message)
                 if (key == null || messageIds.add(key)) {
                     insertSorted(Entry(owner, rendererFor(owner, message), message))
+                    incrementSourceCount(owner)
                 }
             }
         notifyDataSetChanged()
@@ -125,6 +140,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             if (entry.owner === owner) {
                 messageKey(entry.message)?.let(messageIds::remove)
                 iterator.remove()
+                decrementSourceCount(owner)
                 remaining--
             }
         }
@@ -134,6 +150,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     fun removeSource(source: ChatAdapter) {
         if (!sources.remove(source)) return
         sourcesByChannelId.entries.removeAll { it.value === source }
+        sourceEntryCounts.remove(source)
         entries.forEach { entry ->
             if (entry.renderer === source) entry.renderer = entry.owner
         }
@@ -144,6 +161,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     fun clearSource(owner: ChatAdapter) {
         if (entries.removeAll { it.owner === owner }) {
+            sourceEntryCounts.remove(owner)
             rebuildMessageIds()
             notifyDataSetChanged()
         }
