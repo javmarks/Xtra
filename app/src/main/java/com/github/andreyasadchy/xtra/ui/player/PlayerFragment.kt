@@ -1444,17 +1444,12 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     "#$channelName · $entry"
                 }
             }
-        requireContext().getAlertDialogBuilder()
-            .setTitle("Mod Logs · All Chats")
-            .apply {
-                if (entries.isEmpty()) {
-                    setMessage("No moderation events have been recorded for the open channels yet. Logs begin when the app is connected and Twitch grants the required moderation permissions.")
-                } else {
-                    setItems(entries.toTypedArray(), null)
-                }
-            }
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
+        ModerationLogDialog.show(
+            requireContext(),
+            "Mod Logs · All Chats",
+            entries,
+            "No moderation events have been recorded for the open channels yet."
+        )
     }
 
     private fun showAllChats() {
