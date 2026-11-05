@@ -143,6 +143,7 @@ class ChatViewModel(
     private val _streamInfo = MutableStateFlow<PubSubUtils.StreamInfo?>(null)
     val sharedChatParticipants = MutableStateFlow<List<String>>(emptyList())
     val channelPointsBalance = MutableStateFlow<Int?>(null)
+    val channelPointRewards = MutableStateFlow<List<ChannelPointReward>>(emptyList())
     val watchStreak = MutableStateFlow<WatchStreakInfo?>(null)
     val pinnedChatMessage = MutableStateFlow<PinnedChatMessageResponse.PinnedMessage?>(null)
     val moderationLogs = MutableStateFlow<List<String>>(emptyList())
@@ -219,7 +220,21 @@ class ChatViewModel(
                         return@launch
                     }
                 }
-                channelPointsBalance.value = response.data?.community?.channel?.self?.communityPoints?.balance
+                val channel = response.data?.community?.channel
+                channelPointsBalance.value = channel?.self?.communityPoints?.balance
+                val settings = channel?.communityPointsSettings
+                channelPointRewards.value = if (settings?.isEnabled == true) {
+                    settings.customRewards.orEmpty().mapNotNull { reward ->
+                        val id = reward.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        val title = reward.title?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                        ChannelPointReward(
+                            id = id, title = title, cost = reward.cost, prompt = reward.prompt,
+                            enabled = reward.isEnabled == true, inStock = reward.isInStock != false,
+                            paused = reward.isPaused == true, url1x = reward.image?.url1x,
+                            url2x = reward.image?.url2x, url4x = reward.image?.url4x,
+                        )
+                    }.sortedBy { it.cost ?: Int.MAX_VALUE }
+                } else emptyList()
             } catch (e: Exception) {
             }
         }

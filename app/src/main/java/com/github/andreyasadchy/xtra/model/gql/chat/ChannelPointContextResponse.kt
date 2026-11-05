@@ -9,24 +9,19 @@ class ChannelPointContextResponse(
     val data: Data? = null,
 ) {
     @Serializable
-    class Data(
-        val community: Community,
-    )
+    class Data(val community: Community)
 
     @Serializable
-    class Community(
-        val channel: Channel,
-    )
+    class Community(val channel: Channel)
 
     @Serializable
     class Channel(
-        val self: Self,
+        val self: Self? = null,
+        val communityPointsSettings: CommunityPointsSettings? = null,
     )
 
     @Serializable
-    class Self(
-        val communityPoints: Points,
-    )
+    class Self(val communityPoints: Points? = null)
 
     @Serializable
     class Points(
@@ -35,7 +30,30 @@ class ChannelPointContextResponse(
     )
 
     @Serializable
-    class Claim(
+    class Claim(val id: String? = null)
+
+    @Serializable
+    class CommunityPointsSettings(
+        val isEnabled: Boolean? = null,
+        val customRewards: List<Reward>? = null,
+    )
+
+    @Serializable
+    class Reward(
         val id: String? = null,
+        val title: String? = null,
+        val cost: Int? = null,
+        val prompt: String? = null,
+        val isEnabled: Boolean? = null,
+        val isInStock: Boolean? = null,
+        val isPaused: Boolean? = null,
+        val image: RewardImage? = null,
+    )
+
+    @Serializable
+    class RewardImage(
+        val url1x: String? = null,
+        val url2x: String? = null,
+        val url4x: String? = null,
     )
 }

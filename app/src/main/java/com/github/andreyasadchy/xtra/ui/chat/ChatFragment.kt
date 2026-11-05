@@ -158,6 +158,32 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 }
             }
         }
+        binding.channelPointsBar.setOnClickListener {
+            val rewards = viewModel.channelPointRewards.value
+            val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
+                ?: requireArguments().getString(KEY_CHANNEL_LOGIN) ?: "channel"
+            val balance = viewModel.channelPointsBalance.value
+            val lines = rewards.map { reward ->
+                val cost = reward.cost?.let { NumberFormat.getIntegerInstance().format(it) } ?: "?"
+                val status = when {
+                    reward.paused -> " · Paused"
+                    !reward.enabled -> " · Unavailable"
+                    !reward.inStock -> " · Out of stock"
+                    else -> ""
+                }
+                "${reward.title}  ·  ◆ $cost$status"
+            }
+            val message = if (rewards.isNotEmpty()) {
+                "Your balance: ${balance?.let { NumberFormat.getIntegerInstance().format(it) } ?: "—"} Channel Points"
+            } else {
+                "Twitch didn't provide any custom rewards for this channel. The channel may have rewards disabled, or Twitch may not have returned them."
+            }
+            val dialog = requireContext().getAlertDialogBuilder()
+                .setTitle("Channel Points · #$channelName")
+                .setMessage(message)
+            if (lines.isNotEmpty()) dialog.setItems(lines.toTypedArray(), null)
+            dialog.setPositiveButton(android.R.string.ok, null).show()
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.pinnedChatMessage.collectLatest { pinned ->
