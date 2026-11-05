@@ -14,6 +14,19 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     // Twitch message IDs are unique across channels, including copies delivered through Shared Chat.
     private val messageIds = mutableSetOf<String>()
     private val sourceEntryCounts = mutableMapOf<ChatAdapter, Int>()
+    private val sourceChannelInfo = mutableMapOf<String, Pair<String?, String?>>()
+
+    fun setSourceChannelInfo(channelId: String, channelName: String?, imageUrl: String?) {
+        if (channelId.isBlank()) return
+        sourceChannelInfo[channelId] = channelName to imageUrl
+        entries.forEach { entry ->
+            val sourceMessage = if (entry.message.type == ChatMessage.REPLY_MESSAGE) entry.message.replyParent ?: entry.message else entry.message
+            if ((sourceMessage.sourceRoomId ?: sourceMessage.roomId) == channelId) {
+                entry.message.sourceChannelName = channelName
+                entry.message.sourceChannelImageUrl = imageUrl
+            }
+        }
+    }
 
     override fun getItemViewType(position: Int): Int {
         val renderer = entries.getOrNull(position)?.renderer ?: return 0
@@ -83,6 +96,12 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         // same channel-specific adapter and rendering settings as the individual chat.
         val sourceMessage = if (message.type == ChatMessage.REPLY_MESSAGE) message.replyParent ?: message else message
         val originId = sourceMessage.sourceRoomId ?: sourceMessage.roomId
+        if (!originId.isNullOrBlank()) {
+            sourceChannelInfo[originId]?.let { (name, imageUrl) ->
+                message.sourceChannelName = name
+                message.sourceChannelImageUrl = imageUrl
+            }
+        }
         return if (originId.isNullOrBlank()) owner else sourcesByChannelId[originId] ?: owner
     }
 
