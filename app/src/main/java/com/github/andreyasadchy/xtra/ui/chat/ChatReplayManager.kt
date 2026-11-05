@@ -235,7 +235,7 @@ class ChatReplayManager(
                         }
                     ) {
                         val timeLeft = (messageOffset - currentPosition).div(playbackSpeed ?: 1f).toLong()
-                        val delay = max(timeLeft, 1) // ExoPlayer getCurrentPosition freezes the app if it's called too rapidly
+                        val delay = max(timeLeft, 1).coerceAtMost(500) // Recheck playback position regularly so pauses and buffering cannot desync chat
                         delay(delay.milliseconds)
                     }
                     if (!isActive) {
