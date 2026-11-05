@@ -63,6 +63,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import org.json.JSONArray
@@ -177,6 +178,7 @@ class ChatViewModel(
     private var messageLimit = 600
     // Serializes list mutation and adapter notifications when IRC/EventSub callbacks overlap.
     private val messageMutex = Mutex()
+    private val moderationLogMutex = Mutex()
     // Twitch message IDs are stable across duplicate deliveries from overlapping connections.
     // Keep a bounded recent-ID cache so genuine repeated text with a new ID is never hidden.
     private val seenChatMessageIds = LinkedHashMap<String, Unit>()
@@ -1403,22 +1405,20 @@ class ChatViewModel(
 
     private fun saveModerationLog(channelId: String?, entry: String) {
         if (channelId.isNullOrBlank()) return
-        viewModelScope.launch(Dispatchers.IO) {
-            synchronized(moderationLogs) {
-                val key = "moderation_logs_$channelId"
-                val saved = applicationContext.prefs().getString(key, null)
-                val entries = runCatching {
-                    val array = JSONArray(saved ?: "[]")
-                    (0 until array.length()).mapNotNull { index ->
-                        array.optString(index).takeIf { it.isNotBlank() && it != "null" }
-                    }
-                }.getOrDefault(emptyList()).toMutableList()
-                entries.add(0, entry)
-                val bounded = entries.take(300)
+        viewModelScope.launch {
+            moderationLogMutex.withLock {
+                // Update from the in-memory flow instead of re-reading SharedPreferences
+                // for every event. This prevents concurrent callbacks from overwriting one
+                // another and keeps the rolling 300-entry window moving indefinitely.
+                val bounded = (listOf(entry) + moderationLogs.value).take(300)
+                moderationLogs.value = bounded
                 val json = JSONArray()
                 bounded.forEach(json::put)
-                applicationContext.prefs().edit().putString(key, json.toString()).apply()
-                moderationLogs.value = bounded
+                withContext(Dispatchers.IO) {
+                    applicationContext.prefs().edit()
+                        .putString("moderation_logs_$channelId", json.toString())
+                        .apply()
+                }
             }
         }
     }
