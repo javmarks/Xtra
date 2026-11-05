@@ -29,6 +29,8 @@ class ChatMessage(
     val sourceRoomId: String? = null,
     val sourceMessageId: String? = null,
     val isSourceOnly: Boolean? = null,
+    var sourceChannelImageUrl: String? = null,
+    var sourceChannelName: String? = null,
 ) {
     companion object {
         const val SYSTEM_MESSAGE = 0
