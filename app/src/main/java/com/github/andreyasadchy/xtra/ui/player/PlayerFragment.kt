@@ -106,6 +106,8 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private var primaryChatFragment: ChatFragment? = null
     private var mergedChatRecyclerView: RecyclerView? = null
     private var mergedChatAdapter: MergedChatAdapter? = null
+    private var mergedChatScrollButton: Button? = null
+    private var isFollowingMergedChat = true
     private var isAllChatsSelected = false
     private val observedChatSources = mutableSetOf<ChatFragment>()
     private val chatSourceJobs = mutableMapOf<ChatFragment, Job>()
@@ -1292,6 +1294,22 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             itemAnimator = null
             this.adapter = adapter
             visibility = View.GONE
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    super.onScrolled(recyclerView, dx, dy)
+                    val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
+                    val lastVisible = layoutManager?.findLastVisibleItemPosition() ?: -1
+                    val count = recyclerView.adapter?.itemCount ?: 0
+                    val atBottom = count == 0 || lastVisible >= count - 1
+                    if (atBottom) {
+                        isFollowingMergedChat = true
+                        mergedChatScrollButton?.visibility = View.GONE
+                    } else {
+                        if (dy < 0) isFollowingMergedChat = false
+                        mergedChatScrollButton?.visibility = if (isFollowingMergedChat) View.GONE else View.VISIBLE
+                    }
+                }
+            })
         }
         binding.chatFragmentContainer.addView(
             recyclerView,
@@ -1300,8 +1318,32 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         )
+        val scrollButton = Button(requireContext()).apply {
+            text = getString(R.string.scroll_down)
+            visibility = View.GONE
+            setOnClickListener {
+                isFollowingMergedChat = true
+                val last = (mergedChatAdapter?.itemCount ?: 0) - 1
+                if (last >= 0) mergedChatRecyclerView?.scrollToPosition(last)
+                visibility = View.GONE
+            }
+        }
+        val margin = (4 * resources.displayMetrics.density).toInt()
+        binding.chatFragmentContainer.addView(
+            scrollButton,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM
+            ).apply {
+                marginStart = margin
+                marginEnd = margin
+                bottomMargin = margin
+            }
+        )
         mergedChatAdapter = adapter
         mergedChatRecyclerView = recyclerView
+        mergedChatScrollButton = scrollButton
     }
 
     /** Preserve the reader's visible message while live sources insert or trim rows. */
@@ -1323,14 +1365,22 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         recyclerView.post {
             if (mergedChatRecyclerView !== recyclerView || mergedChatAdapter !== merged ||
                 !isAllChatsSelected || merged.itemCount == 0) return@post
-            if (wasAtBottom) {
+            // Do not issue programmatic scrolls while the reader is dragging or flinging.
+            // RecyclerView already adjusts visible positions for adapter insertions/removals.
+            if (recyclerView.scrollState != RecyclerView.SCROLL_STATE_IDLE) return@post
+            if (isFollowingMergedChat && wasAtBottom) {
                 recyclerView.scrollToPosition(merged.itemCount - 1)
+                mergedChatScrollButton?.visibility = View.GONE
             } else {
+                isFollowingMergedChat = false
+                mergedChatScrollButton?.visibility = View.VISIBLE
                 val newAnchorPosition = anchorMessage?.let(merged::positionOfMessage) ?: -1
-                when {
-                    newAnchorPosition >= 0 -> layoutManager?.scrollToPositionWithOffset(newAnchorPosition, anchorTop)
-                    firstPosition != RecyclerView.NO_POSITION ->
-                        layoutManager?.scrollToPositionWithOffset(firstPosition.coerceAtMost(merged.itemCount - 1), anchorTop)
+                // Only restore when the anchor's adapter position actually moved. Reissuing
+                // the same offset after every incoming message makes upward scrolling jitter.
+                if (newAnchorPosition >= 0 && newAnchorPosition != firstPosition) {
+                    layoutManager?.scrollToPositionWithOffset(newAnchorPosition, anchorTop)
+                } else if (newAnchorPosition < 0 && firstPosition != RecyclerView.NO_POSITION) {
+                    layoutManager?.scrollToPositionWithOffset(firstPosition.coerceAtMost(merged.itemCount - 1), anchorTop)
                 }
             }
         }
@@ -1522,6 +1572,8 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         fragments.filter { it.isAdded }.forEach { transaction.hide(it) }
         transaction.commit()
         mergedChatRecyclerView?.visibility = View.VISIBLE
+        isFollowingMergedChat = true
+        mergedChatScrollButton?.visibility = View.GONE
         isAllChatsSelected = true
         refreshChatTabs()
         mergedChatRecyclerView?.post {
@@ -2826,6 +2878,8 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         channelPointsBalances.clear()
         mergedChatRecyclerView = null
         mergedChatAdapter = null
+        mergedChatScrollButton = null
+        isFollowingMergedChat = true
         isAllChatsSelected = false
         super.onDestroyView()
         _binding = null
