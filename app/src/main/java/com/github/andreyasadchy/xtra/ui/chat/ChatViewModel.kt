@@ -244,15 +244,15 @@ class ChatViewModel(
                     }.sortedBy { it.cost ?: Int.MAX_VALUE }
                 } else emptyList()
                 channelPointRewardsStatus.value = when {
-                    response.errors?.isNotEmpty() == true -> "Twitch GraphQL error: \${response.errors.firstOrNull()?.message ?: "unknown error"}"
+                    response.errors?.isNotEmpty() == true -> "Twitch GraphQL error: ${response.errors.firstOrNull()?.message ?: "unknown error"}"
                     channel == null -> "Twitch response did not include channel data"
                     settings == null -> "Twitch response did not include communityPointsSettings"
                     settings.isEnabled != true -> "Channel Points rewards are disabled in Twitch's response"
                     channelPointRewards.value.isEmpty() -> "Twitch returned settings but no usable custom rewards"
-                    else -> "Loaded \${channelPointRewards.value.size} custom reward(s)"
+                    else -> "Loaded ${channelPointRewards.value.size} custom reward(s)"
                 }
             } catch (e: Exception) {
-                channelPointRewardsStatus.value = "Request failed: \${e.javaClass.simpleName}: \${e.message ?: "no details"}"
+                channelPointRewardsStatus.value = "Request failed: ${e.javaClass.simpleName}: ${e.message ?: "no details"}"
             }
         }
     }
