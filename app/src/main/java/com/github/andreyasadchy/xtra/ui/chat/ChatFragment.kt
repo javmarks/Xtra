@@ -233,9 +233,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     append("🔥  ")
                     append(streak.count)
                     append(if (streak.count == 1) " consecutive stream" else " consecutive streams")
-                    if (streak.threshold > 0) append("\\nNext milestone: ${streak.threshold}")
-                    if (streak.bonusPoints > 0) append("\\nMilestone bonus: +${NumberFormat.getIntegerInstance().format(streak.bonusPoints)} Channel Points")
-                    expiry?.let { append("\\n$it") }
+                    if (streak.threshold > 0) append("\nNext milestone: ${streak.threshold}")
+                    if (streak.bonusPoints > 0) append("\nMilestone bonus: +${NumberFormat.getIntegerInstance().format(streak.bonusPoints)} Channel Points")
+                    expiry?.let { append("\n$it") }
                 })
             if (streak.shareStatus == "CAN_SHARE" && !streak.milestoneId.isNullOrBlank()) {
                 dialog.setPositiveButton("Share Watch Streak") { _, _ ->
@@ -269,9 +269,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 .setTitle("Pinned message · #$channelName")
                 .setMessage(buildString {
                     append(pinned.message?.text.orEmpty())
-                    append("\\n\\nSent by $sender")
-                    append("\\nPinned by $pinnedBy")
-                    expiry?.let { append("\\n$it") }
+                    append("\n\\nSent by $sender")
+                    append("\nPinned by $pinnedBy")
+                    expiry?.let { append("\n$it") }
                 })
                 .setPositiveButton("Copy message") { _, _ ->
                     val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
