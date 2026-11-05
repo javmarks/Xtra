@@ -144,6 +144,7 @@ class ChatViewModel(
     val sharedChatParticipants = MutableStateFlow<List<String>>(emptyList())
     val channelPointsBalance = MutableStateFlow<Int?>(null)
     val channelPointRewards = MutableStateFlow<List<ChannelPointReward>>(emptyList())
+    val channelPointRewardsStatus = MutableStateFlow("Not loaded")
     val watchStreak = MutableStateFlow<WatchStreakInfo?>(null)
     val pinnedChatMessage = MutableStateFlow<PinnedChatMessageResponse.PinnedMessage?>(null)
     val moderationLogs = MutableStateFlow<List<String>>(emptyList())
@@ -204,9 +205,16 @@ class ChatViewModel(
     }
 
     private fun refreshChannelPointsBalance(channelLogin: String?) {
-        if (channelLogin.isNullOrBlank()) return
+        if (channelLogin.isNullOrBlank()) {
+            channelPointRewardsStatus.value = "Missing channel login"
+            return
+        }
         val headers = TwitchApiHelper.getGQLHeaders(applicationContext, true)
-        if (headers[C.HEADER_TOKEN].isNullOrBlank()) return
+        if (headers[C.HEADER_TOKEN].isNullOrBlank()) {
+            channelPointRewardsStatus.value = "Twitch sign-in token is missing"
+            return
+        }
+        channelPointRewardsStatus.value = "Loading rewards…"
         viewModelScope.launch {
             try {
                 val response = graphQLRepository.loadChannelPointsContext(
@@ -235,7 +243,16 @@ class ChatViewModel(
                         )
                     }.sortedBy { it.cost ?: Int.MAX_VALUE }
                 } else emptyList()
+                channelPointRewardsStatus.value = when {
+                    response.errors?.isNotEmpty() == true -> "Twitch GraphQL error: \${response.errors.firstOrNull()?.message ?: "unknown error"}"
+                    channel == null -> "Twitch response did not include channel data"
+                    settings == null -> "Twitch response did not include communityPointsSettings"
+                    settings.isEnabled != true -> "Channel Points rewards are disabled in Twitch's response"
+                    channelPointRewards.value.isEmpty() -> "Twitch returned settings but no usable custom rewards"
+                    else -> "Loaded \${channelPointRewards.value.size} custom reward(s)"
+                }
             } catch (e: Exception) {
+                channelPointRewardsStatus.value = "Request failed: \${e.javaClass.simpleName}: \${e.message ?: "no details"}"
             }
         }
     }
