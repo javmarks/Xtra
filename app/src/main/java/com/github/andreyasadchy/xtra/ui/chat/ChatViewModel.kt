@@ -1853,6 +1853,18 @@ class ChatViewModel(
         }
 
         override suspend fun onClearChat(event: JSONObject, timestamp: String?) {
+            val eventTime = timestamp?.let { Instant.parseOrNull(it)?.toEpochMilliseconds() }
+                ?.takeIf { it > 0L }
+                ?.let { java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it)) }
+            val logEntry = JSONObject().apply {
+                put("action", "Chat cleared")
+                put("target", JSONObject.NULL)
+                put("moderator", JSONObject.NULL)
+                put("time", eventTime ?: JSONObject.NULL)
+                put("channel", channelLogin)
+                put("message", JSONObject.NULL)
+            }
+            saveModerationLog(channelId, logEntry.toString())
             if (showClearChat) {
                 onMessage(EventSubUtils.parseClearChat(applicationContext, event, timestamp))
             }
