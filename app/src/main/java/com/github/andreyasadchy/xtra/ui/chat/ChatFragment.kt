@@ -975,11 +975,13 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     val previousItemCount = (lastIndex - 1 + removeCount).coerceAtLeast(0)
                                     val wasAtBottom = previousItemCount == 0 ||
                                         (layoutManager?.findLastVisibleItemPosition() ?: -1) >= previousItemCount - 1
-                                    if (removeCount > 0) {
-                                        adapter.notifyItemRangeRemoved(0, removeCount)
-                                    }
                                     val newLastIndex = lastIndex - 1
-                                    if (newLastIndex >= 0) {
+                                    if (removeCount > 0) {
+                                        // The backing list has already been trimmed and appended as
+                                        // one operation, so a full refresh avoids mismatched
+                                        // intermediate RecyclerView item counts at the cap.
+                                        adapter.notifyDataSetChanged()
+                                    } else if (newLastIndex >= 0) {
                                         adapter.notifyItemInserted(newLastIndex)
                                     }
                                     if (!isChatTouched && wasAtBottom && newLastIndex >= 0) {
