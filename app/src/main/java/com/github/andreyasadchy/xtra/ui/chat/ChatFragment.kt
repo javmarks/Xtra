@@ -179,13 +179,15 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             }
             val builder = requireContext().getAlertDialogBuilder()
                 .setTitle("Channel Points · #$channelName")
-                .setMessage("Your balance: $balanceText Channel Points\n\nTap a reward to view its redemption details.")
                 .setPositiveButton(android.R.string.ok, null)
             if (rewards.isEmpty()) {
                 builder.setMessage(
                     "Your balance: $balanceText Channel Points\n\nNo custom rewards were loaded.\n\nDiagnostic: ${viewModel.channelPointRewardsStatus.value}"
                 )
             } else {
+                // AlertDialog cannot display a message and a selectable item list together.
+                // Put the balance in the title so the reward rows remain visible and tappable.
+                builder.setTitle("Channel Points · #$channelName\nYour balance: $balanceText points")
                 builder.setItems(lines.toTypedArray()) { _, which ->
                     val reward = rewards[which]
                     val unavailableReason = when {
