@@ -177,6 +177,9 @@ class ChatViewModel(
     private var messageLimit = 600
     // Serializes list mutation and adapter notifications when IRC/EventSub callbacks overlap.
     private val messageMutex = Mutex()
+    // Twitch message IDs are stable across duplicate deliveries from overlapping connections.
+    // Keep a bounded recent-ID cache so genuine repeated text with a new ID is never hidden.
+    private val seenChatMessageIds = LinkedHashMap<String, Unit>()
     val chatMessages = mutableListOf<ChatMessage>()
     val autoCompleteList = mutableListOf<Any?>()
     private val chatters = ConcurrentHashMap<String, Chatter>()
@@ -1242,13 +1245,16 @@ class ChatViewModel(
                         }
                     }
                     if (list.isNotEmpty()) {
+                        // Skip history entries already delivered live (and duplicate IDs within
+                        // the history response) without suppressing repeated text with new IDs.
+                        val uniqueList = list.filterNot { isDuplicateChatMessage(it) }
                         // Serialize history insertion with live messages so adapter positions
                         // always match the order of backing-list mutations and notifications.
                         messageMutex.withLock {
                             synchronized(chatMessages) {
                                 val left = messageLimit - chatMessages.size
                                 if (left > 0) {
-                                    val items = list.takeLast(left)
+                                    val items = uniqueList.takeLast(left)
                                     chatMessages.addAll(0, items)
                                     Pair(items, chatMessages.lastIndex)
                                 } else null
@@ -1315,7 +1321,28 @@ class ChatViewModel(
         )
     }
 
+    private fun isDuplicateChatMessage(message: ChatMessage): Boolean {
+        if (message.type != ChatMessage.USER_MESSAGE) return false
+        val id = message.id?.takeIf { it.isNotBlank() } ?: return false
+        return synchronized(seenChatMessageIds) {
+            if (seenChatMessageIds.containsKey(id)) {
+                true
+            } else {
+                seenChatMessageIds[id] = Unit
+                while (seenChatMessageIds.size > 2048) {
+                    val oldest = seenChatMessageIds.keys.iterator()
+                    if (oldest.hasNext()) {
+                        oldest.next()
+                        oldest.remove()
+                    }
+                }
+                false
+            }
+        }
+    }
+
     suspend fun onMessage(message: ChatMessage) = messageMutex.withLock {
+        if (isDuplicateChatMessage(message)) return@withLock
         val update = synchronized(chatMessages) {
             chatMessages.add(message)
             val removeCount = (chatMessages.size - messageLimit).coerceAtLeast(0)
