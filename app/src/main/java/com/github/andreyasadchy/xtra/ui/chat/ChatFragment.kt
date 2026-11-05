@@ -173,16 +173,24 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 }
                 "${reward.title}  ·  ◆ $cost$status"
             }
-            val message = if (rewards.isNotEmpty()) {
-                "Your balance: ${balance?.let { NumberFormat.getIntegerInstance().format(it) } ?: "—"} Channel Points"
-            } else {
-                "No custom rewards were loaded.\n\nDiagnostic: ${viewModel.channelPointRewardsStatus.value}"
+            val message = buildString {
+                append("Your balance: ")
+                append(balance?.let { NumberFormat.getIntegerInstance().format(it) } ?: "—")
+                append(" Channel Points")
+                if (lines.isNotEmpty()) {
+                    append("\n\nCustom rewards:\n")
+                    append(lines.joinToString("\n"))
+                } else {
+                    append("\n\nNo custom rewards were loaded.")
+                    append("\n\nDiagnostic: ")
+                    append(viewModel.channelPointRewardsStatus.value)
+                }
             }
-            val dialog = requireContext().getAlertDialogBuilder()
+            requireContext().getAlertDialogBuilder()
                 .setTitle("Channel Points · #$channelName")
                 .setMessage(message)
-            if (lines.isNotEmpty()) dialog.setItems(lines.toTypedArray(), null)
-            dialog.setPositiveButton(android.R.string.ok, null).show()
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
         }
         // Attach the action directly to each visible part instead of forwarding child taps.
         binding.channelPointsBar.setOnClickListener { showChannelPointsRewards() }
