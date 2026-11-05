@@ -2,6 +2,8 @@ package com.github.andreyasadchy.xtra.ui.chat
 
 import android.content.Context
 import android.graphics.Typeface
+import android.text.method.LinkMovementMethod
+import android.text.util.Linkify
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -73,13 +75,21 @@ object ModerationLogDialog {
                         if (!entry.channel.isNullOrBlank()) { if (isNotEmpty()) append(" · "); append("#").append(entry.channel.removePrefix("#")) }
                     }
                     if (targetLine.isNotBlank()) inner.addView(TextView(context).apply {
+                        autoLinkMask = Linkify.WEB_URLS
+                        movementMethod = LinkMovementMethod.getInstance()
+                        linksClickable = true
                         text = targetLine; textSize = 12f; setTextColor(secondary); setPadding(0, dp(3), 0, 0)
                     })
                     entry.duration?.takeIf { it.isNotBlank() }?.let { inner.addView(detail(context, "Duration", it, onSurface, secondary, dp(6))) }
                     entry.reason?.takeIf { it.isNotBlank() }?.let { inner.addView(detail(context, "Reason", it, onSurface, secondary, dp(6))) }
                     entry.message?.takeIf { it.isNotBlank() }?.let { inner.addView(detail(context, "Message", it, onSurface, secondary, dp(6))) }
                     entry.legacy?.takeIf { it.isNotBlank() }?.let { value ->
-                        inner.addView(TextView(context).apply { text = value; textSize = 12f; setTextColor(secondary); setPadding(0, dp(4), 0, 0) })
+                        inner.addView(TextView(context).apply {
+                            autoLinkMask = Linkify.WEB_URLS
+                            movementMethod = LinkMovementMethod.getInstance()
+                            linksClickable = true
+                            text = value; textSize = 12f; setTextColor(secondary); setPadding(0, dp(4), 0, 0)
+                        })
                     }
                     addView(inner)
                 }
@@ -106,7 +116,12 @@ object ModerationLogDialog {
             orientation = LinearLayout.VERTICAL
             setPadding(0, top, 0, 0)
             addView(TextView(context).apply { text = label.uppercase(); textSize = 10f; setTypeface(typeface, Typeface.BOLD); setTextColor(secondary) })
-            addView(TextView(context).apply { text = value; textSize = 13f; setTextColor(primary) })
+            addView(TextView(context).apply {
+                autoLinkMask = Linkify.WEB_URLS
+                movementMethod = LinkMovementMethod.getInstance()
+                linksClickable = true
+                text = value; textSize = 13f; setTextColor(primary)
+            })
         }
 
     private fun parse(raw: String): Entry {
