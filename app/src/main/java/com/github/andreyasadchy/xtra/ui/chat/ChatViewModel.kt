@@ -2369,7 +2369,7 @@ class ChatViewModel(
     private suspend fun onChatMessage(message: ChatMessage, networkLibrary: String?, isLoggedIn: Boolean, accountId: String?, channelId: String?) {
         // Shared Chat IRC tags identify the real source broadcaster. Resolve that ID
         // directly instead of relying only on the session participant list.
-        loadSharedChatSourceProfile(message.sourceRoomId)
+        loadSharedChatSourceProfile(message.sourceRoomId ?: message.roomId)
         onMessage(message)
         addChatter(message.userName)
         if (isLoggedIn && !accountId.isNullOrBlank() && message.userId == accountId) {
