@@ -6,6 +6,7 @@ import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
 import android.app.RemoteAction
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -19,6 +20,7 @@ import android.os.SystemClock
 import android.text.format.DateFormat
 import android.text.format.DateUtils
 import android.util.TypedValue
+import android.view.DragEvent
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -123,6 +125,8 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         }
     }
     private var isAllChatsSelected = false
+    private val chatTabOrder = mutableListOf<String>()
+    private var chatTabOrderLoaded = false
     private val observedChatSources = mutableSetOf<ChatFragment>()
     private val chatSourceJobs = mutableMapOf<ChatFragment, Job>()
     private val sharedChatRendererFragments = mutableMapOf<String, ChatFragment>()
@@ -212,6 +216,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     @SuppressLint("ClickableViewAccessibility")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        loadChatTabOrder()
         with(binding) {
             addChatButton.setOnClickListener {
                 AddChatDialogFragment().show(childFragmentManager, "addChatDialog")
@@ -1171,13 +1176,47 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         }
     }
 
+    private fun loadChatTabOrder() {
+        if (chatTabOrderLoaded) return
+        chatTabOrderLoaded = true
+        val saved = requireContext().prefs().getString("multi_chat_tab_order", null)
+        if (!saved.isNullOrBlank()) {
+            chatTabOrder.addAll(saved.split("|").filter { it.isNotBlank() })
+        }
+    }
+
+    private fun saveChatTabOrder() {
+        requireContext().prefs().edit {
+            putString("multi_chat_tab_order", chatTabOrder.joinToString("|"))
+        }
+    }
+
+    private fun reorderChatTabs(dragged: ChatFragment, target: ChatFragment) {
+        if (dragged === target || dragged === primaryChatFragment) return
+        val fragments = getChatFragments().toMutableList()
+        val from = fragments.indexOf(dragged)
+        val to = fragments.indexOf(target)
+        if (from < 0 || to < 0) return
+        fragments.removeAt(from)
+        fragments.add(to, dragged)
+        chatTabOrder.clear()
+        chatTabOrder.addAll(fragments.mapNotNull { it.arguments?.getString("channel_login")?.lowercase() })
+        saveChatTabOrder()
+        refreshChatTabs()
+    }
+
     private fun getChatFragments(): List<ChatFragment> {
         val fragments = childFragmentManager.fragments
             .filterIsInstance<ChatFragment>()
             .filterNot { it.isMergedRendererOnly }
             .toMutableList()
         chatFragment?.let { if (!it.isMergedRendererOnly && it !in fragments) fragments.add(it) }
-        return fragments
+        if (chatTabOrder.isEmpty()) return fragments
+        val order = chatTabOrder.withIndex().associate { it.value to it.index }
+        return fragments.sortedBy { fragment ->
+            val login = fragment.arguments?.getString("channel_login")?.lowercase()
+            order[login] ?: Int.MAX_VALUE
+        }
     }
 
     private fun ensureSharedChatRenderers(users: List<User>) {
@@ -1246,9 +1285,42 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 isAllCaps = false
                 isSelected = !isAllChatsSelected && fragment === chatFragment
                 setOnClickListener { switchChatFragment(fragment) }
+                setOnLongClickListener { source ->
+                    if (fragment === primaryChatFragment) {
+                        Toast.makeText(requireContext(), "The main chat stays first", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val dragData = ClipData.newPlainText("chat_tab", label)
+                        source.startDragAndDrop(dragData, View.DragShadowBuilder(source), fragment, 0)
+                    }
+                    true
+                }
                 if (fragment !== primaryChatFragment) {
                     // Reserve space for the close affordance inside this same channel tab.
                     setPadding(paddingLeft, paddingTop, (paddingRight + (40 * resources.displayMetrics.density).toInt()), paddingBottom)
+                }
+            }
+            tabContainer.setOnDragListener { target, event ->
+                when (event.action) {
+                    DragEvent.ACTION_DRAG_STARTED -> event.localState is ChatFragment
+                    DragEvent.ACTION_DRAG_ENTERED -> {
+                        target.alpha = 0.65f
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_EXITED -> {
+                        target.alpha = 1f
+                        true
+                    }
+                    DragEvent.ACTION_DROP -> {
+                        target.alpha = 1f
+                        val dragged = event.localState as? ChatFragment
+                        if (dragged != null) reorderChatTabs(dragged, fragment)
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_ENDED -> {
+                        target.alpha = 1f
+                        true
+                    }
+                    else -> true
                 }
             }
             tabContainer.addView(
