@@ -1,5 +1,7 @@
 package com.github.andreyasadchy.xtra.ui.chat
 
+import android.os.Handler
+import android.os.Looper
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
@@ -15,12 +17,39 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val messageIds = mutableSetOf<String>()
     private val sourceEntryCounts = mutableMapOf<ChatAdapter, Int>()
     private val sourceChannelInfo = mutableMapOf<String, Pair<String?, String?>>()
+    private val updateHandler = Handler(Looper.getMainLooper())
+    private var updateScheduled = false
+    private val flushLiveUpdates = Runnable {
+        updateScheduled = false
+        if (frozenEntries == null) notifyDataSetChanged()
+    }
+
+    private fun scheduleLiveUpdate() {
+        if (frozenEntries != null || updateScheduled) return
+        updateScheduled = true
+        updateHandler.postDelayed(flushLiveUpdates, 200L)
+    }
     private var frozenEntries: List<Entry>? = null
     var pendingMessageCount: Int = 0
         private set
     private fun displayedEntries(): List<Entry> = frozenEntries ?: entries
-    fun pauseDisplay() { if (frozenEntries == null) { frozenEntries = entries.toList(); pendingMessageCount = 0 } }
-    fun resumeDisplay() { if (frozenEntries != null) { frozenEntries = null; pendingMessageCount = 0; notifyDataSetChanged() } }
+    fun pauseDisplay() {
+        if (frozenEntries == null) {
+            updateHandler.removeCallbacks(flushLiveUpdates)
+            updateScheduled = false
+            frozenEntries = entries.toList()
+            pendingMessageCount = 0
+        }
+    }
+    fun resumeDisplay() {
+        if (frozenEntries != null) {
+            frozenEntries = null
+            pendingMessageCount = 0
+            updateHandler.removeCallbacks(flushLiveUpdates)
+            updateScheduled = false
+            notifyDataSetChanged()
+        }
+    }
     fun isDisplayPaused(): Boolean = frozenEntries != null
 
     fun setSourceChannelInfo(channelId: String, channelName: String?, imageUrl: String?) {
@@ -122,7 +151,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
         val insertedAt = insertSorted(Entry(owner, rendererFor(owner, message), message))
         incrementSourceCount(owner)
-        if (frozenEntries != null) pendingMessageCount++ else notifyItemInserted(insertedAt)
+        if (frozenEntries != null) pendingMessageCount++ else scheduleLiveUpdate()
         trimLiveMessages(owner)
     }
 
@@ -135,15 +164,14 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             val removed = entries.removeAt(index)
             messageKey(removed.message)?.let(messageIds::remove)
             decrementSourceCount(owner)
-            if (frozenEntries == null) notifyItemRemoved(index)
             count--
         }
     }
 
-    fun messageAt(position: Int): ChatMessage? = entries.getOrNull(position)?.message
+    fun messageAt(position: Int): ChatMessage? = displayedEntries().getOrNull(position)?.message
 
     fun positionOfMessage(message: ChatMessage): Int =
-        entries.indexOfFirst { it.message === message }
+        displayedEntries().indexOfFirst { it.message === message }
 
     fun addOlderMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
         val insertedPositions = mutableListOf<Int>()
