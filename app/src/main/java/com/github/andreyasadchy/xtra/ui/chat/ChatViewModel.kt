@@ -483,7 +483,10 @@ class ChatViewModel(
                     )
                     val participantIds = response.data
                         .flatMap { session ->
-                            session.participants.mapNotNull { it.broadcasterId }
+                            // Include the host explicitly as well as every participant.
+                            // Some session responses may omit the host from participants.
+                            session.participants.mapNotNull { it.broadcasterId } +
+                                listOfNotNull(session.hostBroadcasterId)
                         }
                         .distinct()
                     sharedChatParticipants.value = participantIds
@@ -497,7 +500,12 @@ class ChatViewModel(
                         emptyList()
                     }
                     sharedChatParticipantUsers.value = users
-                    if (users.any { !it.profileImageURL.isNullOrBlank() }) return@launch
+                    // Do not stop after the first successful profile: keep retrying
+                    // while any Shared Chat participant is still missing an avatar.
+                    val allProfilesLoaded = participantIds.all { participantId ->
+                        users.any { it.id == participantId && !it.profileImageURL.isNullOrBlank() }
+                    }
+                    if (allProfilesLoaded) return@launch
                 } catch (_: Exception) {
                     if (attempt == 2) {
                         sharedChatParticipants.value = emptyList()
