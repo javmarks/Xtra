@@ -1079,9 +1079,9 @@ class PlayerRepository(
                             // Prefer the selected format, but fall back to another format that
                             // Android image loaders commonly support instead of inventing a URL.
                             val formatOrder = if (useWebp) {
-                                listOf("WEBP", "GIF", "PNG")
+                                listOf("WEBP", "AVIF", "GIF", "PNG")
                             } else {
-                                listOf("GIF", "PNG", "WEBP")
+                                listOf("GIF", "PNG", "WEBP", "AVIF")
                             }
                             val hostUrl = when {
                                 template.startsWith("https://", true) || template.startsWith("http://", true) -> template
