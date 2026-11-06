@@ -152,6 +152,8 @@ class ChatViewModel(
     val pinnedChatMessage = MutableStateFlow<PinnedChatMessageResponse.PinnedMessage?>(null)
     val moderationLogs = MutableStateFlow<List<String>>(emptyList())
     val sharedChatParticipantUsers = MutableStateFlow<List<User>>(emptyList())
+    // Source-channel IDs observed in actual Shared Chat messages; dedupe profile lookups.
+    private val resolvedSharedChatSourceIds = ConcurrentHashMap.newKeySet<String>()
     val streamInfo: StateFlow<PubSubUtils.StreamInfo?> = _streamInfo
     private val _playbackMessage = MutableStateFlow<PubSubUtils.PlaybackMessage?>(null)
     val playbackMessage: StateFlow<PubSubUtils.PlaybackMessage?> = _playbackMessage
@@ -463,6 +465,31 @@ class ChatViewModel(
                         refreshPinnedChatMessage(channelId)
                     }
                 }
+            }
+        }
+    }
+
+    private fun loadSharedChatSourceProfile(sourceChannelId: String?) {
+        if (sourceChannelId.isNullOrBlank() || !resolvedSharedChatSourceIds.add(sourceChannelId)) return
+        viewModelScope.launch {
+            try {
+                val users = helixRepository.getUsers(
+                    applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                    TwitchApiHelper.getHelixHeaders(applicationContext),
+                    ids = listOf(sourceChannelId),
+                ).data
+                val user = users.firstOrNull { it.id == sourceChannelId }
+                if (user == null || user.profileImageURL.isNullOrBlank()) {
+                    // Let a later message retry if Twitch did not return a usable profile.
+                    resolvedSharedChatSourceIds.remove(sourceChannelId)
+                    return@launch
+                }
+                sharedChatParticipants.value =
+                    (sharedChatParticipants.value + sourceChannelId).distinct()
+                sharedChatParticipantUsers.value =
+                    (sharedChatParticipantUsers.value.filterNot { it.id == sourceChannelId } + user)
+            } catch (_: Exception) {
+                resolvedSharedChatSourceIds.remove(sourceChannelId)
             }
         }
     }
@@ -2340,6 +2367,9 @@ class ChatViewModel(
     }
 
     private suspend fun onChatMessage(message: ChatMessage, networkLibrary: String?, isLoggedIn: Boolean, accountId: String?, channelId: String?) {
+        // Shared Chat IRC tags identify the real source broadcaster. Resolve that ID
+        // directly instead of relying only on the session participant list.
+        loadSharedChatSourceProfile(message.sourceRoomId)
         onMessage(message)
         addChatter(message.userName)
         if (isLoggedIn && !accountId.isNullOrBlank() && message.userId == accountId) {
