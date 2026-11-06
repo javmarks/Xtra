@@ -48,6 +48,7 @@ import com.github.andreyasadchy.xtra.util.chat.ChatWriteIRCSocket
 import com.github.andreyasadchy.xtra.util.chat.ChatWriteWebSocket
 import com.github.andreyasadchy.xtra.util.chat.EventSubUtils
 import com.github.andreyasadchy.xtra.util.chat.EventSubWebSocket
+import com.github.andreyasadchy.xtra.util.chat.ModerationEventSubManager
 import com.github.andreyasadchy.xtra.util.chat.HermesWebSocket
 import com.github.andreyasadchy.xtra.util.chat.PubSubUtils
 import com.github.andreyasadchy.xtra.util.chat.STVEventApiUtils
@@ -86,6 +87,7 @@ class ChatViewModel(
     private val helixRepository: HelixRepository,
     private val playerRepository: PlayerRepository,
     private val json: Json,
+    private val moderationEventSubManager: ModerationEventSubManager,
 ) : ViewModel() {
 
     val integrity = MutableSharedFlow<String?>()
@@ -97,8 +99,8 @@ class ChatViewModel(
     private var chatReadJob: Job? = null
     private var chatWriteJob: Job? = null
     private var eventSub: EventSubWebSocket? = null
-    private var moderationEventSub: EventSubWebSocket? = null
-    private var moderationEventSubJob: Job? = null
+    private var moderationEventSubListener: EventSubWebSocket.Listener? = null
+    private var moderationEventSubChannelId: String? = null
     private var hermesWebSocket: HermesWebSocket? = null
     private var pubSubJob: Job? = null
     private var stvEventApi: STVEventApiWebSocket? = null
@@ -1467,11 +1469,13 @@ class ChatViewModel(
             !channelId.isNullOrBlank() && !accountId.isNullOrBlank() &&
             !helixHeaders[C.HEADER_TOKEN].isNullOrBlank()
         ) {
-            moderationEventSub = EventSubWebSocket(EventSubListener(
+            val listener = EventSubListener(
                 helixHeaders, channelLogin, showUserNotice, showClearChat, usePubSub,
                 networkLibrary, isLoggedIn, accountId, channelId, moderationOnly = true
-            ))
-            moderationEventSubJob = moderationEventSub?.connect(viewModelScope)
+            )
+            moderationEventSubListener = listener
+            moderationEventSubChannelId = channelId
+            moderationEventSubManager.register(channelId, listener)
         }
         if (usePubSub && !channelId.isNullOrBlank()) {
             val collectPoints = applicationContext.prefs().getBoolean(C.CHAT_POINTS_COLLECT, true)
@@ -1541,8 +1545,8 @@ class ChatViewModel(
             val oldChatReadJob = chatReadJob
             val oldChatWriteJob = chatWriteJob
             val oldEventSub = eventSub
-            val oldModerationEventSub = moderationEventSub
-            val oldModerationEventSubJob = moderationEventSubJob
+            val oldModerationEventSubListener = moderationEventSubListener
+            val oldModerationEventSubChannelId = moderationEventSubChannelId
             val oldHermesWebSocket = hermesWebSocket
             val oldPubSubJob = pubSubJob
             val oldStvEventApi = stvEventApi
@@ -1555,8 +1559,8 @@ class ChatViewModel(
             chatReadJob = null
             chatWriteJob = null
             eventSub = null
-            moderationEventSub = null
-            moderationEventSubJob = null
+            moderationEventSubListener = null
+            moderationEventSubChannelId = null
             hermesWebSocket = null
             pubSubJob = null
             stvEventApi = null
@@ -1568,7 +1572,9 @@ class ChatViewModel(
                 oldEventSub?.disconnect(oldChatReadJob)
                 oldChatWriteIRCSocket?.disconnect(oldChatWriteJob)
                 oldChatWriteWebSocket?.disconnect(oldChatWriteJob)
-                oldModerationEventSub?.disconnect(oldModerationEventSubJob)
+                if (oldModerationEventSubListener != null && !oldModerationEventSubChannelId.isNullOrBlank()) {
+                    moderationEventSubManager.unregister(oldModerationEventSubChannelId, oldModerationEventSubListener)
+                }
                 oldHermesWebSocket?.disconnect(oldPubSubJob)
                 oldStvEventApi?.disconnect(oldStvEventApiJob)
             }
@@ -3690,7 +3696,7 @@ class ChatViewModel(
             initializer {
                 val application = (this[APPLICATION_KEY] as XtraApp)
                 val xtraModule = application.xtraModule
-                ChatViewModel(application.applicationContext, xtraModule.graphQLRepository, xtraModule.helixRepository, xtraModule.playerRepository, xtraModule.json)
+                ChatViewModel(application.applicationContext, xtraModule.graphQLRepository, xtraModule.helixRepository, xtraModule.playerRepository, xtraModule.json, xtraModule.moderationEventSubManager)
             }
         }
     }
