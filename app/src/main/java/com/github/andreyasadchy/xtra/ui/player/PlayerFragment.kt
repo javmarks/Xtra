@@ -108,6 +108,16 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private var mergedChatAdapter: MergedChatAdapter? = null
     private var mergedChatScrollButton: Button? = null
     private var isFollowingMergedChat = true
+    private var mergedChatScrollScheduled = false
+    private val mergedChatScrollRunnable = Runnable {
+        mergedChatScrollScheduled = false
+        val recyclerView = mergedChatRecyclerView
+        val adapter = mergedChatAdapter
+        if (recyclerView != null && adapter != null && isAllChatsSelected && isFollowingMergedChat && adapter.itemCount > 0) {
+            recyclerView.scrollToPosition(adapter.itemCount - 1)
+            mergedChatScrollButton?.visibility = View.GONE
+        }
+    }
     private var isAllChatsSelected = false
     private val observedChatSources = mutableSetOf<ChatFragment>()
     private val chatSourceJobs = mutableMapOf<ChatFragment, Job>()
@@ -1379,20 +1389,19 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
 
         update(merged)
 
-        recyclerView.post {
-            if (mergedChatRecyclerView !== recyclerView || mergedChatAdapter !== merged ||
-                !isAllChatsSelected || merged.itemCount == 0) return@post
-
-            if (isFollowingMergedChat) {
-                recyclerView.scrollToPosition(merged.itemCount - 1)
-                mergedChatScrollButton?.visibility = View.GONE
-            } else {
-                // Never issue a corrective scroll while the reader is browsing older messages.
-                mergedChatScrollButton?.apply {
-                    visibility = View.VISIBLE
-                    if (merged.pendingMessageCount > 0) text = "↓ " + merged.pendingMessageCount
-                }
+        if (!isFollowingMergedChat) {
+            // Never issue a corrective scroll while the reader is browsing older messages.
+            mergedChatScrollButton?.apply {
+                visibility = View.VISIBLE
+                if (merged.pendingMessageCount > 0) text = "↓ " + merged.pendingMessageCount
             }
+            return
+        }
+
+        // Coalesce high-volume channel updates into one scroll adjustment at a time.
+        if (!mergedChatScrollScheduled) {
+            mergedChatScrollScheduled = true
+            recyclerView.postDelayed(mergedChatScrollRunnable, 200L)
         }
     }
 
