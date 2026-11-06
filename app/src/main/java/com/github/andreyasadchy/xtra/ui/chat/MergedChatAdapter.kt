@@ -30,6 +30,20 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private fun dispatchLiveDiff() {
         val oldEntries = lastDispatchedEntries
         val newEntries = entries.map { it.copy() }
+
+        // The normal live-chat path appends newer timestamps. Handle that cheaply
+        // instead of diffing the entire multi-channel history every 200 ms.
+        val appendOnly = oldEntries.size <= newEntries.size && oldEntries.indices.all { index ->
+            oldEntries[index].message === newEntries[index].message &&
+                oldEntries[index].renderer === newEntries[index].renderer
+        }
+        lastDispatchedEntries = newEntries
+        if (appendOnly) {
+            val insertedCount = newEntries.size - oldEntries.size
+            if (insertedCount > 0) notifyItemRangeInserted(oldEntries.size, insertedCount)
+            return
+        }
+
         val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
             override fun getOldListSize(): Int = oldEntries.size
             override fun getNewListSize(): Int = newEntries.size
@@ -48,7 +62,6 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 return oldEntry.message === newEntry.message && oldEntry.renderer === newEntry.renderer
             }
         }, true)
-        lastDispatchedEntries = newEntries
         diff.dispatchUpdatesTo(this)
     }
 
