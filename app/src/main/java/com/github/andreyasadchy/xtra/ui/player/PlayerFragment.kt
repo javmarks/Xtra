@@ -1312,13 +1312,14 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     val lastVisible = layoutManager?.findLastVisibleItemPosition() ?: -1
                     val count = recyclerView.adapter?.itemCount ?: 0
                     val atBottom = count == 0 || lastVisible >= count - 1
-                    if (atBottom) {
+                    // Do not re-enable follow because a new row/layout pass still exposes
+                    // the newest row while the user is dragging upward through history.
+                    if (dy < 0) {
+                        isFollowingMergedChat = false
+                    } else if (dy > 0 && atBottom) {
                         isFollowingMergedChat = true
-                        mergedChatScrollButton?.visibility = View.GONE
-                    } else {
-                        if (dy < 0) isFollowingMergedChat = false
-                        mergedChatScrollButton?.visibility = if (isFollowingMergedChat) View.GONE else View.VISIBLE
                     }
+                    mergedChatScrollButton?.visibility = if (isFollowingMergedChat) View.GONE else View.VISIBLE
                 }
             })
         }
