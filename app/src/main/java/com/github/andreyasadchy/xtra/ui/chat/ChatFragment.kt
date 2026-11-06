@@ -649,23 +649,25 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         repeatOnLifecycle(Lifecycle.State.STARTED) {
                             viewModel.reloadMessages.collectLatest { reloadVersion ->
                                 if (reloadVersion > 0) {
-                                    adapter?.let { adapter ->
-                                        val size = synchronized(viewModel.chatMessages) {
-                                            viewModel.chatMessages.size
+                                    // Emote and badge resources affect visible rows; rebinding the
+                                    // entire history repeatedly restarts image requests and can make
+                                    // already-loaded emotes blink while provider results arrive.
+                                    adapter?.let { currentAdapter ->
+                                        val layoutManager = binding.recyclerView.layoutManager as? LinearLayoutManager
+                                        val first = layoutManager?.findFirstVisibleItemPosition() ?: RecyclerView.NO_POSITION
+                                        val last = layoutManager?.findLastVisibleItemPosition() ?: RecyclerView.NO_POSITION
+                                        if (first != RecyclerView.NO_POSITION && last >= first) {
+                                            currentAdapter.notifyItemRangeChanged(first, last - first + 1)
                                         }
-                                        adapter.notifyItemRangeChanged(0, size)
+                                        (parentFragment as? PlayerFragment)?.refreshMergedChatSource(currentAdapter)
                                     }
-                                    messageDialog?.adapter?.let { adapter ->
-                                        val size = synchronized(adapter.messages) {
-                                            adapter.messages.size
-                                        }
-                                        adapter.notifyItemRangeChanged(0, size)
+                                    messageDialog?.adapter?.let { currentAdapter ->
+                                        val size = synchronized(currentAdapter.messages) { currentAdapter.messages.size }
+                                        if (size > 0) currentAdapter.notifyItemRangeChanged(0, size)
                                     }
-                                    replyDialog?.adapter?.let { adapter ->
-                                        val size = synchronized(adapter.messages) {
-                                            adapter.messages.size
-                                        }
-                                        adapter.notifyItemRangeChanged(0, size)
+                                    replyDialog?.adapter?.let { currentAdapter ->
+                                        val size = synchronized(currentAdapter.messages) { currentAdapter.messages.size }
+                                        if (size > 0) currentAdapter.notifyItemRangeChanged(0, size)
                                     }
                                 }
                             }
