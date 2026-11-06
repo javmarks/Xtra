@@ -126,6 +126,8 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private val observedChatSources = mutableSetOf<ChatFragment>()
     private val chatSourceJobs = mutableMapOf<ChatFragment, Job>()
     private val sharedChatRendererFragments = mutableMapOf<String, ChatFragment>()
+    // Profile data from channel selections lets All Chats show each tab's real avatar.
+    private val sourceChannelProfiles = mutableMapOf<String, Pair<String?, String?>>()
     private val channelPointsBalances = mutableMapOf<ChatFragment, Int>()
     private val moderationLogSources = mutableMapOf<ChatFragment, List<String>>()
     private var mergedModerationLogDialog: ModerationLogDialog.Handle? = null
@@ -1312,6 +1314,11 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         }
     }
 
+    /** Refresh merged rows that use a channel's renderer after its resources change. */
+    fun refreshMergedChatSource(source: ChatAdapter) {
+        mergedChatAdapter?.refreshSource(source)
+    }
+
     private fun ensureMergedChatView() {
         if (mergedChatRecyclerView != null) return
         val adapter = MergedChatAdapter()
@@ -1465,10 +1472,12 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                         }
                     }
                     fragment.mergedChatChannelId?.let { channelId ->
-                        val channelName = fragment.arguments?.getString("channel_name")
-                            ?.takeIf { it.isNotBlank() }
+                        val savedProfile = sourceChannelProfiles[channelId]
+                        val channelName = savedProfile?.first
+                            ?: fragment.arguments?.getString("channel_name")?.takeIf { it.isNotBlank() }
                             ?: fragment.arguments?.getString("channel_login")?.takeIf { it.isNotBlank() }
-                        val channelImage = if (channelId == playbackService?.channelId) playbackService?.channelImage else null
+                        val channelImage = savedProfile?.second
+                            ?: if (channelId == playbackService?.channelId) playbackService?.channelImage else null
                         merged.setSourceChannelInfo(channelId, channelName, channelImage)
                     }
                     merged.addSource(sourceAdapter, fragment.mergedChatChannelId, initialMessages)
@@ -1641,6 +1650,11 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
 
     override fun onChannelSelected(user: User) {
         val login = user.login?.takeIf { it.isNotBlank() } ?: return
+        user.id?.takeIf { it.isNotBlank() }?.let { channelId ->
+            val profile = (user.name ?: login) to user.profileImageURL
+            sourceChannelProfiles[channelId] = profile
+            mergedChatAdapter?.setSourceChannelInfo(channelId, profile.first, profile.second)
+        }
         val existing = getChatFragments().firstOrNull {
             it.arguments?.getString("channel_login").equals(login, ignoreCase = true)
         }
