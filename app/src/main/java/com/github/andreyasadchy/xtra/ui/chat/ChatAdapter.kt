@@ -89,6 +89,28 @@ class ChatAdapter(
     private val savedLocalBadges = mutableMapOf<String, ByteArray>()
     private val savedLocalCheerEmotes = mutableMapOf<String, ByteArray>()
     private val savedLocalEmotes = mutableMapOf<String, ByteArray>()
+    private var frozenMessages: List<ChatMessage>? = null
+    var pendingMessageCount: Int = 0
+        private set
+
+    fun pauseDisplay() {
+        if (frozenMessages == null) {
+            frozenMessages = synchronized(messages) { messages.toList() }
+            pendingMessageCount = 0
+        }
+    }
+
+    fun resumeDisplay() {
+        if (frozenMessages != null) {
+            frozenMessages = null
+            pendingMessageCount = 0
+            notifyDataSetChanged()
+        }
+    }
+
+    fun isDisplayPaused(): Boolean = frozenMessages != null
+    fun onIncomingMessageWhilePaused() { if (frozenMessages != null) pendingMessageCount++ }
+    private fun displayedMessages(): List<ChatMessage> = frozenMessages ?: messages
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         return ViewHolder(LayoutInflater.from(parent.context).inflate(R.layout.chat_list_item, parent, false))
@@ -96,7 +118,7 @@ class ChatAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val chatMessage = synchronized(messages) {
-            messages.getOrNull(position)
+            displayedMessages().getOrNull(position)
         } ?: return
         bindMessage(holder, chatMessage)
     }
@@ -169,7 +191,7 @@ class ChatAdapter(
     }
 
     override fun getItemCount(): Int = synchronized(messages) {
-        messages.size
+        displayedMessages().size
     }
 
     private fun stopAnimations(textView: TextView) {
