@@ -1287,6 +1287,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     }
 
     fun resumeMergedChatFollowing() {
+        mergedChatAdapter?.resumeDisplay()
         isFollowingMergedChat = true
         mergedChatScrollButton?.visibility = View.GONE
         mergedChatRecyclerView?.post {
