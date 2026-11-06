@@ -1195,8 +1195,9 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         if (dragged === target || dragged === primaryChatFragment) return
         val fragments = getChatFragments().toMutableList()
         val from = fragments.indexOf(dragged)
-        val to = fragments.indexOf(target)
-        if (from < 0 || to < 0) return
+        val targetIndex = fragments.indexOf(target)
+        if (from < 0 || targetIndex < 0) return
+        val to = if (target === primaryChatFragment) 1 else targetIndex
         fragments.removeAt(from)
         fragments.add(to, dragged)
         chatTabOrder.clear()
@@ -1284,6 +1285,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 text = label
                 isAllCaps = false
                 isSelected = !isAllChatsSelected && fragment === chatFragment
+                tooltipText = "Long press and drag to reorder"
                 setOnClickListener { switchChatFragment(fragment) }
                 setOnLongClickListener { source ->
                     if (fragment === primaryChatFragment) {
