@@ -1813,12 +1813,9 @@ class ChatViewModel(
         }
 
         override suspend fun onWelcomeMessage(sessionId: String) {
-            val subscriptions = if (moderationOnly) buildList {
-                add(Triple("channel.moderate", "2", true))
-                if (applicationContext.prefs().getBoolean(C.CHAT_WATCH_STREAKS, true)) {
-                    add(Triple("channel.chat.notification", "1", false))
-                }
-            } else listOf(
+            val subscriptions = if (moderationOnly) listOf(
+                Triple("channel.moderate", "2", true),
+            ) else listOf(
                 Triple("channel.chat.clear", "1", false),
                 Triple("channel.chat.message", "1", false),
                 Triple("channel.chat.notification", "1", false),
