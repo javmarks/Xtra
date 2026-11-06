@@ -1067,10 +1067,24 @@ object ChatAdapterUtils {
         val sources = imageSources(image, emoteQuality)
         if (sources.isEmpty()) {
             onFailed()
-        } else if (imageLibrary == "0" || (imageLibrary == "1" && !image.format.equals("webp", true))) {
-            loadCoil(fragment, image, sources, 0, onFailed, onLoaded)
+            return
+        }
+
+        // Try the user's preferred image loader first, then the other decoder.
+        // This is especially useful for third-party emotes whose formats or
+        // animation codecs may be supported differently by Coil and Glide.
+        val preferCoil = imageLibrary == "0" || (imageLibrary == "1" && !image.format.equals("webp", true))
+        val fallback: () -> Unit = {
+            if (preferCoil) {
+                loadGlide(fragment, image, sources, 0, onFailed, onLoaded)
+            } else {
+                loadCoil(fragment, image, sources, 0, onFailed, onLoaded)
+            }
+        }
+        if (preferCoil) {
+            loadCoil(fragment, image, sources, 0, fallback, onLoaded)
         } else {
-            loadGlide(fragment, image, sources, 0, onFailed, onLoaded)
+            loadGlide(fragment, image, sources, 0, fallback, onLoaded)
         }
     }
 
