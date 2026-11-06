@@ -147,7 +147,7 @@ class ChatReplayManagerLocal(
                             }
                         ) {
                             val timeLeft = (messageOffset - currentPosition).div(playbackSpeed ?: 1f).toLong()
-                            val delay = max(timeLeft, 1).coerceAtMost(500) // Recheck playback position regularly so pauses and buffering cannot desync chat
+                            val delay = max(timeLeft, 1).coerceAtMost(100) // Recheck frequently to keep replay chat close to the playback position
                             delay(delay.milliseconds)
                         }
                         if (!isActive) {
