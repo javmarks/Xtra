@@ -73,7 +73,8 @@ object ChatAdapterUtils {
         // before the message, separate from the chatter's own badges.
         if (showSourceChannel && chatMessage.type != ChatMessage.REPLY_MESSAGE) {
             val sourceImage = chatMessage.sourceChannelImageUrl?.takeIf { it.isNotBlank() }
-            if (sourceImage != null) {
+            val sourceInitial = chatMessage.sourceChannelName?.trim()?.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+            if (sourceImage != null || !chatMessage.sourceChannelName.isNullOrBlank()) {
                 builder.append(". ")
                 builder.setSpan(ForegroundColorSpan(Color.TRANSPARENT), builderIndex, builderIndex + 1, SPAN_EXCLUSIVE_EXCLUSIVE)
                 images.add(Image(
@@ -83,6 +84,7 @@ object ChatAdapterUtils {
                     url4x = sourceImage,
                     size = Image.IMAGE_SIZE_BADGE,
                     circular = true,
+                    fallbackText = sourceInitial,
                     start = builderIndex,
                     end = builderIndex + 1
                 ))
@@ -943,14 +945,18 @@ object ChatAdapterUtils {
                 builder.getSpans(image.start, image.end, ForegroundColorSpan::class.java).forEach {
                     builder.removeSpan(it)
                 }
-                builder.setSpan(object : ReplacementSpan() {
-                    override fun getSize(paint: android.graphics.Paint, text: CharSequence?, start: Int, end: Int, fm: android.graphics.Paint.FontMetricsInt?): Int {
-                        return paint.measureText(fallbackText).toInt()
+                val fallbackSpan = if (image.circular) {
+                    CircularFallbackSpan(fallbackText)
+                } else {
+                    object : ReplacementSpan() {
+                        override fun getSize(paint: android.graphics.Paint, text: CharSequence?, start: Int, end: Int, fm: android.graphics.Paint.FontMetricsInt?): Int =
+                            paint.measureText(fallbackText).toInt()
+                        override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: android.graphics.Paint) {
+                            canvas.drawText(fallbackText, x, y.toFloat(), paint)
+                        }
                     }
-                    override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: android.graphics.Paint) {
-                        canvas.drawText(fallbackText, x, y.toFloat(), paint)
-                    }
-                }, image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                builder.setSpan(fallbackSpan, image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE)
                 bind(builder)
             }) { result ->
                 if (!isCurrent()) return@loadImage
@@ -1118,6 +1124,38 @@ object ChatAdapterUtils {
                 override fun onLoadCleared(placeholder: Drawable?) {
                 }
             })
+    }
+
+    private class CircularFallbackSpan(private val label: String) : ReplacementSpan() {
+        override fun getSize(paint: android.graphics.Paint, text: CharSequence?, start: Int, end: Int, fm: android.graphics.Paint.FontMetricsInt?): Int {
+            val size = (paint.textSize * 1.15f).toInt()
+            if (fm != null) {
+                val metrics = paint.fontMetricsInt
+                val center = metrics.ascent + (metrics.descent - metrics.ascent) / 2
+                fm.ascent = center - size / 2
+                fm.top = fm.ascent
+                fm.descent = center + size / 2
+                fm.bottom = fm.descent
+            }
+            return size
+        }
+
+        override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: android.graphics.Paint) {
+            val size = (paint.textSize * 1.15f).toInt().toFloat()
+            val centerY = y + paint.fontMetricsInt.descent - (paint.fontMetricsInt.descent - paint.fontMetricsInt.ascent) / 2f
+            val oldColor = paint.color
+            val oldAlign = paint.textAlign
+            val oldStyle = paint.style
+            paint.color = Color.DKGRAY
+            paint.style = android.graphics.Paint.Style.FILL
+            canvas.drawCircle(x + size / 2f, centerY, size / 2f, paint)
+            paint.color = Color.WHITE
+            paint.textAlign = android.graphics.Paint.Align.CENTER
+            canvas.drawText(label.take(1), x + size / 2f, centerY - (paint.ascent() + paint.descent()) / 2f, paint)
+            paint.color = oldColor
+            paint.textAlign = oldAlign
+            paint.style = oldStyle
+        }
     }
 
     private class CircularCenteredImageSpan(private val image: Drawable) : ReplacementSpan() {
