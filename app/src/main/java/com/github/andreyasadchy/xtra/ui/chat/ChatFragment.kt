@@ -975,14 +975,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 val lastIndex = result.second
                                 val removeCount = result.third
                                 adapter?.let { adapter ->
-                                    // onMessage() has already changed the backing list before this
-                                    // collector runs, so adapter.itemCount includes the incoming row.
-                                    // Compare against the previous count, not the new count, or a reader
-                                    // who was at the bottom will incorrectly be treated as scrolled up.
-                                    val layoutManager = binding.recyclerView.layoutManager as? LinearLayoutManager
-                                    val previousItemCount = (lastIndex - 1 + removeCount).coerceAtLeast(0)
-                                    val wasAtBottom = previousItemCount == 0 ||
-                                        (layoutManager?.findLastVisibleItemPosition() ?: -1) >= previousItemCount - 1
+                                    // Follow mode is controlled by the user's scroll position.
+                                    // Do not re-check a transient "was at bottom" snapshot for every
+                                    // replay message: RecyclerView can report a stale last-visible row
+                                    // while it is laying out the previous insertion.
                                     val newLastIndex = lastIndex - 1
                                     if (removeCount > 0) {
                                         // The backing list has already been trimmed and appended as
@@ -992,7 +988,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     } else if (newLastIndex >= 0) {
                                         adapter.notifyItemInserted(newLastIndex)
                                     }
-                                    if (isFollowingChat && wasAtBottom && newLastIndex >= 0) {
+                                    if (isFollowingChat && newLastIndex >= 0) {
                                         binding.recyclerView.scrollToPosition(newLastIndex)
                                         binding.btnDown.isGone = true
                                     }
