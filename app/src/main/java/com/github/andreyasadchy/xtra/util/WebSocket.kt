@@ -121,7 +121,8 @@ class WebSocket(
         var validated = false
         var line = reader.readLine()
         if (!line.startsWith("HTTP/1.1 101", true)) {
-            listener.onDisconnect(this@WebSocket, line)
+            val endpoint = url.substringAfter("://").substringBefore("/")
+            listener.onDisconnect(this@WebSocket, "$line ($endpoint)")
             if (line.startsWith("HTTP/1.1 429", true)) {
                 delayReconnect = true
                 return@withContext false
