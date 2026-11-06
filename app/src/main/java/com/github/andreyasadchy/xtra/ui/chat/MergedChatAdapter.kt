@@ -15,6 +15,13 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val messageIds = mutableSetOf<String>()
     private val sourceEntryCounts = mutableMapOf<ChatAdapter, Int>()
     private val sourceChannelInfo = mutableMapOf<String, Pair<String?, String?>>()
+    private var frozenEntries: List<Entry>? = null
+    var pendingMessageCount: Int = 0
+        private set
+    private fun displayedEntries(): List<Entry> = frozenEntries ?: entries
+    fun pauseDisplay() { if (frozenEntries == null) { frozenEntries = entries.toList(); pendingMessageCount = 0 } }
+    fun resumeDisplay() { if (frozenEntries != null) { frozenEntries = null; pendingMessageCount = 0; notifyDataSetChanged() } }
+    fun isDisplayPaused(): Boolean = frozenEntries != null
 
     fun setSourceChannelInfo(channelId: String, channelName: String?, imageUrl: String?) {
         if (channelId.isBlank()) return
@@ -24,13 +31,13 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             if ((sourceMessage.sourceRoomId ?: sourceMessage.roomId) == channelId) {
                 entry.message.sourceChannelName = channelName
                 entry.message.sourceChannelImageUrl = imageUrl
-                notifyItemChanged(index)
+                if (frozenEntries == null) notifyItemChanged(index)
             }
         }
     }
 
     override fun getItemViewType(position: Int): Int {
-        val renderer = entries.getOrNull(position)?.renderer ?: return 0
+        val renderer = displayedEntries().getOrNull(position)?.renderer ?: return 0
         return sources.indexOf(renderer).takeIf { it >= 0 } ?: 0
     }
 
@@ -41,11 +48,11 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        val entry = entries.getOrNull(position) ?: return
+        val entry = displayedEntries().getOrNull(position) ?: return
         (holder as? ChatAdapter.ViewHolder)?.let { entry.renderer.bindMessage(it, entry.message, showSourceChannel = true) }
     }
 
-    override fun getItemCount(): Int = entries.size
+    override fun getItemCount(): Int = displayedEntries().size
 
     private fun messageKey(message: ChatMessage): String? =
         // In Twitch Shared Chat, each destination room can have its own local message ID.
@@ -115,7 +122,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
         val insertedAt = insertSorted(Entry(owner, rendererFor(owner, message), message))
         incrementSourceCount(owner)
-        notifyItemInserted(insertedAt)
+        if (frozenEntries != null) pendingMessageCount++ else notifyItemInserted(insertedAt)
         trimLiveMessages(owner)
     }
 
@@ -128,7 +135,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             val removed = entries.removeAt(index)
             messageKey(removed.message)?.let(messageIds::remove)
             decrementSourceCount(owner)
-            notifyItemRemoved(index)
+            if (frozenEntries == null) notifyItemRemoved(index)
             count--
         }
     }
@@ -149,7 +156,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
         // Report the actual sorted insertions rather than invalidating every visible row.
         // A full refresh can make RecyclerView jump while the reader is paging upward.
-        insertedPositions.forEach(::notifyItemInserted)
+        if (frozenEntries == null) insertedPositions.forEach(::notifyItemInserted)
     }
 
     fun replaceSourceMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
@@ -167,7 +174,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     incrementSourceCount(owner)
                 }
             }
-        notifyDataSetChanged()
+        if (frozenEntries == null) notifyDataSetChanged()
     }
 
     fun removeOldestMessages(owner: ChatAdapter, count: Int) {
@@ -183,7 +190,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 remaining--
             }
         }
-        if (remaining != count) notifyDataSetChanged()
+        if (remaining != count && frozenEntries == null) notifyDataSetChanged()
     }
 
     fun removeSource(source: ChatAdapter) {
@@ -210,13 +217,13 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         super.onViewAttachedToWindow(holder)
         val position = holder.bindingAdapterPosition
         if (position == RecyclerView.NO_POSITION) return
-        val entry = entries.getOrNull(position) ?: return
+        val entry = displayedEntries().getOrNull(position) ?: return
         (holder as? ChatAdapter.ViewHolder)?.let { entry.renderer.onViewAttachedToWindow(it) }
     }
 
     override fun onViewDetachedFromWindow(holder: RecyclerView.ViewHolder) {
         val position = holder.bindingAdapterPosition
-        val entry = if (position == RecyclerView.NO_POSITION) null else entries.getOrNull(position)
+        val entry = if (position == RecyclerView.NO_POSITION) null else displayedEntries().getOrNull(position)
         if (entry != null) {
             (holder as? ChatAdapter.ViewHolder)?.let { entry.renderer.onViewDetachedFromWindow(it) }
         }
