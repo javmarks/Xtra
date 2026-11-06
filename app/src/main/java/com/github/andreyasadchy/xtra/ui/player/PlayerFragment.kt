@@ -1274,10 +1274,13 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         chatFragment?.let { if (!it.isMergedRendererOnly && it !in fragments) fragments.add(it) }
         if (chatTabOrder.isEmpty()) return fragments
         val order = chatTabOrder.withIndex().associate { it.value to it.index }
-        return fragments.sortedBy { fragment ->
-            val login = fragment.arguments?.getString("channel_login")?.lowercase()
-            order[login] ?: Int.MAX_VALUE
-        }
+        return fragments.sortedWith(
+            compareBy<ChatFragment> { if (it === primaryChatFragment) 0 else 1 }
+                .thenBy { fragment ->
+                    val login = fragment.arguments?.getString("channel_login")?.lowercase()
+                    order[login] ?: Int.MAX_VALUE
+                }
+        )
     }
 
     private fun ensureSharedChatRenderers(users: List<User>) {
