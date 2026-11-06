@@ -73,7 +73,6 @@ object ChatAdapterUtils {
         // before the message, separate from the chatter's own badges.
         if (showSourceChannel && chatMessage.type != ChatMessage.REPLY_MESSAGE) {
             val sourceImage = chatMessage.sourceChannelImageUrl?.takeIf { it.isNotBlank() }
-            val sourceLabel = chatMessage.sourceChannelName?.takeIf { it.isNotBlank() }?.let { "#${it.take(16)}" }
             if (sourceImage != null) {
                 builder.append(". ")
                 builder.setSpan(ForegroundColorSpan(Color.TRANSPARENT), builderIndex, builderIndex + 1, SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -83,20 +82,11 @@ object ChatAdapterUtils {
                     url3x = sourceImage,
                     url4x = sourceImage,
                     size = Image.IMAGE_SIZE_BADGE,
-                    fallbackText = sourceLabel,
+                    circular = true,
                     start = builderIndex,
                     end = builderIndex + 1
                 ))
                 builderIndex += 2
-            } else if (sourceLabel != null) {
-                builder.append(sourceLabel).append(" ")
-                builder.setSpan(
-                    ForegroundColorSpan(getSavedColor("#999999", savedColors, useReadableColors, isLightTheme)),
-                    builderIndex,
-                    builderIndex + sourceLabel.length,
-                    SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-                builderIndex += sourceLabel.length + 1
             }
         }
         when {
@@ -996,7 +986,10 @@ object ChatAdapterUtils {
                     val drawables = arrayOf(result)
                     nextOverlayEmote(imageLibrary, fragment, drawables, image.overlayEmote!!, image, itemView, bind, builder, translated, emoteSize, emoteQuality, animateGifs, enableOverlayEmotes, chatMessage, savedColors, useReadableColors, isLightTheme, showLanguageDownloadDialog, hideErrors, isCurrent)
                 } else {
-                    builder.setSpan(CenteredImageSpan(result), image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE)
+                    builder.setSpan(
+                        if (image.circular) CircularCenteredImageSpan(result) else CenteredImageSpan(result),
+                        image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
                     if (!translated && chatMessage.translatedMessage != null) {
                         addTranslation(chatMessage, builder, builder.length, savedColors, useReadableColors, isLightTheme, showLanguageDownloadDialog, hideErrors)
                     }
@@ -1049,52 +1042,69 @@ object ChatAdapterUtils {
         }
     }
 
+    private fun imageSources(image: Image, emoteQuality: String): List<Any> {
+        val sources = mutableListOf<Any>()
+        image.localData?.takeIf { it.isNotEmpty() }?.let(sources::add)
+        val urls = when (emoteQuality) {
+            "4" -> listOf(image.url4x, image.url3x, image.url2x, image.url1x)
+            "3" -> listOf(image.url3x, image.url2x, image.url1x)
+            "2" -> listOf(image.url2x, image.url1x)
+            else -> listOf(image.url1x)
+        }
+        urls.filterNotNull().filter { it.isNotBlank() }.forEach { url ->
+            if (sources.none { it is String && it == url }) sources.add(url)
+        }
+        return sources
+    }
+
     private fun loadImage(imageLibrary: String?, fragment: Fragment, image: Image, emoteQuality: String, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
-        if (imageLibrary == "0" || (imageLibrary == "1" && !image.format.equals("webp", true))) {
-            loadCoil(fragment, image, emoteQuality, onFailed, onLoaded)
+        val sources = imageSources(image, emoteQuality)
+        if (sources.isEmpty()) {
+            onFailed()
+        } else if (imageLibrary == "0" || (imageLibrary == "1" && !image.format.equals("webp", true))) {
+            loadCoil(fragment, image, sources, 0, onFailed, onLoaded)
         } else {
-            loadGlide(fragment, image, emoteQuality, onFailed, onLoaded)
+            loadGlide(fragment, image, sources, 0, onFailed, onLoaded)
         }
     }
 
-    private fun loadCoil(fragment: Fragment, image: Image, emoteQuality: String, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
-        fragment.requireContext().imageLoader.enqueue(
-            ImageRequest.Builder(fragment.requireContext()).apply {
-                data(image.localData ?: when (emoteQuality) {
-                    "4" -> image.url4x ?: image.url3x ?: image.url2x ?: image.url1x
-                    "3" -> image.url3x ?: image.url2x ?: image.url1x
-                    "2" -> image.url2x ?: image.url1x
-                    else -> image.url1x
-                })
+    private fun loadCoil(fragment: Fragment, image: Image, sources: List<Any>, index: Int, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
+        if (index >= sources.size) {
+            onFailed()
+            return
+        }
+        val context = fragment.context
+        if (context == null) {
+            onFailed()
+            return
+        }
+        context.imageLoader.enqueue(
+            ImageRequest.Builder(context).apply {
+                data(sources[index])
                 if (image.thirdParty) {
                     httpHeaders(NetworkHeaders.Builder().apply {
                         add("User-Agent", "Xtra/" + BuildConfig.VERSION_NAME)
                     }.build())
                 }
                 target(
-                    onSuccess = {
-                        onLoaded((it.asDrawable(fragment.resources)))
-                    },
-                    onError = {
-                        onFailed()
-                    },
+                    onSuccess = { onLoaded(it.asDrawable(context.resources)) },
+                    onError = { loadCoil(fragment, image, sources, index + 1, onFailed, onLoaded) },
                 )
             }.build()
         )
     }
 
-    private fun loadGlide(fragment: Fragment, image: Image, emoteQuality: String, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
+    private fun loadGlide(fragment: Fragment, image: Image, sources: List<Any>, index: Int, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
+        if (index >= sources.size) {
+            onFailed()
+            return
+        }
+        val source = sources[index]
+        val data: Any = if (source is String && image.thirdParty) {
+            GlideUrl(source) { mapOf("User-Agent" to "Xtra/" + BuildConfig.VERSION_NAME) }
+        } else source
         Glide.with(fragment)
-            .load(image.localData ?: when (emoteQuality) {
-                "4" -> image.url4x ?: image.url3x ?: image.url2x ?: image.url1x
-                "3" -> image.url3x ?: image.url2x ?: image.url1x
-                "2" -> image.url2x ?: image.url1x
-                else -> image.url1x
-            }.let {
-                if (image.thirdParty) {
-                    GlideUrl(it) { mapOf("User-Agent" to "Xtra/" + BuildConfig.VERSION_NAME) }
-                } else it
-            })
+            .load(data)
             .diskCacheStrategy(DiskCacheStrategy.DATA)
             .into(object : CustomTarget<Drawable>() {
                 override fun onResourceReady(resource: Drawable, transition: Transition<in Drawable>?) {
@@ -1102,11 +1112,44 @@ object ChatAdapterUtils {
                 }
 
                 override fun onLoadFailed(errorDrawable: Drawable?) {
-                    onFailed()
+                    loadGlide(fragment, image, sources, index + 1, onFailed, onLoaded)
                 }
 
                 override fun onLoadCleared(placeholder: Drawable?) {
                 }
             })
+    }
+
+    private class CircularCenteredImageSpan(private val image: Drawable) : ReplacementSpan() {
+        override fun getSize(paint: android.graphics.Paint, text: CharSequence?, start: Int, end: Int, fm: android.graphics.Paint.FontMetricsInt?): Int {
+            val bounds = image.bounds
+            if (fm != null) {
+                val metrics = paint.fontMetricsInt
+                val center = metrics.ascent + (metrics.descent - metrics.ascent) / 2
+                val halfHeight = (bounds.bottom - bounds.top) / 2
+                fm.ascent = center - halfHeight
+                fm.top = fm.ascent
+                fm.descent = center + halfHeight
+                fm.bottom = fm.descent
+            }
+            return image.bounds.right
+        }
+
+        override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: android.graphics.Paint) {
+            val bounds = image.bounds
+            val height = bounds.bottom - bounds.top
+            val width = bounds.right - bounds.left
+            val metrics = paint.fontMetricsInt
+            val centerY = y + metrics.descent - (metrics.descent - metrics.ascent) / 2
+            val drawTop = centerY - height / 2f
+            val path = android.graphics.Path().apply {
+                addCircle(x + width / 2f, drawTop + height / 2f, minOf(width, height) / 2f, android.graphics.Path.Direction.CW)
+            }
+            val save = canvas.save()
+            canvas.clipPath(path)
+            canvas.translate(x, drawTop)
+            image.draw(canvas)
+            canvas.restoreToCount(save)
+        }
     }
 }
