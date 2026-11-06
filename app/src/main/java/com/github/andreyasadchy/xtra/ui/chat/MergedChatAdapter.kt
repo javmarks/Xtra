@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.github.andreyasadchy.xtra.model.chat.ChatMessage
 
@@ -19,9 +20,41 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     private val sourceChannelInfo = mutableMapOf<String, Pair<String?, String?>>()
     private val updateHandler = Handler(Looper.getMainLooper())
     private var updateScheduled = false
+    // Snapshot diffing avoids rebinding every visible message on each live refresh.
+    private var lastDispatchedEntries: List<Entry> = emptyList()
     private val flushLiveUpdates = Runnable {
         updateScheduled = false
-        if (frozenEntries == null) notifyDataSetChanged()
+        if (frozenEntries == null) dispatchLiveDiff()
+    }
+
+    private fun dispatchLiveDiff() {
+        val oldEntries = lastDispatchedEntries
+        val newEntries = entries.map { it.copy() }
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize(): Int = oldEntries.size
+            override fun getNewListSize(): Int = newEntries.size
+
+            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                val oldMessage = oldEntries[oldItemPosition].message
+                val newMessage = newEntries[newItemPosition].message
+                val oldKey = messageKey(oldMessage)
+                val newKey = messageKey(newMessage)
+                return if (oldKey != null && newKey != null) oldKey == newKey else oldMessage === newMessage
+            }
+
+            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                val oldEntry = oldEntries[oldItemPosition]
+                val newEntry = newEntries[newItemPosition]
+                return oldEntry.message === newEntry.message && oldEntry.renderer === newEntry.renderer
+            }
+        }, true)
+        lastDispatchedEntries = newEntries
+        diff.dispatchUpdatesTo(this)
+    }
+
+    private fun dispatchFullRefresh() {
+        lastDispatchedEntries = entries.map { it.copy() }
+        notifyDataSetChanged()
     }
 
     private fun scheduleLiveUpdate() {
@@ -47,7 +80,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             pendingMessageCount = 0
             updateHandler.removeCallbacks(flushLiveUpdates)
             updateScheduled = false
-            notifyDataSetChanged()
+            dispatchFullRefresh()
         }
     }
     fun isDisplayPaused(): Boolean = frozenEntries != null
@@ -55,12 +88,17 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     fun setSourceChannelInfo(channelId: String, channelName: String?, imageUrl: String?) {
         if (channelId.isBlank()) return
         sourceChannelInfo[channelId] = channelName to imageUrl
-        entries.forEachIndexed { index, entry ->
+        entries.forEach { entry ->
             val sourceMessage = if (entry.message.type == ChatMessage.REPLY_MESSAGE) entry.message.replyParent ?: entry.message else entry.message
             if ((sourceMessage.sourceRoomId ?: sourceMessage.roomId) == channelId) {
                 entry.message.sourceChannelName = channelName
                 entry.message.sourceChannelImageUrl = imageUrl
-                if (frozenEntries == null) notifyItemChanged(index)
+            }
+        }
+        if (frozenEntries == null) {
+            displayedEntries().forEachIndexed { index, entry ->
+                val sourceMessage = if (entry.message.type == ChatMessage.REPLY_MESSAGE) entry.message.replyParent ?: entry.message else entry.message
+                if ((sourceMessage.sourceRoomId ?: sourceMessage.roomId) == channelId) notifyItemChanged(index)
             }
         }
     }
@@ -184,7 +222,10 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
         // Report the actual sorted insertions rather than invalidating every visible row.
         // A full refresh can make RecyclerView jump while the reader is paging upward.
-        if (frozenEntries == null) insertedPositions.forEach(::notifyItemInserted)
+        if (frozenEntries == null) {
+            insertedPositions.forEach(::notifyItemInserted)
+            lastDispatchedEntries = entries.map { it.copy() }
+        }
     }
 
     fun replaceSourceMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
@@ -202,7 +243,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                     incrementSourceCount(owner)
                 }
             }
-        if (frozenEntries == null) notifyDataSetChanged()
+        if (frozenEntries == null) dispatchFullRefresh()
     }
 
     fun removeOldestMessages(owner: ChatAdapter, count: Int) {
@@ -218,7 +259,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
                 remaining--
             }
         }
-        if (remaining != count && frozenEntries == null) notifyDataSetChanged()
+        if (remaining != count && frozenEntries == null) dispatchFullRefresh()
     }
 
     fun removeSource(source: ChatAdapter) {
@@ -233,7 +274,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
         entries.removeAll { it.owner === source }
         rebuildMessageIds()
-        notifyDataSetChanged()
+        dispatchFullRefresh()
     }
 
     fun clearSource(owner: ChatAdapter) {
@@ -242,7 +283,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
             pendingMessageCount = 0
             sourceEntryCounts.remove(owner)
             rebuildMessageIds()
-            notifyDataSetChanged()
+            dispatchFullRefresh()
         }
     }
 
