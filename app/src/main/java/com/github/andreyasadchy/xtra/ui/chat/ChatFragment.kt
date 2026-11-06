@@ -462,13 +462,16 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 val lastVisible = layoutManager?.findLastVisibleItemPosition() ?: -1
                                 val itemCount = recyclerView.adapter?.itemCount ?: 0
                                 val atBottom = itemCount == 0 || lastVisible >= itemCount - 1
-                                if (atBottom) {
+                                // Upward movement always means the reader is browsing history.
+                                // Only an actual downward scroll reaching the bottom resumes follow;
+                                // dy == 0 can also happen during adapter/layout updates and must not
+                                // pull the reader back to the newest message.
+                                if (dy < 0) {
+                                    isFollowingChat = false
+                                } else if (dy > 0 && atBottom) {
                                     isFollowingChat = true
-                                    btnDown.isGone = true
-                                } else {
-                                    if (dy < 0) isFollowingChat = false
-                                    btnDown.isVisible = !isFollowingChat
                                 }
+                                btnDown.isVisible = !isFollowingChat
                             }
 
                             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
