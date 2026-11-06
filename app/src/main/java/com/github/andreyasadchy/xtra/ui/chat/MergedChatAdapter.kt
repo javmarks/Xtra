@@ -210,7 +210,16 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         return if (originId.isNullOrBlank()) owner else sourcesByChannelId[originId] ?: owner
     }
 
+    // Connection and Watch Streak status rows belong in their source chat, not
+    // the merged timeline where one copy per channel obscures actual messages.
+    private fun isMergedStatusMessage(message: ChatMessage): Boolean {
+        val text = message.systemMsg ?: return false
+        return text.startsWith("Connected to ", ignoreCase = true) ||
+            text.startsWith("Watch streak", ignoreCase = true)
+    }
+
     fun addMessage(owner: ChatAdapter, message: ChatMessage) {
+        if (isMergedStatusMessage(message)) return
         val key = messageKey(message)
         if (key != null && !messageIds.add(key)) return
 
@@ -240,7 +249,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     fun addOlderMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
         val insertedPositions = mutableListOf<Int>()
-        messages.forEach { message ->
+        messages.filterNot(::isMergedStatusMessage).forEach { message ->
             val key = messageKey(message)
             if (key == null || messageIds.add(key)) {
                 insertedPositions += insertSorted(Entry(owner, rendererFor(owner, message), message))
@@ -260,6 +269,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         sourceEntryCounts.remove(owner)
         rebuildMessageIds()
         messages.asSequence()
+            .filterNot(::isMergedStatusMessage)
             .sortedBy { sortTimestamp(it) }
             .toList()
             .takeLast(MAX_LIVE_MESSAGES_PER_SOURCE)
