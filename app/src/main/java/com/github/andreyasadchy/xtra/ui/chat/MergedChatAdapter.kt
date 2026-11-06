@@ -195,6 +195,9 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     fun removeSource(source: ChatAdapter) {
         if (!sources.remove(source)) return
+        // A renderer can no longer be retained by a frozen snapshot after its tab is removed.
+        frozenEntries = null
+        pendingMessageCount = 0
         sourcesByChannelId.entries.removeAll { it.value === source }
         sourceEntryCounts.remove(source)
         entries.forEach { entry ->
@@ -207,6 +210,8 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     fun clearSource(owner: ChatAdapter) {
         if (entries.removeAll { it.owner === owner }) {
+            frozenEntries = null
+            pendingMessageCount = 0
             sourceEntryCounts.remove(owner)
             rebuildMessageIds()
             notifyDataSetChanged()
