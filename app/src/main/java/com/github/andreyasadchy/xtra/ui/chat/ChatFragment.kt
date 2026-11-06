@@ -468,8 +468,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 // pull the reader back to the newest message.
                                 if (dy < 0) {
                                     isFollowingChat = false
+                                    adapter?.pauseDisplay()
                                 } else if (dy > 0 && atBottom) {
                                     isFollowingChat = true
+                                    adapter?.resumeDisplay()
                                 }
                                 btnDown.isVisible = !isFollowingChat
                             }
@@ -485,6 +487,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     }
                     btnDown.setOnClickListener {
                         isFollowingChat = true
+                        adapter?.resumeDisplay()
+                        btnDown.text = getString(R.string.scroll_down)
                         view.post {
                             val lastIndex = synchronized(viewModel.chatMessages) {
                                 viewModel.chatMessages.lastIndex
@@ -983,7 +987,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     // replay message: RecyclerView can report a stale last-visible row
                                     // while it is laying out the previous insertion.
                                     val newLastIndex = lastIndex - 1
-                                    if (removeCount > 0) {
+                                    if (adapter.isDisplayPaused()) {
+                                        adapter.onIncomingMessageWhilePaused()
+                                        binding.btnDown.text = "↓ " + adapter.pendingMessageCount
+                                    } else if (removeCount > 0) {
                                         // The backing list has already been trimmed and appended as
                                         // one operation, so a full refresh avoids mismatched
                                         // intermediate RecyclerView item counts at the cap.
@@ -991,7 +998,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     } else if (newLastIndex >= 0) {
                                         adapter.notifyItemInserted(newLastIndex)
                                     }
-                                    if (isFollowingChat && newLastIndex >= 0) {
+                                    if (!adapter.isDisplayPaused() && isFollowingChat && newLastIndex >= 0) {
                                         binding.recyclerView.scrollToPosition(newLastIndex)
                                         binding.btnDown.isGone = true
                                     }
@@ -1007,8 +1014,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 val messages = result.first
                                 val lastIndex = result.second
                                 adapter?.let { adapter ->
-                                    adapter.notifyItemRangeInserted(0, messages.size)
-                                    if (isFollowingChat && binding.btnDown.isGone) {
+                                    if (!adapter.isDisplayPaused()) adapter.notifyItemRangeInserted(0, messages.size)
+                                    if (!adapter.isDisplayPaused() && isFollowingChat && binding.btnDown.isGone) {
                                         binding.recyclerView.scrollToPosition(lastIndex)
                                     }
                                 }
@@ -1020,7 +1027,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     viewLifecycleOwner.lifecycleScope.launch {
                         repeatOnLifecycle(Lifecycle.State.STARTED) {
                             viewModel.removeMessages.collect { size ->
-                                adapter?.notifyItemRangeRemoved(0, size)
+                                if (adapter?.isDisplayPaused() != true) adapter?.notifyItemRangeRemoved(0, size)
                             }
                         }
                     }
