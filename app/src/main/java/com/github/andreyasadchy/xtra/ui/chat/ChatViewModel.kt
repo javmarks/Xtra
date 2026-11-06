@@ -536,6 +536,12 @@ class ChatViewModel(
         if (rendererResourcesLoaded) return
         rendererResourcesLoaded = true
         loadEmotes(channelId, channelLogin)
+        val isLoggedIn = !applicationContext.tokenPrefs().getString(C.USERNAME, null).isNullOrBlank() &&
+                (!TwitchApiHelper.getGQLHeaders(applicationContext, true)[C.HEADER_TOKEN].isNullOrBlank() ||
+                        !TwitchApiHelper.getHelixHeaders(applicationContext)[C.HEADER_TOKEN].isNullOrBlank())
+        if (isLoggedIn) {
+            loadUserEmotes(channelId)
+        }
     }
 
     private fun loadEmotes(channelId: String?, channelLogin: String?) {
