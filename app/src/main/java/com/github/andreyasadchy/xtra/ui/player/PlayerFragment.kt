@@ -1347,41 +1347,28 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     }
 
     /** Preserve the reader's visible message while live sources insert or trim rows. */
+    /**
+     * Keep the feed at the newest row only while the reader is in follow mode.
+     * When the reader scrolls up, let RecyclerView preserve its own visible children;
+     * restoring an anchor after every incoming message can fight touch/fling scrolling.
+     */
     private fun updateMergedChatPreservingScroll(update: (MergedChatAdapter) -> Unit) {
         val recyclerView = mergedChatRecyclerView
         val merged = mergedChatAdapter
         if (recyclerView == null || merged == null) return
-        val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
-        val firstPosition = layoutManager?.findFirstVisibleItemPosition() ?: RecyclerView.NO_POSITION
-        val anchorMessage = if (firstPosition != RecyclerView.NO_POSITION) merged.messageAt(firstPosition) else null
-        val anchorTop = if (firstPosition != RecyclerView.NO_POSITION) {
-            layoutManager?.findViewByPosition(firstPosition)?.top ?: 0
-        } else 0
-        val wasAtBottom = merged.itemCount == 0 ||
-            (layoutManager?.findLastVisibleItemPosition() ?: -1) >= merged.itemCount - 1
 
         update(merged)
 
         recyclerView.post {
             if (mergedChatRecyclerView !== recyclerView || mergedChatAdapter !== merged ||
                 !isAllChatsSelected || merged.itemCount == 0) return@post
-            // Do not issue programmatic scrolls while the reader is dragging or flinging.
-            // RecyclerView already adjusts visible positions for adapter insertions/removals.
-            if (recyclerView.scrollState != RecyclerView.SCROLL_STATE_IDLE) return@post
-            if (isFollowingMergedChat && wasAtBottom) {
+
+            if (isFollowingMergedChat) {
                 recyclerView.scrollToPosition(merged.itemCount - 1)
                 mergedChatScrollButton?.visibility = View.GONE
             } else {
-                isFollowingMergedChat = false
+                // Never issue a corrective scroll while the reader is browsing older messages.
                 mergedChatScrollButton?.visibility = View.VISIBLE
-                val newAnchorPosition = anchorMessage?.let(merged::positionOfMessage) ?: -1
-                // Only restore when the anchor's adapter position actually moved. Reissuing
-                // the same offset after every incoming message makes upward scrolling jitter.
-                if (newAnchorPosition >= 0 && newAnchorPosition != firstPosition) {
-                    layoutManager?.scrollToPositionWithOffset(newAnchorPosition, anchorTop)
-                } else if (newAnchorPosition < 0 && firstPosition != RecyclerView.NO_POSITION) {
-                    layoutManager?.scrollToPositionWithOffset(firstPosition.coerceAtMost(merged.itemCount - 1), anchorTop)
-                }
             }
         }
     }
