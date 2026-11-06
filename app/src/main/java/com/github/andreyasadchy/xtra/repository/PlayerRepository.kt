@@ -1362,7 +1362,7 @@ class PlayerRepository(
                         name = name,
                         url1x = if (useWebp) "https://cdn.betterttv.net/emote/$id/1x.webp" else "https://cdn.betterttv.net/emote/$id/1x",
                         url2x = if (useWebp) "https://cdn.betterttv.net/emote/$id/2x.webp" else "https://cdn.betterttv.net/emote/$id/2x",
-                        url3x = if (useWebp) "https://cdn.betterttv.net/emote/$id/2x.webp" else "https://cdn.betterttv.net/emote/$id/2x",
+                        url3x = if (useWebp) "https://cdn.betterttv.net/emote/$id/3x.webp" else "https://cdn.betterttv.net/emote/$id/3x",
                         url4x = if (useWebp) "https://cdn.betterttv.net/emote/$id/3x.webp" else "https://cdn.betterttv.net/emote/$id/3x",
                         format = if (useWebp) "webp" else null,
                         isAnimated = emote.animated != false,
