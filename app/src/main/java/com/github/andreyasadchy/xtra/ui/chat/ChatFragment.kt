@@ -1169,11 +1169,28 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         )
     }
 
+    private fun resumeReplayFollowing() {
+        isFollowingChat = true
+        _binding?.let { current ->
+            current.btnDown.isGone = true
+            current.recyclerView.post {
+                val lastIndex = synchronized(viewModel.chatMessages) {
+                    viewModel.chatMessages.lastIndex
+                }
+                if (lastIndex >= 0) current.recyclerView.scrollToPosition(lastIndex)
+            }
+        }
+        (parentFragment as? PlayerFragment)?.resumeMergedChatFollowing()
+    }
+
     fun startReplayChatLoad() {
+        resumeReplayFollowing()
         viewModel.startReplayChatLoad()
     }
 
     fun updatePosition(position: Long) {
+        // A deliberate seek, like Twitch's replay panel, returns chat to follow mode.
+        resumeReplayFollowing()
         viewModel.updatePosition(position)
     }
 
