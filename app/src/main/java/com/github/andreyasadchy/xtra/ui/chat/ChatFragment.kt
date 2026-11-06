@@ -647,8 +647,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     }
                     viewLifecycleOwner.lifecycleScope.launch {
                         repeatOnLifecycle(Lifecycle.State.STARTED) {
-                            viewModel.reloadMessages.collectLatest {
-                                if (it) {
+                            viewModel.reloadMessages.collectLatest { reloadVersion ->
+                                if (reloadVersion > 0) {
                                     adapter?.let { adapter ->
                                         val size = synchronized(viewModel.chatMessages) {
                                             viewModel.chatMessages.size
@@ -667,7 +667,6 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                         }
                                         adapter.notifyItemRangeChanged(0, size)
                                     }
-                                    viewModel.reloadMessages.value = false
                                 }
                             }
                         }
