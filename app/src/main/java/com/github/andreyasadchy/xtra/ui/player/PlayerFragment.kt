@@ -1316,10 +1316,15 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     // the newest row while the user is dragging upward through history.
                     if (dy < 0) {
                         isFollowingMergedChat = false
+                        adapter.pauseDisplay()
                     } else if (dy > 0 && atBottom) {
                         isFollowingMergedChat = true
+                        adapter.resumeDisplay()
                     }
-                    mergedChatScrollButton?.visibility = if (isFollowingMergedChat) View.GONE else View.VISIBLE
+                    mergedChatScrollButton?.apply {
+                        visibility = if (isFollowingMergedChat) View.GONE else View.VISIBLE
+                        if (!isFollowingMergedChat && adapter.pendingMessageCount > 0) text = "↓ " + adapter.pendingMessageCount
+                    }
                 }
             })
         }
@@ -1335,6 +1340,8 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             visibility = View.GONE
             setOnClickListener {
                 isFollowingMergedChat = true
+                adapter.resumeDisplay()
+                text = getString(R.string.scroll_down)
                 val last = (mergedChatAdapter?.itemCount ?: 0) - 1
                 if (last >= 0) mergedChatRecyclerView?.scrollToPosition(last)
                 visibility = View.GONE
@@ -1380,7 +1387,10 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 mergedChatScrollButton?.visibility = View.GONE
             } else {
                 // Never issue a corrective scroll while the reader is browsing older messages.
-                mergedChatScrollButton?.visibility = View.VISIBLE
+                mergedChatScrollButton?.apply {
+                    visibility = View.VISIBLE
+                    if (merged.pendingMessageCount > 0) text = "↓ " + merged.pendingMessageCount
+                }
             }
         }
     }
