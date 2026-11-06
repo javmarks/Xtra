@@ -1075,24 +1075,37 @@ class PlayerRepository(
                 emote.data?.let { data ->
                     data.host?.let { host ->
                         host.url?.takeIf { it.isNotBlank() }?.let { template ->
-                            val urls = host.files?.mapNotNull { file ->
-                                file.name?.takeIf { it.isNotBlank() &&
-                                        if (useWebp) {
-                                            file.format == "WEBP"
-                                        } else {
-                                            file.format == "GIF" || file.format == "PNG"
-                                        }
-                                }?.let { name ->
-                                    "https:${template}/${name}"
+                            // 7TV does not guarantee that host.files is ordered by size.
+                            // Build each quality slot from the filename's actual scale instead
+                            // of accidentally treating an arbitrary file as the 1x image.
+                            val files = host.files.orEmpty()
+                                .filter { file ->
+                                    val format = file.format?.uppercase()
+                                    file.name?.isNotBlank() == true &&
+                                        (if (useWebp) format == "WEBP" else format == "GIF" || format == "PNG")
                                 }
-                            }
+                                .mapNotNull { file ->
+                                    val fileName = file.name ?: return@mapNotNull null
+                                    val scale = Regex("(?:^|/)([1-4])x(?:\\.|$)", RegexOption.IGNORE_CASE)
+                                        .find(fileName)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                                        ?: Regex("^([1-4])x", RegexOption.IGNORE_CASE)
+                                            .find(fileName)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                                    scale?.let { it to "https:${template}/${fileName}" }
+                                }
+                                .toMap()
+                            val fallbackExtension = if (useWebp) "webp" else "gif"
+                            val url1x = files[1] ?: files[2] ?: files[3] ?: files[4]
+                                ?: "https:${template}/1x.${fallbackExtension}"
+                            val url2x = files[2] ?: files[1] ?: url1x
+                            val url3x = files[3] ?: files[2] ?: url2x
+                            val url4x = files[4] ?: files[3] ?: url3x
                             Emote(
                                 name = name,
-                                url1x = urls?.getOrNull(0) ?: "https:${template}/1x.webp",
-                                url2x = urls?.getOrNull(1) ?: if (urls.isNullOrEmpty()) "https:${template}/2x.webp" else null,
-                                url3x = urls?.getOrNull(2) ?: if (urls.isNullOrEmpty()) "https:${template}/3x.webp" else null,
-                                url4x = urls?.getOrNull(3) ?: if (urls.isNullOrEmpty()) "https:${template}/4x.webp" else null,
-                                format = urls?.getOrNull(0)?.substringAfterLast(".") ?: "webp",
+                                url1x = url1x,
+                                url2x = url2x,
+                                url3x = url3x,
+                                url4x = url4x,
+                                format = url1x.substringAfterLast("."),
                                 isAnimated = data.animated != false,
                                 isOverlayEmote = emote.flags == 1,
                                 source = source,
