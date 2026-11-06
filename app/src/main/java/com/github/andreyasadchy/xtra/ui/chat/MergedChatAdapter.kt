@@ -139,16 +139,17 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         entries.indexOfFirst { it.message === message }
 
     fun addOlderMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
-        var changed = false
+        val insertedPositions = mutableListOf<Int>()
         messages.forEach { message ->
             val key = messageKey(message)
             if (key == null || messageIds.add(key)) {
-                insertSorted(Entry(owner, rendererFor(owner, message), message))
+                insertedPositions += insertSorted(Entry(owner, rendererFor(owner, message), message))
                 incrementSourceCount(owner)
-                changed = true
             }
         }
-        if (changed) notifyDataSetChanged()
+        // Report the actual sorted insertions rather than invalidating every visible row.
+        // A full refresh can make RecyclerView jump while the reader is paging upward.
+        insertedPositions.forEach(::notifyItemInserted)
     }
 
     fun replaceSourceMessages(owner: ChatAdapter, messages: List<ChatMessage>) {
