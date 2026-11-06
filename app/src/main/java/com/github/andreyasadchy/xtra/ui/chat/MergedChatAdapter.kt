@@ -109,11 +109,17 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     fun setSourceChannelInfo(channelId: String, channelName: String?, imageUrl: String?) {
         if (channelId.isBlank()) return
-        sourceChannelInfo[channelId] = channelName to imageUrl
+        // Participant metadata can arrive before or after a renderer-only chat is
+        // attached. A later renderer registration may have no profile URL of its own;
+        // never let that empty value erase an avatar already resolved from Twitch.
+        val previous = sourceChannelInfo[channelId]
+        val resolvedName = channelName?.takeIf { it.isNotBlank() } ?: previous?.first
+        val resolvedImage = imageUrl?.takeIf { it.isNotBlank() } ?: previous?.second
+        sourceChannelInfo[channelId] = resolvedName to resolvedImage
         entries.forEach { entry ->
             if (originChannelId(entry.message) == channelId) {
-                entry.message.sourceChannelName = channelName
-                entry.message.sourceChannelImageUrl = imageUrl
+                resolvedName?.let { entry.message.sourceChannelName = it }
+                resolvedImage?.let { entry.message.sourceChannelImageUrl = it }
             }
         }
         if (frozenEntries == null) {
