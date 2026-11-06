@@ -470,20 +470,24 @@ class ChatViewModel(
     private fun loadSharedChatParticipants(channelId: String?) {
         if (channelId.isNullOrBlank()) return
         viewModelScope.launch {
-            try {
-                val response = helixRepository.getSharedChatSession(
-                    applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
-                    TwitchApiHelper.getHelixHeaders(applicationContext),
-                    channelId,
-                )
-                val participantIds = response.data
-                    .flatMap { session ->
-                        session.participants.mapNotNull { it.broadcasterId }
-                    }
-                    .distinct()
-                sharedChatParticipants.value = participantIds
-                sharedChatParticipantUsers.value = try {
-                    if (participantIds.isNotEmpty()) {
+            // Twitch may not expose the Shared Chat session immediately when chat
+            // connects. Retry briefly so we can resolve participant profile images
+            // instead of permanently rendering source-channel initials.
+            repeat(3) { attempt ->
+                if (attempt > 0) delay(4_000L * attempt)
+                try {
+                    val response = helixRepository.getSharedChatSession(
+                        applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                        TwitchApiHelper.getHelixHeaders(applicationContext),
+                        channelId,
+                    )
+                    val participantIds = response.data
+                        .flatMap { session ->
+                            session.participants.mapNotNull { it.broadcasterId }
+                        }
+                        .distinct()
+                    sharedChatParticipants.value = participantIds
+                    val users = if (participantIds.isNotEmpty()) {
                         helixRepository.getUsers(
                             applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
                             TwitchApiHelper.getHelixHeaders(applicationContext),
@@ -492,12 +496,14 @@ class ChatViewModel(
                     } else {
                         emptyList()
                     }
+                    sharedChatParticipantUsers.value = users
+                    if (users.any { !it.profileImageURL.isNullOrBlank() }) return@launch
                 } catch (_: Exception) {
-                    emptyList()
+                    if (attempt == 2) {
+                        sharedChatParticipants.value = emptyList()
+                        sharedChatParticipantUsers.value = emptyList()
+                    }
                 }
-            } catch (_: Exception) {
-                sharedChatParticipants.value = emptyList()
-                sharedChatParticipantUsers.value = emptyList()
             }
         }
     }
