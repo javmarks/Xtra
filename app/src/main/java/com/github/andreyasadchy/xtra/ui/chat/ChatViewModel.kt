@@ -1635,7 +1635,8 @@ class ChatViewModel(
         private val channelId: String?,
     ) : ChatReadWebSocket.Listener {
         override suspend fun onConnect() {
-            onMessage(ChatMessage(systemMsg = ContextCompat.getString(applicationContext, R.string.chat_join).format(channelLogin)))
+            // Do not add a permanent "Connected to" system row for every source
+            // channel; these rows flood the merged All Chats timeline.
         }
 
         override suspend fun onChatMessage(message: ChatUtils.IRCMessage, userNotice: Boolean) {
