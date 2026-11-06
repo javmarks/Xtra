@@ -1286,6 +1286,17 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         }
     }
 
+    fun resumeMergedChatFollowing() {
+        isFollowingMergedChat = true
+        mergedChatScrollButton?.visibility = View.GONE
+        mergedChatRecyclerView?.post {
+            val last = (mergedChatAdapter?.itemCount ?: 0) - 1
+            if (isAllChatsSelected && last >= 0) {
+                mergedChatRecyclerView?.scrollToPosition(last)
+            }
+        }
+    }
+
     private fun ensureMergedChatView() {
         if (mergedChatRecyclerView != null) return
         val adapter = MergedChatAdapter()
