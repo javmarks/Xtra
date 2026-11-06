@@ -123,6 +123,14 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         }
     }
 
+    /** Refresh only messages rendered by a source adapter after its emote/badge data changes. */
+    fun refreshSource(source: ChatAdapter) {
+        if (frozenEntries != null) return
+        displayedEntries().forEachIndexed { index, entry ->
+            if (entry.renderer === source) notifyItemChanged(index)
+        }
+    }
+
     override fun getItemViewType(position: Int): Int {
         val renderer = displayedEntries().getOrNull(position)?.renderer ?: return 0
         return sources.indexOf(renderer).takeIf { it >= 0 } ?: 0
