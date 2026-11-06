@@ -114,7 +114,11 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         val recyclerView = mergedChatRecyclerView
         val adapter = mergedChatAdapter
         if (recyclerView != null && adapter != null && isAllChatsSelected && isFollowingMergedChat && adapter.itemCount > 0) {
-            recyclerView.scrollToPosition(adapter.itemCount - 1)
+            val lastPosition = adapter.itemCount - 1
+            val lastVisible = (recyclerView.layoutManager as? LinearLayoutManager)?.findLastVisibleItemPosition() ?: -1
+            // Avoid resetting RecyclerView's layout position on every refresh when the
+            // newest row is already visible; repeated jumps cause visible jitter.
+            if (lastVisible < lastPosition) recyclerView.scrollToPosition(lastPosition)
             mergedChatScrollButton?.visibility = View.GONE
         }
     }
@@ -1464,7 +1468,8 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                         val channelName = fragment.arguments?.getString("channel_name")
                             ?.takeIf { it.isNotBlank() }
                             ?: fragment.arguments?.getString("channel_login")?.takeIf { it.isNotBlank() }
-                        merged.setSourceChannelInfo(channelId, channelName, null)
+                        val channelImage = if (channelId == playbackService?.channelId) playbackService?.channelImage else null
+                        merged.setSourceChannelInfo(channelId, channelName, channelImage)
                     }
                     merged.addSource(sourceAdapter, fragment.mergedChatChannelId, initialMessages)
                     if (!fragment.isMergedRendererOnly) {
