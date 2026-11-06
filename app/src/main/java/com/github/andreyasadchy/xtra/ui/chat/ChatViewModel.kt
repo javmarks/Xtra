@@ -163,7 +163,7 @@ class ChatViewModel(
     var userSTVEmoteSetId: String? = null
     val translateAllMessages = MutableStateFlow<Boolean?>(null)
 
-    val reloadMessages = MutableStateFlow(false)
+    val reloadMessages = MutableStateFlow(0)
     val hideRaid = MutableStateFlow(false)
     val hidePoll = MutableStateFlow(false)
     val hidePrediction = MutableStateFlow(false)
@@ -561,9 +561,7 @@ class ChatViewModel(
                 globalBadges.clear()
                 globalBadges.addAll(saved)
             }
-            if (!reloadMessages.value) {
-                reloadMessages.value = true
-            }
+            reloadMessages.value = reloadMessages.value + 1
         } else {
             viewModelScope.launch {
                 try {
@@ -574,9 +572,7 @@ class ChatViewModel(
                             globalBadges.clear()
                             globalBadges.addAll(badges)
                         }
-                        if (!reloadMessages.value) {
-                            reloadMessages.value = true
-                        }
+                        reloadMessages.value = reloadMessages.value + 1
                     }
                 } catch (e: Exception) {
                     if (e.message == C.FAILED_INTEGRITY_CHECK) {
@@ -592,9 +588,7 @@ class ChatViewModel(
                     thirdPartyEmotes.addAll(saved)
                     thirdPartyEmotes.sortBy { it.source }
                 }
-                if (!reloadMessages.value) {
-                    reloadMessages.value = true
-                }
+                reloadMessages.value = reloadMessages.value + 1
                 viewModelScope.launch {
                     thirdPartyEmotesUpdated.emit(Unit)
                 }
@@ -633,9 +627,7 @@ class ChatViewModel(
                                     thirdPartyEmotes.addAll(emotes)
                                     thirdPartyEmotes.sortBy { it.source }
                                 }
-                                if (!reloadMessages.value) {
-                                    reloadMessages.value = true
-                                }
+                                reloadMessages.value = reloadMessages.value + 1
                                 thirdPartyEmotesUpdated.emit(Unit)
                                 synchronized(autoCompleteList) {
                                     autoCompleteList.addAll(emotes.filter { it !in autoCompleteList })
@@ -722,9 +714,7 @@ class ChatViewModel(
                                     thirdPartyEmotes.addAll(emotes)
                                     thirdPartyEmotes.sortBy { it.source }
                                 }
-                                if (!reloadMessages.value) {
-                                    reloadMessages.value = true
-                                }
+                                reloadMessages.value = reloadMessages.value + 1
                                 thirdPartyEmotesUpdated.emit(Unit)
                                 synchronized(autoCompleteList) {
                                     autoCompleteList.addAll(emotes.filter { it !in autoCompleteList })
@@ -769,9 +759,7 @@ class ChatViewModel(
                     thirdPartyEmotes.addAll(saved)
                     thirdPartyEmotes.sortBy { it.source }
                 }
-                if (!reloadMessages.value) {
-                    reloadMessages.value = true
-                }
+                reloadMessages.value = reloadMessages.value + 1
                 viewModelScope.launch {
                     thirdPartyEmotesUpdated.emit(Unit)
                 }
@@ -810,9 +798,7 @@ class ChatViewModel(
                                     thirdPartyEmotes.addAll(emotes)
                                     thirdPartyEmotes.sortBy { it.source }
                                 }
-                                if (!reloadMessages.value) {
-                                    reloadMessages.value = true
-                                }
+                                reloadMessages.value = reloadMessages.value + 1
                                 thirdPartyEmotesUpdated.emit(Unit)
                                 synchronized(autoCompleteList) {
                                     autoCompleteList.addAll(emotes.filter { it !in autoCompleteList })
@@ -869,9 +855,7 @@ class ChatViewModel(
                                     thirdPartyEmotes.addAll(emotes)
                                     thirdPartyEmotes.sortBy { it.source }
                                 }
-                                if (!reloadMessages.value) {
-                                    reloadMessages.value = true
-                                }
+                                reloadMessages.value = reloadMessages.value + 1
                                 thirdPartyEmotesUpdated.emit(Unit)
                                 synchronized(autoCompleteList) {
                                     autoCompleteList.addAll(emotes.filter { it !in autoCompleteList })
@@ -916,9 +900,7 @@ class ChatViewModel(
                     thirdPartyEmotes.addAll(saved)
                     thirdPartyEmotes.sortBy { it.source }
                 }
-                if (!reloadMessages.value) {
-                    reloadMessages.value = true
-                }
+                reloadMessages.value = reloadMessages.value + 1
                 viewModelScope.launch {
                     thirdPartyEmotesUpdated.emit(Unit)
                 }
@@ -957,9 +939,7 @@ class ChatViewModel(
                                     thirdPartyEmotes.addAll(emotes)
                                     thirdPartyEmotes.sortBy { it.source }
                                 }
-                                if (!reloadMessages.value) {
-                                    reloadMessages.value = true
-                                }
+                                reloadMessages.value = reloadMessages.value + 1
                                 thirdPartyEmotesUpdated.emit(Unit)
                                 synchronized(autoCompleteList) {
                                     autoCompleteList.addAll(emotes.filter { it !in autoCompleteList })
@@ -1014,9 +994,7 @@ class ChatViewModel(
                                     thirdPartyEmotes.addAll(emotes)
                                     thirdPartyEmotes.sortBy { it.source }
                                 }
-                                if (!reloadMessages.value) {
-                                    reloadMessages.value = true
-                                }
+                                reloadMessages.value = reloadMessages.value + 1
                                 thirdPartyEmotesUpdated.emit(Unit)
                                 synchronized(autoCompleteList) {
                                     autoCompleteList.addAll(emotes.filter { it !in autoCompleteList })
@@ -1061,9 +1039,7 @@ class ChatViewModel(
                             channelBadges.clear()
                             channelBadges.addAll(badges)
                         }
-                        if (!reloadMessages.value) {
-                            reloadMessages.value = true
-                        }
+                        reloadMessages.value = reloadMessages.value + 1
                     }
                 } catch (e: Exception) {
                     if (e.message == C.FAILED_INTEGRITY_CHECK) {
@@ -1079,9 +1055,7 @@ class ChatViewModel(
                             cheerEmotes.clear()
                             cheerEmotes.addAll(emotes)
                         }
-                        if (!reloadMessages.value) {
-                            reloadMessages.value = true
-                        }
+                        reloadMessages.value = reloadMessages.value + 1
                     }
                 } catch (e: Exception) {
                     if (e.message == C.FAILED_INTEGRITY_CHECK) {
@@ -2198,9 +2172,7 @@ class ChatViewModel(
                             thirdPartyEmotes.removeAll { it.name in removedEmotes }
                             thirdPartyEmotes.addAll(newEmotes)
                         }
-                        if (!reloadMessages.value) {
-                            reloadMessages.value = true
-                        }
+                        reloadMessages.value = reloadMessages.value + 1
                         viewModelScope.launch {
                             thirdPartyEmotesUpdated.emit(Unit)
                         }
