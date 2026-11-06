@@ -17,11 +17,15 @@ class ModerationEventSubManager {
     private val listeners = LinkedHashMap<String, EventSubWebSocket.Listener>()
     private var socket: EventSubWebSocket? = null
     private var socketJob: Job? = null
+    private var sessionId: String? = null
 
     fun register(channelId: String, listener: EventSubWebSocket.Listener) {
         synchronized(lock) {
             listeners[channelId] = listener
-            if (socket == null) {
+            val activeSessionId = sessionId
+            if (activeSessionId != null) {
+                scope.launch { listener.onWelcomeMessage(activeSessionId) }
+            } else if (socket == null) {
                 val sharedSocket = EventSubWebSocket(SharedListener())
                 socket = sharedSocket
                 socketJob = sharedSocket.connect(scope)
@@ -40,6 +44,7 @@ class ModerationEventSubManager {
             oldJob = socketJob
             socket = null
             socketJob = null
+            sessionId = null
         }
         scope.launch {
             oldSocket?.disconnect(oldJob)
@@ -55,7 +60,10 @@ class ModerationEventSubManager {
         override suspend fun onConnect() = Unit
 
         override suspend fun onWelcomeMessage(sessionId: String) {
-            val active = synchronized(lock) { listeners.values.toList() }
+            val active = synchronized(lock) {
+                this@ModerationEventSubManager.sessionId = sessionId
+                listeners.values.toList()
+            }
             active.forEach { it.onWelcomeMessage(sessionId) }
         }
 
@@ -80,7 +88,10 @@ class ModerationEventSubManager {
         }
 
         override suspend fun onDisconnect(message: String, fullMsg: String?) {
-            val active = synchronized(lock) { listeners.values.toList() }
+            val active = synchronized(lock) {
+                this@ModerationEventSubManager.sessionId = null
+                listeners.values.toList()
+            }
             active.forEach { it.onDisconnect(message, fullMsg) }
         }
     }
