@@ -85,20 +85,27 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
     fun isDisplayPaused(): Boolean = frozenEntries != null
 
+    private fun sourceMessage(message: ChatMessage): ChatMessage =
+        if (message.type == ChatMessage.REPLY_MESSAGE) message.replyParent ?: message else message
+
+    private fun originChannelId(message: ChatMessage): String? {
+        val source = sourceMessage(message)
+        return source.sourceRoomId?.takeIf { it.isNotBlank() }
+            ?: source.roomId?.takeIf { it.isNotBlank() }
+    }
+
     fun setSourceChannelInfo(channelId: String, channelName: String?, imageUrl: String?) {
         if (channelId.isBlank()) return
         sourceChannelInfo[channelId] = channelName to imageUrl
         entries.forEach { entry ->
-            val sourceMessage = if (entry.message.type == ChatMessage.REPLY_MESSAGE) entry.message.replyParent ?: entry.message else entry.message
-            if ((sourceMessage.sourceRoomId ?: sourceMessage.roomId) == channelId) {
+            if (originChannelId(entry.message) == channelId) {
                 entry.message.sourceChannelName = channelName
                 entry.message.sourceChannelImageUrl = imageUrl
             }
         }
         if (frozenEntries == null) {
             displayedEntries().forEachIndexed { index, entry ->
-                val sourceMessage = if (entry.message.type == ChatMessage.REPLY_MESSAGE) entry.message.replyParent ?: entry.message else entry.message
-                if ((sourceMessage.sourceRoomId ?: sourceMessage.roomId) == channelId) notifyItemChanged(index)
+                if (originChannelId(entry.message) == channelId) notifyItemChanged(index)
             }
         }
     }
@@ -172,8 +179,7 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         // Synthetic reply-preview rows may not carry their own room/channel IDs.
         // Resolve them through the real message they preview so All Chats uses the
         // same channel-specific adapter and rendering settings as the individual chat.
-        val sourceMessage = if (message.type == ChatMessage.REPLY_MESSAGE) message.replyParent ?: message else message
-        val originId = sourceMessage.sourceRoomId ?: sourceMessage.roomId
+        val originId = originChannelId(message)
         if (!originId.isNullOrBlank()) {
             sourceChannelInfo[originId]?.let { (name, imageUrl) ->
                 message.sourceChannelName = name
