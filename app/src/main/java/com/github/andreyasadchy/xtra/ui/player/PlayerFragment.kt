@@ -94,6 +94,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlin.math.max
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Instant
@@ -127,6 +129,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private var isAllChatsSelected = false
     private val chatTabOrder = mutableListOf<String>()
     private var chatTabOrderLoaded = false
+    private var savedChatChannelsRestored = false
     private val observedChatSources = mutableSetOf<ChatFragment>()
     private val chatSourceJobs = mutableMapOf<ChatFragment, Job>()
     private val sharedChatRendererFragments = mutableMapOf<String, ChatFragment>()
@@ -1173,6 +1176,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 if (primaryChatFragment == null) primaryChatFragment = fragment
             }
             refreshChatTabs()
+            restoreSavedExtraChats()
         }
     }
 
@@ -1188,6 +1192,62 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private fun saveChatTabOrder() {
         requireContext().prefs().edit {
             putString("multi_chat_tab_order", chatTabOrder.joinToString("|"))
+        }
+    }
+
+    private fun savedChatChannelsKey(): String =
+        "multi_chat_channels_" + (playbackService?.channelLogin ?: "unknown").lowercase()
+
+    private fun saveOpenChatChannels(extraFragment: ChatFragment? = null) {
+        val channels = (getChatFragments() + listOfNotNull(extraFragment))
+            .distinct()
+            .filterNot { it === primaryChatFragment || it.isMergedRendererOnly }
+        val json = JSONArray()
+        channels.forEach { fragment ->
+            val args = fragment.arguments
+            val login = args?.getString("channel_login")?.takeIf { it.isNotBlank() } ?: return@forEach
+            json.put(JSONObject().apply {
+                put("id", args.getString("channel_id") ?: JSONObject.NULL)
+                put("login", login)
+                put("name", args.getString("channel_name") ?: login)
+            })
+        }
+        requireContext().prefs().edit {
+            putString(savedChatChannelsKey(), json.toString())
+        }
+    }
+
+    private fun restoreSavedExtraChats() {
+        if (savedChatChannelsRestored || playbackService?.type != BasePlaybackService.STREAM) return
+        val primary = primaryChatFragment ?: return
+        savedChatChannelsRestored = true
+        val saved = requireContext().prefs().getString(savedChatChannelsKey(), null) ?: return
+        val json = runCatching { JSONArray(saved) }.getOrNull() ?: return
+        val existing = getChatFragments().mapNotNull {
+            it.arguments?.getString("channel_login")?.lowercase()
+        }.toMutableSet()
+        val transaction = childFragmentManager.beginTransaction()
+        val restored = mutableListOf<ChatFragment>()
+        for (index in 0 until json.length()) {
+            val item = json.optJSONObject(index) ?: continue
+            val login = item.optString("login").takeIf { it.isNotBlank() } ?: continue
+            if (!existing.add(login.lowercase())) continue
+            val id = item.optString("id").takeIf { it.isNotBlank() && it != "null" }
+            val name = item.optString("name", login)
+            val fragment = ChatFragment.newInstance(id, login, name, null)
+            transaction.add(R.id.chatFragmentContainer, fragment, "chat_${login.lowercase()}")
+                .hide(fragment)
+            restored.add(fragment)
+        }
+        if (restored.isNotEmpty()) {
+            transaction.runOnCommit {
+                restored.forEach { fragment ->
+                    if (fragment.isAdded && fragment.isActive() == false) fragment.reconnect()
+                    observeChatSource(fragment)
+                }
+                refreshChatTabs()
+            }
+            transaction.commit()
         }
     }
 
@@ -1626,6 +1686,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                             mergedChatRecyclerView?.visibility = View.GONE
                         }
                 }
+                saveOpenChatChannels()
                 refreshChatTabs()
             }
             .commit()
@@ -1738,6 +1799,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         }
         val fragment = ChatFragment.newInstance(user.id, login, user.name ?: login, null)
         switchChatFragment(fragment)
+        saveOpenChatChannels(fragment)
     }
 
     private fun initLayout() {
