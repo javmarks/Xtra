@@ -21,6 +21,7 @@ import com.github.andreyasadchy.xtra.repository.OfflineVideosRepository
 import com.github.andreyasadchy.xtra.repository.PlayerRepository
 import com.github.andreyasadchy.xtra.repository.RecentSearchesRepository
 import com.github.andreyasadchy.xtra.repository.SavedFiltersRepository
+import com.github.andreyasadchy.xtra.util.chat.ModerationEventSubManager
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -88,6 +89,8 @@ class XtraModule(application: Application) {
             }
         }.build()
     }
+
+    val moderationEventSubManager by lazy { ModerationEventSubManager() }
 
     val json by lazy {
         Json { ignoreUnknownKeys = true }
