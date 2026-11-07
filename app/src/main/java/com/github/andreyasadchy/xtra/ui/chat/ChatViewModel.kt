@@ -1767,16 +1767,32 @@ class ChatViewModel(
         }
 
         override suspend fun onRoomState(message: ChatUtils.IRCMessage) {
+            val previous = roomState.value
+            val emote = message.tags["emote-only"]
+            val followers = message.tags["followers-only"]
+            val unique = message.tags["r9k"]
+            val slow = message.tags["slow"]
+            val subs = message.tags["subs-only"]
+
+            // Twitch sends a full ROOMSTATE snapshot on connection and can repeat
+            // unchanged fields alongside a single mode change. Treat the first snapshot
+            // as a baseline and only log fields that actually changed afterwards.
             val modeChanges = buildList {
-                message.tags["emote-only"]?.let { add(if (it == "1") "Emote-only enabled" else "Emote-only disabled") }
-                message.tags["followers-only"]?.let { value ->
+                emote?.takeIf { previous?.emote != null && previous.emote != it }?.let {
+                    add(if (it == "1") "Emote-only enabled" else "Emote-only disabled")
+                }
+                followers?.takeIf { previous?.followers != null && previous.followers != it }?.let { value ->
                     add(if (value.toIntOrNull()?.let { it >= 0 } == true) "Followers-only enabled ($value m)" else "Followers-only disabled")
                 }
-                message.tags["r9k"]?.let { add(if (it == "1") "Unique chat enabled" else "Unique chat disabled") }
-                message.tags["slow"]?.let { value ->
+                unique?.takeIf { previous?.unique != null && previous.unique != it }?.let {
+                    add(if (it == "1") "Unique chat enabled" else "Unique chat disabled")
+                }
+                slow?.takeIf { previous?.slow != null && previous.slow != it }?.let { value ->
                     add(if (value.toIntOrNull()?.let { it > 0 } == true) "Slow mode enabled ($value s)" else "Slow mode disabled")
                 }
-                message.tags["subs-only"]?.let { add(if (it == "1") "Subscriber-only mode enabled" else "Subscriber-only mode disabled") }
+                subs?.takeIf { previous?.subs != null && previous.subs != it }?.let {
+                    add(if (it == "1") "Subscriber-only mode enabled" else "Subscriber-only mode disabled")
+                }
             }
             if (modeChanges.isNotEmpty()) {
                 saveModerationLog(channelId, buildString {
@@ -1787,11 +1803,11 @@ class ChatViewModel(
                 })
             }
             roomState.value = RoomState(
-                emote = message.tags["emote-only"],
-                followers = message.tags["followers-only"],
-                unique = message.tags["r9k"],
-                slow = message.tags["slow"],
-                subs = message.tags["subs-only"]
+                emote = emote ?: previous?.emote,
+                followers = followers ?: previous?.followers,
+                unique = unique ?: previous?.unique,
+                slow = slow ?: previous?.slow,
+                subs = subs ?: previous?.subs
             )
         }
 
