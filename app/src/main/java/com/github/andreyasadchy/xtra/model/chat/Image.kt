@@ -12,6 +12,7 @@ class Image(
     val thirdParty: Boolean = false,
     val circular: Boolean = false,
     val fallbackText: String? = null,
+    val fallbackUrls: List<String> = emptyList(),
     var overlayEmote: Image? = null,
     var start: Int,
     var end: Int,
