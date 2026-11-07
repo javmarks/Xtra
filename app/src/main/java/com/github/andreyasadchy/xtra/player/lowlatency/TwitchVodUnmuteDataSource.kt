@@ -93,17 +93,18 @@ class TwitchVodUnmuteDataSource(
         var lastAlternateError: IOException? = null
         for (candidateUri in candidates.distinct()) {
             val candidateName = safeSegmentName(candidateUri)
+            val candidateLabel = safeCandidateLabel(candidateUri)
             activeSegmentName = candidateName
             readFailureRecorded = false
-            recordDiagnostic("OPEN TRY " + candidateName)
+            recordDiagnostic("OPEN TRY " + candidateLabel)
             try {
                 val result = upstream.open(dataSpec.withUri(candidateUri))
-                recordDiagnostic("OPEN OK " + candidateName + " length=" + result)
+                recordDiagnostic("OPEN OK " + candidateLabel + " length=" + result)
                 return result
             } catch (e: IOException) {
                 lastAlternateError = e
                 val responseCode = (e as? HttpDataSource.InvalidResponseCodeException)?.responseCode
-                recordDiagnostic("OPEN FAIL " + candidateName + (responseCode?.let { " HTTP=" + it } ?: "") + " " + e.javaClass.simpleName)
+                recordDiagnostic("OPEN FAIL " + candidateLabel + (responseCode?.let { " HTTP=" + it } ?: "") + " " + e.javaClass.simpleName)
                 try {
                     upstream.close()
                 } catch (_: IOException) {
@@ -123,14 +124,15 @@ class TwitchVodUnmuteDataSource(
         val originalName = safeSegmentName(originalUri)
         activeSegmentName = originalName
         readFailureRecorded = false
-        recordDiagnostic("FALLBACK ORIGINAL " + originalName)
+        val originalLabel = safeCandidateLabel(originalUri)
+        recordDiagnostic("FALLBACK ORIGINAL " + originalLabel)
         return try {
             val result = upstream.open(dataSpec)
-            recordDiagnostic("OPEN OK ORIGINAL " + originalName + " length=" + result)
+            recordDiagnostic("OPEN OK ORIGINAL " + originalLabel + " length=" + result)
             result
         } catch (originalError: IOException) {
             val responseCode = (originalError as? HttpDataSource.InvalidResponseCodeException)?.responseCode
-            recordDiagnostic("OPEN FAIL ORIGINAL " + originalName + (responseCode?.let { " HTTP=" + it } ?: "") + " " + originalError.javaClass.simpleName)
+            recordDiagnostic("OPEN FAIL ORIGINAL " + originalLabel + (responseCode?.let { " HTTP=" + it } ?: "") + " " + originalError.javaClass.simpleName)
             lastAlternateError?.let(originalError::addSuppressed)
             throw originalError
         }
@@ -186,6 +188,17 @@ class TwitchVodUnmuteDataSource(
 
         private fun safeSegmentName(uri: Uri): String =
             uri.lastPathSegment?.takeIf { it.isNotBlank() } ?: "unknown"
+
+        // Record only the rendition folder and segment filename. Never include
+        // the host, query string, signed tokens, or other URL credentials.
+        private fun safeCandidateLabel(uri: Uri): String {
+            val parts = (uri.encodedPath ?: "").split("/")
+            val quality = parts.lastOrNull {
+                it == "chunked" || QUALITY_SEGMENT_PATTERN.matches(it)
+            }
+            return if (quality != null) quality + "/" + safeSegmentName(uri)
+            else safeSegmentName(uri)
+        }
 
         // Twitch VOD rendition names include legacy labels and newer
         // resolution/frame-rate labels that may carry a codec suffix (e.g. -av01).
