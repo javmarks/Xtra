@@ -33,6 +33,7 @@ import androidx.media3.exoplayer.hls.HlsManifest
 import androidx.navigation.fragment.findNavController
 import com.github.andreyasadchy.xtra.R
 import com.github.andreyasadchy.xtra.model.VideoQuality
+import com.github.andreyasadchy.xtra.player.lowlatency.TwitchVodUnmuteDataSource
 import com.github.andreyasadchy.xtra.ui.game.GameMediaFragmentDirections
 import com.github.andreyasadchy.xtra.ui.game.GamePagerFragmentDirections
 import com.github.andreyasadchy.xtra.ui.main.MainActivity
@@ -603,6 +604,14 @@ class ExoPlayerFragment : PlayerFragment() {
                 } else {
                     appendLine("Current position is outside the playlist duration")
                 }
+            }
+            appendLine()
+            appendLine("Recent VOD unmute recovery requests (last 60):")
+            val unmuteEvents = TwitchVodUnmuteDataSource.getRecentDiagnostics()
+            if (unmuteEvents.isEmpty()) {
+                appendLine("No alternate segment requests recorded yet")
+            } else {
+                unmuteEvents.forEach { appendLine(it) }
             }
         }
         requireContext().getAlertDialogBuilder().apply {
