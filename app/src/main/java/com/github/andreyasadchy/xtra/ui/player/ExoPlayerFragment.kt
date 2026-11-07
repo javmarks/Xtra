@@ -536,12 +536,17 @@ class ExoPlayerFragment : PlayerFragment() {
     override fun showVodDiagnostics() {
         val service = playbackService ?: return
         val player = service.player
+        val positionMs = player?.currentPosition ?: -1L
+        val mediaPlaylist = (player?.currentManifest as? HlsManifest)?.mediaPlaylist
         val report = buildString {
             appendLine("Xtra VOD playback diagnostics")
             appendLine("Video ID: ${service.videoId ?: "unknown"}")
-            appendLine("Position: ${player?.currentPosition ?: -1} ms")
+            appendLine("Position: $positionMs ms")
             appendLine("Playback state: ${player?.playbackState ?: -1}")
             appendLine("Is playing: ${player?.isPlaying ?: false}")
+            appendLine("Play when ready: ${player?.playWhenReady ?: false}")
+            appendLine("Player volume: ${player?.volume ?: -1f}")
+            appendLine("Buffered position: ${player?.bufferedPosition ?: -1L} ms")
             appendLine("Selected quality: ${service.quality?.name ?: "unknown"}")
             service.quality?.let {
                 appendLine("Selected format: ${it.resolution ?: "?"}p, ${it.frameRate ?: "?"} fps, ${it.bitrate ?: "?"} bps, codecs=${it.codecs ?: "?"}")
@@ -569,16 +574,34 @@ class ExoPlayerFragment : PlayerFragment() {
                     }
                 }
             }
-            val mediaPlaylist = (player?.currentManifest as? HlsManifest)?.mediaPlaylist
             appendLine()
-            appendLine("Recent media playlist segments:")
+            appendLine("Media playlist segments around current position:")
             if (mediaPlaylist == null) {
                 appendLine("No HLS media playlist available")
             } else {
+                val targetUs = positionMs.coerceAtLeast(0L) * 1000L
+                var elapsedUs = 0L
+                var currentIndex = -1
+                mediaPlaylist.segments.forEachIndexed { index, segment ->
+                    if (currentIndex == -1 && targetUs < elapsedUs + segment.durationUs) {
+                        currentIndex = index
+                    }
+                    elapsedUs += segment.durationUs
+                }
                 appendLine("Media sequence: ${mediaPlaylist.mediaSequence}")
-                mediaPlaylist.segments.takeLast(15).forEach { segment ->
-                    val safeName = segment.url.substringAfterLast('/').substringBefore('?').substringBefore('#')
-                    appendLine("$safeName durationMs=${segment.durationUs / 1000}")
+                appendLine("Playlist segments: ${mediaPlaylist.segments.size}, durationMs=${elapsedUs / 1000}")
+                appendLine("Estimated current segment index: $currentIndex")
+                if (currentIndex >= 0) {
+                    val firstIndex = (currentIndex - 4).coerceAtLeast(0)
+                    val lastIndex = (currentIndex + 6).coerceAtMost(mediaPlaylist.segments.lastIndex)
+                    for (index in firstIndex..lastIndex) {
+                        val segment = mediaPlaylist.segments[index]
+                        val safeName = segment.url.substringAfterLast('/').substringBefore('?').substringBefore('#')
+                        val marker = if (index == currentIndex) " CURRENT" else ""
+                        appendLine("index=$index sequence=${mediaPlaylist.mediaSequence + index} $safeName durationMs=${segment.durationUs / 1000}$marker")
+                    }
+                } else {
+                    appendLine("Current position is outside the playlist duration")
                 }
             }
         }
