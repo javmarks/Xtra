@@ -1696,20 +1696,27 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             .commit()
     }
 
-    private fun collectAllModerationLogEntries(): List<String> =
-        getChatFragments()
+    private fun collectAllModerationLogEntries(): List<String> {
+        val sources = getChatFragments()
             .filterNot { it.isMergedRendererOnly }
-            .sortedBy {
-                (it.arguments?.getString("channel_name")
-                    ?: it.arguments?.getString("channel_login")
-                    ?: "channel").lowercase()
-            }
-            .flatMap { fragment ->
+            .map { fragment ->
                 val channelName = fragment.arguments?.getString("channel_name")
                     ?: fragment.arguments?.getString("channel_login")
                     ?: "channel"
-                moderationLogSources[fragment].orEmpty().map { entry -> "#$channelName · $entry" }
+                channelName to moderationLogSources[fragment].orEmpty()
             }
+        val maxEntries = sources.maxOfOrNull { it.second.size } ?: 0
+        // Each channel's list is already newest-first. Interleave them so a busy
+        // channel cannot push every other channel's live events outside the dialog's
+        // visible newest-entry window.
+        return buildList {
+            for (index in 0 until maxEntries) {
+                sources.forEach { (channelName, entries) ->
+                    entries.getOrNull(index)?.let { entry -> add("#$channelName · $entry") }
+                }
+            }
+        }
+    }
 
     private fun showAllModerationLogs(fragments: List<ChatFragment>) {
         val handle = ModerationLogDialog.show(
