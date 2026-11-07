@@ -17,6 +17,8 @@ import android.text.style.ReplacementSpan
 import android.text.style.StyleSpan
 import android.text.style.URLSpan
 import android.util.Patterns
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import org.json.JSONObject
 import androidx.core.graphics.ColorUtils
@@ -1083,9 +1085,9 @@ object ChatAdapterUtils {
         val preferCoil = imageLibrary == "0" || (imageLibrary == "1" && !image.format.equals("webp", true))
         val fallback: () -> Unit = {
             if (preferCoil) {
-                loadGlide(fragment, image, sources, 0, onFailed, onLoaded)
+                loadGlide(fragment, image, sources, 0, 0, onFailed, onLoaded)
             } else {
-                loadCoil(fragment, image, sources, 0, onFailed, onLoaded)
+                loadCoil(fragment, image, sources, 0, 0, onFailed, onLoaded)
             }
         }
         if (preferCoil) {
@@ -1095,7 +1097,7 @@ object ChatAdapterUtils {
         }
     }
 
-    private fun loadCoil(fragment: Fragment, image: Image, sources: List<Any>, index: Int, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
+    private fun loadCoil(fragment: Fragment, image: Image, sources: List<Any>, index: Int, attempt: Int, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
         if (index >= sources.size) {
             onFailed()
             return
@@ -1115,13 +1117,21 @@ object ChatAdapterUtils {
                 }
                 target(
                     onSuccess = { onLoaded(it.asDrawable(context.resources)) },
-                    onError = { loadCoil(fragment, image, sources, index + 1, onFailed, onLoaded) },
+                    onError = {
+                        if (image.thirdParty && attempt < 2) {
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                loadCoil(fragment, image, sources, index, attempt + 1, onFailed, onLoaded)
+                            }, 400L * (attempt + 1))
+                        } else {
+                            loadCoil(fragment, image, sources, index + 1, 0, onFailed, onLoaded)
+                        }
+                    },
                 )
             }.build()
         )
     }
 
-    private fun loadGlide(fragment: Fragment, image: Image, sources: List<Any>, index: Int, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
+    private fun loadGlide(fragment: Fragment, image: Image, sources: List<Any>, index: Int, attempt: Int, onFailed: () -> Unit, onLoaded: (Drawable) -> Unit) {
         if (index >= sources.size) {
             onFailed()
             return
@@ -1139,7 +1149,13 @@ object ChatAdapterUtils {
                 }
 
                 override fun onLoadFailed(errorDrawable: Drawable?) {
-                    loadGlide(fragment, image, sources, index + 1, onFailed, onLoaded)
+                    if (image.thirdParty && attempt < 2) {
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            loadGlide(fragment, image, sources, index, attempt + 1, onFailed, onLoaded)
+                        }, 400L * (attempt + 1))
+                    } else {
+                        loadGlide(fragment, image, sources, index + 1, 0, onFailed, onLoaded)
+                    }
                 }
 
                 override fun onLoadCleared(placeholder: Drawable?) {
