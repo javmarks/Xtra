@@ -134,6 +134,11 @@ class PlayerSettingsDialog : BottomSheetDialogFragment() {
                 }
             }
             if (type == BasePlaybackService.VIDEO) {
+                menuVodDiagnostics.visibility = View.VISIBLE
+                menuVodDiagnostics.setOnClickListener {
+                    (parentFragment as? PlayerFragment)?.showVodDiagnostics()
+                    dismiss()
+                }
                 if (arguments.getBoolean(VOD_GAMES)) {
                     setVodGames()
                 }
