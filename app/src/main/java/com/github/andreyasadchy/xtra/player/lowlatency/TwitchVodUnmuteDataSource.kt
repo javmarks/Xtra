@@ -48,9 +48,31 @@ class TwitchVodUnmuteDataSource(
         candidates += originalUri.buildUpon().encodedPath(alternatePath).build()
 
         val pathParts = path.split("/")
-        val qualityIndex = pathParts.indexOfLast { it in MPEG_TS_QUALITIES }
+        val qualityIndex = pathParts.indexOfLast {
+            it == "chunked" || QUALITY_SEGMENT_PATTERN.matches(it)
+        }
         if (qualityIndex >= 0) {
-            for (quality in MPEG_TS_QUALITIES.drop(qualityIndex + 1)) {
+            val currentQuality = pathParts[qualityIndex]
+            val lowerQualities = if (currentQuality == "chunked") {
+                MPEG_TS_QUALITY_LEVELS
+            } else {
+                val currentMatch = QUALITY_SEGMENT_PATTERN.matchEntire(currentQuality)
+                if (currentMatch != null) {
+                    val currentHeight = currentMatch.groupValues[1].toInt()
+                    val currentFrameRate = currentMatch.groupValues[2].toInt()
+                    val codecSuffix = currentMatch.groupValues[3]
+                    MPEG_TS_QUALITY_LEVELS.filter { quality ->
+                        val qualityMatch = QUALITY_SEGMENT_PATTERN.matchEntire(quality)!!
+                        val height = qualityMatch.groupValues[1].toInt()
+                        val frameRate = qualityMatch.groupValues[2].toInt()
+                        height < currentHeight || height == currentHeight && frameRate < currentFrameRate
+                    }.map { "$it$codecSuffix" }
+                } else {
+                    emptyList()
+                }
+            }
+
+            for (quality in lowerQualities) {
                 val lowerParts = pathParts.toMutableList()
                 lowerParts[qualityIndex] = quality
                 val lowerPath = lowerParts.joinToString("/")
@@ -118,17 +140,23 @@ class TwitchVodUnmuteDataSource(
     }
 
     private companion object {
-        // Twitch VOD renditions, ordered from highest to lowest.
-        val MPEG_TS_QUALITIES = listOf(
-            "chunked",
+        // Twitch VOD rendition names include legacy labels and newer
+        // resolution/frame-rate labels that may carry a codec suffix (e.g. -av01).
+        // Keep this list ordered from highest to lowest.
+        val MPEG_TS_QUALITY_LEVELS = listOf(
+            "1440p60",
+            "1440p30",
             "1080p60",
             "1080p30",
+            "936p60",
+            "936p30",
             "720p60",
             "720p30",
             "480p30",
             "360p30",
             "160p30"
         )
+        val QUALITY_SEGMENT_PATTERN = Regex("^(\\d{3,4})p(\\d{2,3})(-[a-zA-Z0-9]+)?$")
         val UNAVAILABLE_SEGMENT_HTTP_CODES = setOf(403, 404, 410)
         val UNMUTED_SEGMENT_SUFFIX = Regex("-unmuted(?=\\.ts$)")
         val MUTED_SEGMENT_SUFFIX = Regex("-muted(?=\\.ts$)")
