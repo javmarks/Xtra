@@ -1305,6 +1305,7 @@ class ExoPlayerService : BasePlaybackService() {
                                         OkHttpDataSource.Factory(xtraModule.okHttpClient.value, null, null, null, null) { false }
                                     }
                                 }
+                                )
                             )
                         ).apply {
                             setPlaylistParserFactory(CustomHlsPlaylistParserFactory())
