@@ -72,6 +72,7 @@ import com.github.andreyasadchy.xtra.player.lowlatency.CronetDataSource
 import com.github.andreyasadchy.xtra.player.lowlatency.HlsPlaylistParser
 import com.github.andreyasadchy.xtra.player.lowlatency.HttpEngineDataSource
 import com.github.andreyasadchy.xtra.player.lowlatency.OkHttpDataSource
+import com.github.andreyasadchy.xtra.player.lowlatency.TwitchVodUnmuteDataSource
 import com.github.andreyasadchy.xtra.ui.main.MainActivity
 import com.github.andreyasadchy.xtra.util.C
 import com.github.andreyasadchy.xtra.util.MediaButtonReceiver
@@ -822,19 +823,21 @@ class ExoPlayerService : BasePlaybackService() {
                                     val networkLibrary = prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP)
                                     player.setMediaSource(
                                         HlsMediaSource.Factory(
-                                            DefaultDataSource.Factory(
-                                                this@ExoPlayerService,
-                                                when {
-                                                    networkLibrary == C.HTTP_ENGINE && xtraModule.httpEngine.value != null -> @SuppressLint("NewApi") {
-                                                        HttpEngineDataSource.Factory(xtraModule.httpEngine.value, xtraModule.cronetExecutor.value, null, 0, false, false, null, null, null) { false }
+                                            TwitchVodUnmuteDataSource.Factory(
+                                                DefaultDataSource.Factory(
+                                                    this@ExoPlayerService,
+                                                    when {
+                                                        networkLibrary == C.HTTP_ENGINE && xtraModule.httpEngine.value != null -> @SuppressLint("NewApi") {
+                                                            HttpEngineDataSource.Factory(xtraModule.httpEngine.value, xtraModule.cronetExecutor.value, null, 0, false, false, null, null, null) { false }
+                                                        }
+                                                        networkLibrary == C.CRONET && xtraModule.cronetEngine.value != null -> {
+                                                            CronetDataSource.Factory(xtraModule.cronetEngine.value, xtraModule.cronetExecutor.value, null, 0, false, false, null, null, null) { false }
+                                                        }
+                                                        else -> {
+                                                            OkHttpDataSource.Factory(xtraModule.okHttpClient.value, null, null, null, null) { false }
+                                                        }
                                                     }
-                                                    networkLibrary == C.CRONET && xtraModule.cronetEngine.value != null -> {
-                                                        CronetDataSource.Factory(xtraModule.cronetEngine.value, xtraModule.cronetExecutor.value, null, 0, false, false, null, null, null) { false }
-                                                    }
-                                                    else -> {
-                                                        OkHttpDataSource.Factory(xtraModule.okHttpClient.value, null, null, null, null) { false }
-                                                    }
-                                                }
+                                                )
                                             )
                                         ).apply {
                                             setPlaylistParserFactory(CustomHlsPlaylistParserFactory())
