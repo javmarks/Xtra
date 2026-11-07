@@ -1114,6 +1114,15 @@ class PlayerRepository(
                             val url2x = files[2] ?: files[1] ?: firstAvailable
                             val url3x = files[3] ?: files[2] ?: url2x
                             val url4x = files[4] ?: files[3] ?: url3x
+                            // Keep other CDN formats as real fallbacks. Selecting one format
+                            // for primary URLs alone can leave an emote blank when that file
+                            // cannot be decoded or fetched on the device.
+                            val primaryUrls = setOf(url1x, url2x, url3x, url4x)
+                            val fallbackUrls = availableFiles
+                                .sortedWith(compareBy<Triple<Int, String, String>> { formatOrder.indexOf(it.second) }.thenByDescending { it.first })
+                                .map { it.third }
+                                .distinct()
+                                .filterNot { it in primaryUrls }
                             Emote(
                                 name = name,
                                 url1x = url1x,
@@ -1124,6 +1133,7 @@ class PlayerRepository(
                                 isAnimated = data.animated != false,
                                 isOverlayEmote = emote.flags == 1,
                                 source = source,
+                                fallbackUrls = fallbackUrls,
                             )
                         }
                     }
