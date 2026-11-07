@@ -10,8 +10,9 @@ import java.io.IOException
 /**
  * Tries Twitch's alternate, unmuted MPEG-TS VOD segment when the requested
  * segment is marked muted. If it is unavailable at the selected rendition,
- * tries the same original segment at lower MPEG-TS renditions before falling
- * back to the originally requested (muted) segment.
+ * tries up to two lower MPEG-TS renditions before falling back to the
+ * originally requested (muted) segment. Limiting retries avoids delaying
+ * playback when alternate CDN segments are unavailable.
  *
  * Fragmented-MP4 segments and their initialization maps are deliberately left
  * untouched because mixing renditions can break their shared initialization
@@ -48,7 +49,7 @@ class TwitchVodUnmuteDataSource(
         val pathParts = path.split("/")
         val qualityIndex = pathParts.indexOfLast { it in MPEG_TS_QUALITIES }
         if (qualityIndex >= 0) {
-            for (quality in MPEG_TS_QUALITIES.drop(qualityIndex + 1)) {
+            for (quality in MPEG_TS_QUALITIES.drop(qualityIndex + 1).take(MAX_LOWER_RENDITION_ATTEMPTS)) {
                 val lowerParts = pathParts.toMutableList()
                 lowerParts[qualityIndex] = quality
                 val lowerPath = lowerParts.joinToString("/")
@@ -119,6 +120,7 @@ class TwitchVodUnmuteDataSource(
             "360p30",
             "160p30"
         )
+        const val MAX_LOWER_RENDITION_ATTEMPTS = 2
         val UNMUTED_SEGMENT_SUFFIX = Regex("-unmuted(?=\\.ts$)")
         val MUTED_SEGMENT_SUFFIX = Regex("-muted(?=\\.ts$)")
     }
