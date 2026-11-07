@@ -9,12 +9,11 @@ import androidx.media3.datasource.TransferListener
 import java.io.IOException
 
 /**
- * Twitch's VOD playlist marks muted segments with "-unmuted.ts". The matching
- * "-muted.ts" URL is the alternate segment containing the original audio.
- *
- * Try that alternate first, then lower MPEG-TS renditions only when Twitch
- * explicitly reports it unavailable. If no alternate exists, fall back to the
- * original muted segment. Transient network errors stop retries immediately.
+ * Tries Twitch's alternate, unmuted MPEG-TS VOD segment when the requested
+ * segment is marked muted. If it is definitively unavailable (HTTP 403, 404,
+ * or 410) at the selected rendition, tries lower MPEG-TS renditions. Transient
+ * network errors stop retries immediately so they do not multiply playback
+ * and seek delays.
  *
  * Fragmented-MP4 segments and their initialization maps are deliberately left
  * untouched because mixing renditions can break their shared initialization
@@ -33,15 +32,18 @@ class TwitchVodUnmuteDataSource(
     override fun open(dataSpec: DataSpec): Long {
         val originalUri = dataSpec.uri
         val path = originalUri.encodedPath ?: return upstream.open(dataSpec)
-        if (!path.endsWith(".ts", ignoreCase = true) ||
-            !UNMUTED_SEGMENT_SUFFIX.containsMatchIn(path)
-        ) {
-            // A "-muted.ts" URL is already the original-audio alternate.
-            // Leave it alone rather than stripping its marker.
+        if (!path.endsWith(".ts", ignoreCase = true)) {
             return upstream.open(dataSpec)
         }
 
-        val alternatePath = UNMUTED_SEGMENT_SUFFIX.replaceFirst(path, "-muted.ts")
+        val alternatePath = when {
+            UNMUTED_SEGMENT_SUFFIX.containsMatchIn(path) ->
+                UNMUTED_SEGMENT_SUFFIX.replaceFirst(path, "-muted.ts")
+            MUTED_SEGMENT_SUFFIX.containsMatchIn(path) ->
+                MUTED_SEGMENT_SUFFIX.replaceFirst(path, "")
+            else -> return upstream.open(dataSpec)
+        }
+
         val candidates = mutableListOf<Uri>()
         candidates += originalUri.buildUpon().encodedPath(alternatePath).build()
 
@@ -74,8 +76,13 @@ class TwitchVodUnmuteDataSource(
                 val lowerParts = pathParts.toMutableList()
                 lowerParts[qualityIndex] = quality
                 val lowerPath = lowerParts.joinToString("/")
-                val lowerAlternatePath =
-                    UNMUTED_SEGMENT_SUFFIX.replaceFirst(lowerPath, "-muted.ts")
+                val lowerAlternatePath = when {
+                    UNMUTED_SEGMENT_SUFFIX.containsMatchIn(lowerPath) ->
+                        UNMUTED_SEGMENT_SUFFIX.replaceFirst(lowerPath, "-muted.ts")
+                    MUTED_SEGMENT_SUFFIX.containsMatchIn(lowerPath) ->
+                        MUTED_SEGMENT_SUFFIX.replaceFirst(lowerPath, "")
+                    else -> lowerPath
+                }
                 candidates += originalUri.buildUpon().encodedPath(lowerAlternatePath).build()
             }
         }
@@ -135,6 +142,7 @@ class TwitchVodUnmuteDataSource(
     private companion object {
         // Twitch VOD rendition names include legacy labels and newer
         // resolution/frame-rate labels that may carry a codec suffix (e.g. -av01).
+        // Keep this list ordered from highest to lowest.
         val MPEG_TS_QUALITY_LEVELS = listOf(
             "1440p60",
             "1440p30",
@@ -151,5 +159,6 @@ class TwitchVodUnmuteDataSource(
         val QUALITY_SEGMENT_PATTERN = Regex("^(\\d{3,4})p(\\d{2,3})(-[a-zA-Z0-9]+)?$")
         val UNAVAILABLE_SEGMENT_HTTP_CODES = setOf(403, 404, 410)
         val UNMUTED_SEGMENT_SUFFIX = Regex("-unmuted(?=\\.ts$)")
+        val MUTED_SEGMENT_SUFFIX = Regex("-muted(?=\\.ts$)")
     }
 }
