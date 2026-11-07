@@ -944,36 +944,37 @@ object ChatAdapterUtils {
                     })
             }
         }
-        images.forEach { image ->
-            // Keep third-party emote text visible while its image request is pending.
-            // A successful image load replaces this label; a failed/stalled request
-            // leaves the emote name visible instead of an empty placeholder.
-            val pendingEmoteSpan = image.fallbackText
+        // Prepare all visible third-party emote labels together, then bind once.
+        // Binding once per emote caused repeated TextView updates for messages with
+        // several emotes, which is especially expensive in the merged live chat.
+        val pendingEmoteSpans = arrayOfNulls<ReplacementSpan>(images.size)
+        images.forEachIndexed { index, image ->
+            val fallbackText = image.fallbackText
                 ?.takeIf { image.thirdParty && it.isNotBlank() }
-                ?.let { fallbackText ->
-                    object : ReplacementSpan() {
-                        override fun getSize(paint: android.graphics.Paint, text: CharSequence?, start: Int, end: Int, fm: android.graphics.Paint.FontMetricsInt?): Int =
-                            paint.measureText(fallbackText).toInt()
+                ?: return@forEachIndexed
+            val span = object : ReplacementSpan() {
+                override fun getSize(paint: android.graphics.Paint, text: CharSequence?, start: Int, end: Int, fm: android.graphics.Paint.FontMetricsInt?): Int =
+                    paint.measureText(fallbackText).toInt()
 
-                        override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: android.graphics.Paint) {
-                            canvas.drawText(fallbackText, x, y.toFloat(), paint)
-                        }
-                    }
+                override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: android.graphics.Paint) {
+                    canvas.drawText(fallbackText, x, y.toFloat(), paint)
                 }
-            if (pendingEmoteSpan != null && isCurrent()) {
-                builder.getSpans(image.start, image.end, ForegroundColorSpan::class.java).forEach {
-                    builder.removeSpan(it)
-                }
-                builder.setSpan(pendingEmoteSpan, image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE)
-                bind(builder)
             }
+            builder.getSpans(image.start, image.end, ForegroundColorSpan::class.java).forEach {
+                builder.removeSpan(it)
+            }
+            builder.setSpan(span, image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE)
+            pendingEmoteSpans[index] = span
+        }
+        if (pendingEmoteSpans.any { it != null } && isCurrent()) {
+            bind(builder)
+        }
 
+        images.forEachIndexed { index, image ->
+            val pendingEmoteSpan = pendingEmoteSpans[index]
             loadImage(imageLibrary, fragment, image, emoteQuality, onFailed = {
                 if (!isCurrent()) return@loadImage
-                if (pendingEmoteSpan != null) {
-                    // Keep the visible emote name if all image sources fail.
-                    bind(builder)
-                } else {
+                if (pendingEmoteSpan == null) {
                     val fallbackText = image.fallbackText ?: return@loadImage
                     builder.getSpans(image.start, image.end, ForegroundColorSpan::class.java).forEach {
                         builder.removeSpan(it)
@@ -992,6 +993,7 @@ object ChatAdapterUtils {
                     builder.setSpan(fallbackSpan, image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE)
                     bind(builder)
                 }
+                // Third-party emote labels were already bound above; no extra rebind is needed.
             }) { result ->
                 if (!isCurrent()) return@loadImage
                 pendingEmoteSpan?.let(builder::removeSpan)
