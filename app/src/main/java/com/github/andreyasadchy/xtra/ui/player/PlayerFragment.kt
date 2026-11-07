@@ -110,6 +110,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private var primaryChatFragment: ChatFragment? = null
     private var mergedChatRecyclerView: RecyclerView? = null
     private var mergedChatAdapter: MergedChatAdapter? = null
+    private var mergedChatPausedForPip = false
     private var mergedChatScrollButton: Button? = null
     private var isFollowingMergedChat = true
     private var mergedChatScrollScheduled = false
@@ -2658,6 +2659,16 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     }
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
+        chatFragment?.setPipDisplayPaused(isInPictureInPictureMode)
+        if (isInPictureInPictureMode) {
+            if (mergedChatAdapter?.isDisplayPaused() != true) {
+                mergedChatAdapter?.pauseDisplay()
+                mergedChatPausedForPip = true
+            }
+        } else if (mergedChatPausedForPip) {
+            mergedChatAdapter?.resumeDisplay()
+            mergedChatPausedForPip = false
+        }
         with(binding) {
             if (isInPictureInPictureMode) {
                 if (!isMaximized) {
