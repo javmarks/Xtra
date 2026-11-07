@@ -682,6 +682,8 @@ object ChatAdapterUtils {
                             size = Image.IMAGE_SIZE_EMOTE,
                             thirdParty = emote.thirdParty,
                             fallbackText = emote.name?.takeIf { emote.thirdParty },
+
+                            fallbackUrls = emote.fallbackUrls,
                             start = previousImage.start,
                             end = previousImage.end
                         )
@@ -718,6 +720,8 @@ object ChatAdapterUtils {
                             size = Image.IMAGE_SIZE_EMOTE,
                             thirdParty = emote.thirdParty,
                             fallbackText = emote.name?.takeIf { emote.thirdParty },
+
+                            fallbackUrls = emote.fallbackUrls,
                             start = builderIndex,
                             end = builderIndex + 1
                         )
@@ -1058,6 +1062,9 @@ object ChatAdapterUtils {
             else -> listOf(image.url1x)
         }
         urls.filterNotNull().filter { it.isNotBlank() }.forEach { url ->
+            if (sources.none { it is String && it == url }) sources.add(url)
+        }
+        image.fallbackUrls.filter { it.isNotBlank() }.forEach { url ->
             if (sources.none { it is String && it == url }) sources.add(url)
         }
         return sources
