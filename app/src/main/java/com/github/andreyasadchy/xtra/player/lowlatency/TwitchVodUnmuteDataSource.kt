@@ -4,15 +4,16 @@ import android.net.Uri
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.TransferListener
 import java.io.IOException
 
 /**
  * Tries Twitch's alternate, unmuted MPEG-TS VOD segment when the requested
- * segment is marked muted. If it is unavailable at the selected rendition,
- * tries up to two lower MPEG-TS renditions before falling back to the
- * originally requested (muted) segment. Limiting retries avoids delaying
- * playback when alternate CDN segments are unavailable.
+ * segment is marked muted. If it is definitively unavailable (HTTP 403, 404,
+ * or 410) at the selected rendition, tries lower MPEG-TS renditions. Transient
+ * network errors stop retries immediately so they do not multiply playback
+ * and seek delays.
  *
  * Fragmented-MP4 segments and their initialization maps are deliberately left
  * untouched because mixing renditions can break their shared initialization
@@ -75,6 +76,14 @@ class TwitchVodUnmuteDataSource(
                 } catch (_: IOException) {
                     // Reset the failed request before trying another rendition.
                 }
+                // Only try another quality when Twitch explicitly says this
+                // alternate segment is unavailable. Do not multiply timeouts,
+                // connection failures, or other transient network errors.
+                if (e !is HttpDataSource.InvalidResponseCodeException ||
+                    e.responseCode !in UNAVAILABLE_SEGMENT_HTTP_CODES
+                ) {
+                    break
+                }
             }
         }
 
@@ -120,7 +129,7 @@ class TwitchVodUnmuteDataSource(
             "360p30",
             "160p30"
         )
-        const val MAX_LOWER_RENDITION_ATTEMPTS = 2
+        val UNAVAILABLE_SEGMENT_HTTP_CODES = setOf(403, 404, 410)
         val UNMUTED_SEGMENT_SUFFIX = Regex("-unmuted(?=\\.ts$)")
         val MUTED_SEGMENT_SUFFIX = Regex("-muted(?=\\.ts$)")
     }
