@@ -98,6 +98,11 @@ class MergedChatAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     }
     fun isDisplayPaused(): Boolean = frozenEntries != null
 
+    /** Rebind visible rows after PiP to retry emote images that failed while backgrounded. */
+    fun refreshImagesAfterPip() {
+        if (frozenEntries == null) dispatchFullRefresh()
+    }
+
     private fun sourceMessage(message: ChatMessage): ChatMessage =
         if (message.type == ChatMessage.REPLY_MESSAGE) message.replyParent ?: message else message
 
