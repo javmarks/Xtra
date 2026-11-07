@@ -1291,7 +1291,8 @@ class ExoPlayerService : BasePlaybackService() {
                     val networkLibrary = prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP)
                     player.setMediaSource(
                         HlsMediaSource.Factory(
-                            DefaultDataSource.Factory(
+                            TwitchVodUnmuteDataSource.Factory(
+                                DefaultDataSource.Factory(
                                 this@ExoPlayerService,
                                 when {
                                     networkLibrary == C.HTTP_ENGINE && xtraModule.httpEngine.value != null -> @SuppressLint("NewApi") {
