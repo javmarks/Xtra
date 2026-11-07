@@ -945,27 +945,59 @@ object ChatAdapterUtils {
             }
         }
         images.forEach { image ->
-            loadImage(imageLibrary, fragment, image, emoteQuality, onFailed = {
-                if (!isCurrent()) return@loadImage
-                val fallbackText = image.fallbackText ?: return@loadImage
-                builder.getSpans(image.start, image.end, ForegroundColorSpan::class.java).forEach {
-                    builder.removeSpan(it)
-                }
-                val fallbackSpan = if (image.circular) {
-                    CircularFallbackSpan(fallbackText)
-                } else {
+            // Keep third-party emote text visible while its image request is pending.
+            // A successful image load replaces this label; a failed/stalled request
+            // leaves the emote name visible instead of an empty placeholder.
+            val pendingEmoteSpan = image.fallbackText
+                ?.takeIf { image.thirdParty && it.isNotBlank() }
+                ?.let { fallbackText ->
                     object : ReplacementSpan() {
                         override fun getSize(paint: android.graphics.Paint, text: CharSequence?, start: Int, end: Int, fm: android.graphics.Paint.FontMetricsInt?): Int =
                             paint.measureText(fallbackText).toInt()
+
                         override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: android.graphics.Paint) {
                             canvas.drawText(fallbackText, x, y.toFloat(), paint)
                         }
                     }
                 }
-                builder.setSpan(fallbackSpan, image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (pendingEmoteSpan != null && isCurrent()) {
+                builder.getSpans(image.start, image.end, ForegroundColorSpan::class.java).forEach {
+                    builder.removeSpan(it)
+                }
+                builder.setSpan(pendingEmoteSpan, image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE)
                 bind(builder)
+            }
+
+            loadImage(imageLibrary, fragment, image, emoteQuality, onFailed = {
+                if (!isCurrent()) return@loadImage
+                if (pendingEmoteSpan != null) {
+                    // Keep the visible emote name if all image sources fail.
+                    bind(builder)
+                } else {
+                    val fallbackText = image.fallbackText ?: return@loadImage
+                    builder.getSpans(image.start, image.end, ForegroundColorSpan::class.java).forEach {
+                        builder.removeSpan(it)
+                    }
+                    val fallbackSpan = if (image.circular) {
+                        CircularFallbackSpan(fallbackText)
+                    } else {
+                        object : ReplacementSpan() {
+                            override fun getSize(paint: android.graphics.Paint, text: CharSequence?, start: Int, end: Int, fm: android.graphics.Paint.FontMetricsInt?): Int =
+                                paint.measureText(fallbackText).toInt()
+                            override fun draw(canvas: Canvas, text: CharSequence?, start: Int, end: Int, x: Float, top: Int, y: Int, bottom: Int, paint: android.graphics.Paint) {
+                                canvas.drawText(fallbackText, x, y.toFloat(), paint)
+                            }
+                        }
+                    }
+                    builder.setSpan(fallbackSpan, image.start, image.end, SPAN_EXCLUSIVE_EXCLUSIVE)
+                    bind(builder)
+                }
             }) { result ->
                 if (!isCurrent()) return@loadImage
+                pendingEmoteSpan?.let(builder::removeSpan)
+                builder.getSpans(image.start, image.end, ForegroundColorSpan::class.java).forEach {
+                    builder.removeSpan(it)
+                }
                 val imageSize = when (image.size) {
                     Image.IMAGE_SIZE_EMOTE -> emoteSize
                     Image.IMAGE_SIZE_GIF -> gifSize
@@ -1010,7 +1042,6 @@ object ChatAdapterUtils {
             }
         }
     }
-
     private fun nextOverlayEmote(imageLibrary: String?, fragment: Fragment, drawables: Array<Drawable>, image: Image, bottomImage: Image, itemView: View, bind: (SpannableStringBuilder) -> Unit, builder: SpannableStringBuilder, translated: Boolean, emoteSize: Int, emoteQuality: String, animateGifs: Boolean, enableOverlayEmotes: Boolean, chatMessage: ChatMessage, savedColors: HashMap<String, Int>, useReadableColors: Boolean, isLightTheme: Boolean, showLanguageDownloadDialog: (ChatMessage, String) -> Unit, hideErrors: Boolean, isCurrent: () -> Boolean) {
         loadImage(imageLibrary, fragment, image, emoteQuality, onFailed = {}) { result ->
             if (!isCurrent()) return@loadImage
