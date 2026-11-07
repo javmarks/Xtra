@@ -2665,9 +2665,15 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 mergedChatAdapter?.pauseDisplay()
                 mergedChatPausedForPip = true
             }
-        } else if (mergedChatPausedForPip) {
-            mergedChatAdapter?.resumeDisplay()
-            mergedChatPausedForPip = false
+        } else {
+            if (mergedChatPausedForPip) {
+                mergedChatAdapter?.resumeDisplay()
+                mergedChatPausedForPip = false
+            }
+            // Rebind visible messages once on return to full screen. Image requests that
+            // failed while PiP was active can then retry without reconnecting chat.
+            chatFragment?.refreshImagesAfterPip()
+            mergedChatAdapter?.refreshImagesAfterPip()
         }
         with(binding) {
             if (isInPictureInPictureMode) {
