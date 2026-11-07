@@ -8,9 +8,12 @@ import androidx.media3.datasource.TransferListener
 import java.io.IOException
 
 /**
- * Tries Twitch's alternate, unmuted VOD segment when the requested segment is marked muted.
- * If the alternate is unavailable, the original segment is requested normally.
+ * Tries Twitch's alternate, unmuted MPEG-TS VOD segment when the requested
+ * segment is marked muted. If the alternate is unavailable, the original
+ * segment is requested normally.
  *
+ * Fragmented-MP4 segments and their initialization maps are deliberately left
+ * untouched until their paired initialization segment can be verified.
  * This wrapper is installed only for VOD playback, never for live streams.
  */
 @UnstableApi
@@ -26,6 +29,10 @@ class TwitchVodUnmuteDataSource(
     override fun open(dataSpec: DataSpec): Long {
         val originalUri = dataSpec.uri
         val path = originalUri.encodedPath ?: return upstream.open(dataSpec)
+        if (!path.endsWith(".ts", ignoreCase = true)) {
+            return upstream.open(dataSpec)
+        }
+
         val alternatePath = MUTED_SEGMENT_SUFFIX.replaceFirst(path, "")
         if (alternatePath == path) {
             return upstream.open(dataSpec)
@@ -72,7 +79,7 @@ class TwitchVodUnmuteDataSource(
     }
 
     private companion object {
-        // Only rewrite a final "-muted" marker in a media filename, not playlist names.
-        val MUTED_SEGMENT_SUFFIX = Regex("-muted(?=\\.[^./]+$|$)")
+        // Only rewrite a final "-muted" marker in an MPEG-TS media filename.
+        val MUTED_SEGMENT_SUFFIX = Regex("-muted(?=\\.ts$)")
     }
 }
