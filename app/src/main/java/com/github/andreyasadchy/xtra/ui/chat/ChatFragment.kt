@@ -1164,6 +1164,13 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         }
     }
 
+    /** Rebind visible messages after PiP so failed third-party emote requests get another chance. */
+    fun refreshImagesAfterPip() {
+        if (isAdded && view != null && !isMergedRendererOnly && adapter?.isDisplayPaused() != true) {
+            adapter?.notifyDataSetChanged()
+        }
+    }
+
     fun isActive(): Boolean? {
         return viewModel.isActive()
     }
