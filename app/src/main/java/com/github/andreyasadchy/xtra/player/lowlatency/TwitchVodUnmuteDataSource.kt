@@ -24,6 +24,9 @@ class TwitchVodUnmuteDataSource(
     private val upstream: DataSource
 ) : DataSource {
 
+    private var activeSegmentName: String = "unknown"
+    private var readFailureRecorded = false
+
     override fun addTransferListener(transferListener: TransferListener) {
         upstream.addTransferListener(transferListener)
     }
@@ -89,10 +92,18 @@ class TwitchVodUnmuteDataSource(
 
         var lastAlternateError: IOException? = null
         for (candidateUri in candidates.distinct()) {
+            val candidateName = safeSegmentName(candidateUri)
+            activeSegmentName = candidateName
+            readFailureRecorded = false
+            recordDiagnostic("OPEN TRY " + candidateName)
             try {
-                return upstream.open(dataSpec.withUri(candidateUri))
+                val result = upstream.open(dataSpec.withUri(candidateUri))
+                recordDiagnostic("OPEN OK " + candidateName + " length=" + result)
+                return result
             } catch (e: IOException) {
                 lastAlternateError = e
+                val responseCode = (e as? HttpDataSource.InvalidResponseCodeException)?.responseCode
+                recordDiagnostic("OPEN FAIL " + candidateName + (responseCode?.let { " HTTP=" + it } ?: "") + " " + e.javaClass.simpleName)
                 try {
                     upstream.close()
                 } catch (_: IOException) {
@@ -109,16 +120,32 @@ class TwitchVodUnmuteDataSource(
             }
         }
 
+        val originalName = safeSegmentName(originalUri)
+        activeSegmentName = originalName
+        readFailureRecorded = false
+        recordDiagnostic("FALLBACK ORIGINAL " + originalName)
         return try {
-            upstream.open(dataSpec)
+            val result = upstream.open(dataSpec)
+            recordDiagnostic("OPEN OK ORIGINAL " + originalName + " length=" + result)
+            result
         } catch (originalError: IOException) {
+            val responseCode = (originalError as? HttpDataSource.InvalidResponseCodeException)?.responseCode
+            recordDiagnostic("OPEN FAIL ORIGINAL " + originalName + (responseCode?.let { " HTTP=" + it } ?: "") + " " + originalError.javaClass.simpleName)
             lastAlternateError?.let(originalError::addSuppressed)
             throw originalError
         }
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
-        return upstream.read(buffer, offset, length)
+        return try {
+            upstream.read(buffer, offset, length)
+        } catch (e: IOException) {
+            if (!readFailureRecorded) {
+                readFailureRecorded = true
+                recordDiagnostic("READ FAIL " + activeSegmentName + " " + e.javaClass.simpleName)
+            }
+            throw e
+        }
     }
 
     override fun getUri(): Uri? = upstream.uri
@@ -139,7 +166,27 @@ class TwitchVodUnmuteDataSource(
         }
     }
 
-    private companion object {
+    companion object {
+        private const val MAX_DIAGNOSTIC_EVENTS = 60
+        private val diagnosticEvents = java.util.ArrayDeque<String>()
+
+        @JvmStatic
+        fun getRecentDiagnostics(): List<String> = synchronized(diagnosticEvents) {
+            diagnosticEvents.toList()
+        }
+
+        private fun recordDiagnostic(message: String) {
+            synchronized(diagnosticEvents) {
+                diagnosticEvents.addLast(System.currentTimeMillis().toString() + " " + message)
+                while (diagnosticEvents.size > MAX_DIAGNOSTIC_EVENTS) {
+                    diagnosticEvents.removeFirst()
+                }
+            }
+        }
+
+        private fun safeSegmentName(uri: Uri): String =
+            uri.lastPathSegment?.takeIf { it.isNotBlank() } ?: "unknown"
+
         // Twitch VOD rendition names include legacy labels and newer
         // resolution/frame-rate labels that may carry a codec suffix (e.g. -av01).
         // Keep this list ordered from highest to lowest.
