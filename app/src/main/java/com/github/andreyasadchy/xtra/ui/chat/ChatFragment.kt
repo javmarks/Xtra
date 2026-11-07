@@ -1150,6 +1150,20 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         }
     }
 
+    private var pausedForPip = false
+
+    fun setPipDisplayPaused(paused: Boolean) {
+        if (paused) {
+            if (!pausedForPip && adapter?.isDisplayPaused() != true) {
+                adapter?.pauseDisplay()
+                pausedForPip = true
+            }
+        } else if (pausedForPip) {
+            adapter?.resumeDisplay()
+            pausedForPip = false
+        }
+    }
+
     fun isActive(): Boolean? {
         return viewModel.isActive()
     }
