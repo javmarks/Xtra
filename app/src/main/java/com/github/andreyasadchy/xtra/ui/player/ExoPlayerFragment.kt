@@ -533,6 +533,80 @@ class ExoPlayerFragment : PlayerFragment() {
         }
     }
 
+    override fun showVodDiagnostics() {
+        val service = playbackService ?: return
+        val player = service.player
+        val report = buildString {
+            appendLine("Xtra VOD playback diagnostics")
+            appendLine("Video ID: ${service.videoId ?: "unknown"}")
+            appendLine("Position: ${player?.currentPosition ?: -1} ms")
+            appendLine("Playback state: ${player?.playbackState ?: -1}")
+            appendLine("Is playing: ${player?.isPlaying ?: false}")
+            appendLine("Selected quality: ${service.quality?.name ?: "unknown"}")
+            service.quality?.let {
+                appendLine("Selected format: ${it.resolution ?: "?"}p, ${it.frameRate ?: "?"} fps, ${it.bitrate ?: "?"} bps, codecs=${it.codecs ?: "?"}")
+            }
+            appendLine()
+            appendLine("Available qualities:")
+            service.qualities.orEmpty().forEach {
+                appendLine("- ${it.name}: ${it.resolution ?: "?"}p, ${it.frameRate ?: "?"} fps, ${it.bitrate ?: "?"} bps, codecs=${it.codecs ?: "?"}")
+            }
+            appendLine()
+            appendLine("Selected and available tracks:")
+            val tracks = player?.currentTracks
+            if (tracks == null || tracks.groups.isEmpty()) {
+                appendLine("No track information available")
+            } else {
+                tracks.groups.forEachIndexed { groupIndex, group ->
+                    val typeName = when (group.type) {
+                        androidx.media3.common.C.TRACK_TYPE_AUDIO -> "audio"
+                        androidx.media3.common.C.TRACK_TYPE_VIDEO -> "video"
+                        else -> "type-${group.type}"
+                    }
+                    for (trackIndex in 0 until group.length) {
+                        val format = group.getTrackFormat(trackIndex)
+                        appendLine("group=$groupIndex type=$typeName selected=${group.isTrackSelected(trackIndex)} mime=${format.sampleMimeType ?: "?"} codecs=${format.codecs ?: "?"} language=${format.language ?: "?"} size=${format.width}x${format.height} fps=${format.frameRate} bitrate=${format.bitrate} sampleRate=${format.sampleRate} channels=${format.channelCount}")
+                    }
+                }
+            }
+            val mediaPlaylist = (player?.currentManifest as? HlsManifest)?.mediaPlaylist
+            appendLine()
+            appendLine("Recent media playlist segments:")
+            if (mediaPlaylist == null) {
+                appendLine("No HLS media playlist available")
+            } else {
+                appendLine("Media sequence: ${mediaPlaylist.mediaSequence}")
+                mediaPlaylist.segments.takeLast(15).forEach { segment ->
+                    val safeName = segment.url.substringAfterLast('/').substringBefore('?').substringBefore('#')
+                    appendLine("$safeName durationMs=${segment.durationUs / 1000}")
+                }
+            }
+        }
+        requireContext().getAlertDialogBuilder().apply {
+            setTitle(R.string.vod_diagnostics)
+            setView(NestedScrollView(context).apply {
+                addView(TextView(context).apply {
+                    text = report
+                    textSize = 12F
+                    setTextIsSelectable(true)
+                    setPadding(24, 12, 24, 12)
+                })
+            })
+            setNegativeButton(R.string.copy_clip) { _, _ ->
+                val clipboard = ContextCompat.getSystemService(requireContext(), ClipboardManager::class.java)
+                clipboard?.setPrimaryClip(ClipData.newPlainText("Xtra VOD diagnostics", report))
+            }
+            setPositiveButton(R.string.share) { _, _ ->
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "Xtra VOD playback diagnostics")
+                    putExtra(Intent.EXTRA_TEXT, report)
+                }
+                startActivity(Intent.createChooser(intent, getString(R.string.share)))
+            }
+        }.show()
+    }
+
     override fun changeQuality(selectedQuality: VideoQuality?) {
         playbackService?.changeQuality(selectedQuality)
     }
