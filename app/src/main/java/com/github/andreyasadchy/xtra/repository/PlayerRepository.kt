@@ -1078,8 +1078,11 @@ class PlayerRepository(
                             // 7TV can provide different formats for different emotes.
                             // Prefer the selected format, but fall back to another format that
                             // Android image loaders commonly support instead of inventing a URL.
+                            // Keep AVIF last: some Android image-loader/device combinations
+                            // fail to decode 7TV AVIF files even when the URL is valid.
+                            // Prefer WebP when requested, then broadly supported GIF/PNG.
                             val formatOrder = if (useWebp) {
-                                listOf("WEBP", "AVIF", "GIF", "PNG")
+                                listOf("WEBP", "GIF", "PNG", "AVIF")
                             } else {
                                 listOf("GIF", "PNG", "WEBP", "AVIF")
                             }
