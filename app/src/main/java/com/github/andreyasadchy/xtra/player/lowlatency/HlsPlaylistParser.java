@@ -1573,7 +1573,7 @@ public final class HlsPlaylistParser implements ParsingLoadable.Parser<HlsPlayli
           line = line.substring(line.indexOf(':') + 1);
         }
         String segmentUri = replaceVariableReferences(line, variableDefinitions, matcherCache)
-                ; // Preserve Twitch's muted marker for the VOD unmute data source.
+                .replace("-unmuted", "-muted"); // xtra: unmuted segments
         @Nullable Segment inferredInitSegment = urlToInferredInitSegment.get(segmentUri);
         if (segmentByteRangeLength == C.LENGTH_UNSET) {
           // The segment has no byte range defined.
