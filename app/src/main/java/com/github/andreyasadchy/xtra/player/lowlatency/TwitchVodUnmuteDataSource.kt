@@ -33,9 +33,12 @@ class TwitchVodUnmuteDataSource(
             return upstream.open(dataSpec)
         }
 
-        val alternatePath = MUTED_SEGMENT_SUFFIX.replaceFirst(path, "")
-        if (alternatePath == path) {
-            return upstream.open(dataSpec)
+        val alternatePath = when {
+            UNMUTED_SEGMENT_SUFFIX.containsMatchIn(path) ->
+                UNMUTED_SEGMENT_SUFFIX.replaceFirst(path, "-muted.ts")
+            MUTED_SEGMENT_SUFFIX.containsMatchIn(path) ->
+                MUTED_SEGMENT_SUFFIX.replaceFirst(path, "")
+            else -> return upstream.open(dataSpec)
         }
 
         val alternateUri = originalUri.buildUpon().encodedPath(alternatePath).build()
@@ -79,7 +82,9 @@ class TwitchVodUnmuteDataSource(
     }
 
     private companion object {
-        // Only rewrite a final "-muted" marker in an MPEG-TS media filename.
+        // Twitch can expose muted playlist entries under either marker.
+        // In one playlist format, the matching original segment uses "-muted.ts".
+        val UNMUTED_SEGMENT_SUFFIX = Regex("-unmuted(?=\\.ts$)")
         val MUTED_SEGMENT_SUFFIX = Regex("-muted(?=\\.ts$)")
     }
 }
