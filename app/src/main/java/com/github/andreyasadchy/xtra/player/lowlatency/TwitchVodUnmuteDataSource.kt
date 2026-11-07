@@ -50,7 +50,7 @@ class TwitchVodUnmuteDataSource(
         val pathParts = path.split("/")
         val qualityIndex = pathParts.indexOfLast { it in MPEG_TS_QUALITIES }
         if (qualityIndex >= 0) {
-            for (quality in MPEG_TS_QUALITIES.drop(qualityIndex + 1).take(MAX_LOWER_RENDITION_ATTEMPTS)) {
+            for (quality in MPEG_TS_QUALITIES.drop(qualityIndex + 1)) {
                 val lowerParts = pathParts.toMutableList()
                 lowerParts[qualityIndex] = quality
                 val lowerPath = lowerParts.joinToString("/")
