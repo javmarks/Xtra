@@ -9,12 +9,13 @@ import java.io.IOException
 
 /**
  * Tries Twitch's alternate, unmuted MPEG-TS VOD segment when the requested
- * segment is marked muted. If the alternate is unavailable, the original
- * segment is requested normally.
+ * segment is marked muted. If it is unavailable at the selected rendition,
+ * tries the same original segment at lower MPEG-TS renditions before falling
+ * back to the originally requested (muted) segment.
  *
  * Fragmented-MP4 segments and their initialization maps are deliberately left
- * untouched until their paired initialization segment can be verified.
- * This wrapper is installed only for VOD playback, never for live streams.
+ * untouched because mixing renditions can break their shared initialization
+ * data. This wrapper is installed only for VOD playback, never for live streams.
  */
 @UnstableApi
 class TwitchVodUnmuteDataSource(
@@ -41,21 +42,46 @@ class TwitchVodUnmuteDataSource(
             else -> return upstream.open(dataSpec)
         }
 
-        val alternateUri = originalUri.buildUpon().encodedPath(alternatePath).build()
+        val candidates = mutableListOf<Uri>()
+        candidates += originalUri.buildUpon().encodedPath(alternatePath).build()
+
+        val pathParts = path.split("/")
+        val qualityIndex = pathParts.indexOfLast { it in MPEG_TS_QUALITIES }
+        if (qualityIndex >= 0) {
+            for (quality in MPEG_TS_QUALITIES.drop(qualityIndex + 1)) {
+                val lowerParts = pathParts.toMutableList()
+                lowerParts[qualityIndex] = quality
+                val lowerPath = lowerParts.joinToString("/")
+                val lowerAlternatePath = when {
+                    UNMUTED_SEGMENT_SUFFIX.containsMatchIn(lowerPath) ->
+                        UNMUTED_SEGMENT_SUFFIX.replaceFirst(lowerPath, "-muted.ts")
+                    MUTED_SEGMENT_SUFFIX.containsMatchIn(lowerPath) ->
+                        MUTED_SEGMENT_SUFFIX.replaceFirst(lowerPath, "")
+                    else -> lowerPath
+                }
+                candidates += originalUri.buildUpon().encodedPath(lowerAlternatePath).build()
+            }
+        }
+
+        var lastAlternateError: IOException? = null
+        for (candidateUri in candidates.distinct()) {
+            try {
+                return upstream.open(dataSpec.withUri(candidateUri))
+            } catch (e: IOException) {
+                lastAlternateError = e
+                try {
+                    upstream.close()
+                } catch (_: IOException) {
+                    // Reset the failed request before trying another rendition.
+                }
+            }
+        }
+
         return try {
-            upstream.open(dataSpec.withUri(alternateUri))
-        } catch (alternateError: IOException) {
-            try {
-                upstream.close()
-            } catch (_: IOException) {
-                // The failed alternate request may not have opened a connection.
-            }
-            try {
-                upstream.open(dataSpec)
-            } catch (originalError: IOException) {
-                originalError.addSuppressed(alternateError)
-                throw originalError
-            }
+            upstream.open(dataSpec)
+        } catch (originalError: IOException) {
+            lastAlternateError?.let(originalError::addSuppressed)
+            throw originalError
         }
     }
 
@@ -82,8 +108,17 @@ class TwitchVodUnmuteDataSource(
     }
 
     private companion object {
-        // Twitch can expose muted playlist entries under either marker.
-        // In one playlist format, the matching original segment uses "-muted.ts".
+        // Twitch VOD renditions, ordered from highest to lowest.
+        val MPEG_TS_QUALITIES = listOf(
+            "chunked",
+            "1080p60",
+            "1080p30",
+            "720p60",
+            "720p30",
+            "480p30",
+            "360p30",
+            "160p30"
+        )
         val UNMUTED_SEGMENT_SUFFIX = Regex("-unmuted(?=\\.ts$)")
         val MUTED_SEGMENT_SUFFIX = Regex("-muted(?=\\.ts$)")
     }
