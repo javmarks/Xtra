@@ -1091,9 +1091,9 @@ object ChatAdapterUtils {
             }
         }
         if (preferCoil) {
-            loadCoil(fragment, image, sources, 0, fallback, onLoaded)
+            loadCoil(fragment, image, sources, 0, 0, fallback, onLoaded)
         } else {
-            loadGlide(fragment, image, sources, 0, fallback, onLoaded)
+            loadGlide(fragment, image, sources, 0, 0, fallback, onLoaded)
         }
     }
 
