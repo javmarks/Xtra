@@ -194,6 +194,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     open fun toggleSubtitles(enabled: Boolean) {}
     open fun getUnavailableQualities(): List<VideoQuality> = emptyList()
     open fun showPlaylistTags(mediaPlaylist: Boolean) {}
+    open fun showVodDiagnostics() {}
     open fun changeQuality(selectedQuality: VideoQuality?) {}
     open fun startAudioOnly() {}
     open fun close(deleteStates: Boolean = true) {}
