@@ -266,7 +266,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     binding.pinnedChatBy.text = pinned?.let {
                         val pinnedBy = it.pinnedByName ?: it.pinnedByLogin ?: "moderator"
                         val sender = it.senderName ?: it.senderLogin ?: "viewer"
-                    append("\n\nSent by $sender")
+                        "Pinned by $pinnedBy · Sent by $sender"
                     }.orEmpty()
                     binding.pinnedChatExpiry.text = pinned?.expiresAt?.let { expiry ->
                         runCatching {
@@ -338,7 +338,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 .setTitle("Pinned message · #$channelName")
                 .setMessage(buildString {
                     append(pinned.message?.text.orEmpty())
-                    append("\n\\nSent by $sender")
+                    append("\n\nSent by $sender")
                     append("\nPinned by $pinnedBy")
                     expiry?.let { append("\n$it") }
                 })
