@@ -123,7 +123,9 @@ class ChatAdapter(
         bindMessage(
             holder,
             chatMessage,
-            showSourceChannel = !chatMessage.sourceChannelName.isNullOrBlank()
+            showSourceChannel = !chatMessage.sourceChannelName.isNullOrBlank() &&
+                    !chatMessage.sourceRoomId.isNullOrBlank() &&
+                    chatMessage.sourceRoomId != channelId
         )
     }
 
