@@ -123,7 +123,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             val lastVisible = (recyclerView.layoutManager as? LinearLayoutManager)?.findLastVisibleItemPosition() ?: -1
             // Avoid resetting RecyclerView's layout position on every refresh when the
             // newest row is already visible; repeated jumps cause visible jitter.
-            if (lastVisible < lastPosition) recyclerView.scrollToPosition(lastPosition)
+            if (lastVisible < lastPosition) recyclerView.smoothScrollToPosition(lastPosition)
             mergedChatScrollButton?.visibility = View.GONE
         }
     }
