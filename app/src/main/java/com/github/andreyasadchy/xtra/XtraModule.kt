@@ -14,6 +14,7 @@ import com.github.andreyasadchy.xtra.repository.ChannelSortRepository
 import com.github.andreyasadchy.xtra.repository.GameSortRepository
 import com.github.andreyasadchy.xtra.repository.GraphQLRepository
 import com.github.andreyasadchy.xtra.repository.HelixRepository
+import com.github.andreyasadchy.xtra.repository.SharedChatParticipantsCache
 import com.github.andreyasadchy.xtra.repository.LocalChannelFollowsRepository
 import com.github.andreyasadchy.xtra.repository.LocalGameFollowsRepository
 import com.github.andreyasadchy.xtra.repository.NotificationsRepository
@@ -306,6 +307,10 @@ class XtraModule(application: Application) {
 
     val helixRepository by lazy {
         HelixRepository(httpEngine, cronetEngine, cronetExecutor, okHttpClient, json)
+    }
+
+    val sharedChatParticipantsCache by lazy {
+        SharedChatParticipantsCache(helixRepository)
     }
 
     val localChannelFollowsRepository by lazy {
