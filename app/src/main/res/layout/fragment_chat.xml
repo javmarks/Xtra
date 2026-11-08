@@ -84,6 +84,8 @@
                 android:layout_marginTop="3dp"
                 android:maxLines="3"
                 android:ellipsize="end"
+                android:autoLink="web"
+                android:linksClickable="true"
                 android:textAppearance="?attr/textAppearanceBodyMedium"
                 tools:text="Welcome to the channel!" />
 
