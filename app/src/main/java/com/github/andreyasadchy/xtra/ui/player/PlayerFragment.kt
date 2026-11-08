@@ -428,20 +428,34 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                             slidingLayout.animate().apply {
                                 translationX(slidingLayout.translationX + (slidingLayout.width * slidingLayout.scaleX))
                                 setDuration(250L)
+                                setListener(object : AnimatorListenerAdapter() {
+                                    override fun onAnimationEnd(animation: Animator) {
+                                        setListener(null)
+                                        if (this@PlayerFragment.view != null) {
+                                            close()
+                                            (activity as? MainActivity)?.closePlayer()
+                                        }
+                                    }
+                                })
                                 start()
                             }
-                            close()
-                            (activity as? MainActivity)?.closePlayer()
                         }
                         xVelocity < -1500 -> {
                             isAnimating = true
                             slidingLayout.animate().apply {
                                 translationX(slidingLayout.translationX - (slidingLayout.width * slidingLayout.scaleX))
                                 setDuration(250L)
+                                setListener(object : AnimatorListenerAdapter() {
+                                    override fun onAnimationEnd(animation: Animator) {
+                                        setListener(null)
+                                        if (this@PlayerFragment.view != null) {
+                                            close()
+                                            (activity as? MainActivity)?.closePlayer()
+                                        }
+                                    }
+                                })
                                 start()
                             }
-                            close()
-                            (activity as? MainActivity)?.closePlayer()
                         }
                         else -> {
                             if (isTap && (event.eventTime - tapEventTime) < longPressTimeout) {
