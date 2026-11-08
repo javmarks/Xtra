@@ -120,7 +120,11 @@ class ChatAdapter(
         val chatMessage = synchronized(messages) {
             displayedMessages().getOrNull(position)
         } ?: return
-        bindMessage(holder, chatMessage)
+        bindMessage(
+            holder,
+            chatMessage,
+            showSourceChannel = !chatMessage.sourceChannelName.isNullOrBlank()
+        )
     }
 
     fun bindMessage(holder: ViewHolder, chatMessage: ChatMessage, showSourceChannel: Boolean = false) {
