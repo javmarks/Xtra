@@ -2424,6 +2424,13 @@ class ChatViewModel(
     }
 
     private suspend fun onChatMessage(message: ChatMessage, networkLibrary: String?, isLoggedIn: Boolean, accountId: String?, channelId: String?) {
+        // Ordinary channel messages identify their broadcaster through roomId. Resolve
+        // that profile once per channel so All Chats can show the channel avatar even
+        // when the channel was restored from a saved tab. The merged adapter applies
+        // this metadata only in All Chats; individual chat keeps its normal layout.
+        if (message.sourceRoomId.isNullOrBlank()) {
+            loadSharedChatSourceProfile(message.roomId)
+        }
         // Twitch supplies source-room-id for messages mirrored from another
         // broadcaster in a native Shared Chat session. Ordinary channel messages
         // (including the primary channel's own messages) keep their existing layout.
