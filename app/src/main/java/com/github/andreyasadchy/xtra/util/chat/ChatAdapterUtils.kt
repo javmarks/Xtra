@@ -786,6 +786,7 @@ object ChatAdapterUtils {
                         format = emote.format,
                         isAnimated = emote.isAnimated,
                         size = Image.IMAGE_SIZE_EMOTE,
+                        fallbackText = value,
                         start = builderIndex,
                         end = builderIndex + 1
                     )
