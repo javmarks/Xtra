@@ -496,7 +496,7 @@ class ChatViewModel(
                     chatMessages.forEach { chatMessage ->
                         if (chatMessage.sourceRoomId == sourceChannelId) {
                             chatMessage.sourceChannelImageUrl = user.profileImageURL
-                            chatMessage.sourceChannelName = user.displayName ?: user.login
+                            chatMessage.sourceChannelName = user?.displayName ?: user?.login
                             changedMessages = true
                         }
                     }
