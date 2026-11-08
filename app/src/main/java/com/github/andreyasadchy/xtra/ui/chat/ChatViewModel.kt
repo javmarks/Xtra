@@ -172,7 +172,8 @@ class ChatViewModel(
     val hidePoll = MutableStateFlow(false)
     val hidePrediction = MutableStateFlow(false)
 
-    val newMessage = MutableSharedFlow<Triple<ChatMessage, Int, Int>>()
+    // Buffer UI updates so a busy RecyclerView cannot stall the socket callback while it holds messageMutex.
+    val newMessage = MutableSharedFlow<Triple<ChatMessage, Int, Int>>(extraBufferCapacity = 64)
     val addMessages = MutableSharedFlow<Pair<List<ChatMessage>, Int>>()
     val removeMessages = MutableSharedFlow<Int>()
     val updateUserMessages = MutableSharedFlow<String>()
@@ -1608,16 +1609,19 @@ class ChatViewModel(
             stvEventApiJob = null
 
             MainScope().launch(Dispatchers.IO) {
-                oldChatReadIRCSocket?.disconnect(oldChatReadJob)
-                oldChatReadWebSocket?.disconnect(oldChatReadJob)
-                oldEventSub?.disconnect(oldChatReadJob)
-                oldChatWriteIRCSocket?.disconnect(oldChatWriteJob)
-                oldChatWriteWebSocket?.disconnect(oldChatWriteJob)
-                if (oldModerationEventSubListener != null && !oldModerationEventSubChannelId.isNullOrBlank()) {
-                    moderationEventSubManager.unregister(oldModerationEventSubChannelId, oldModerationEventSubListener)
+                // One failed socket close must not abort the remaining cleanup or crash the app.
+                runCatching { oldChatReadIRCSocket?.disconnect(oldChatReadJob) }
+                runCatching { oldChatReadWebSocket?.disconnect(oldChatReadJob) }
+                runCatching { oldEventSub?.disconnect(oldChatReadJob) }
+                runCatching { oldChatWriteIRCSocket?.disconnect(oldChatWriteJob) }
+                runCatching { oldChatWriteWebSocket?.disconnect(oldChatWriteJob) }
+                runCatching {
+                    if (oldModerationEventSubListener != null && !oldModerationEventSubChannelId.isNullOrBlank()) {
+                        moderationEventSubManager.unregister(oldModerationEventSubChannelId, oldModerationEventSubListener)
+                    }
                 }
-                oldHermesWebSocket?.disconnect(oldPubSubJob)
-                oldStvEventApi?.disconnect(oldStvEventApiJob)
+                runCatching { oldHermesWebSocket?.disconnect(oldPubSubJob) }
+                runCatching { oldStvEventApi?.disconnect(oldStvEventApiJob) }
             }
         }
     }
