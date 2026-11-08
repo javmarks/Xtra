@@ -541,6 +541,30 @@ class ChatViewModel(
                         emptyList()
                     }
                     sharedChatParticipantUsers.value = users
+
+                    // A session/profile response can arrive after chat messages. Attach
+                    // the batched profile results to those messages in one pass so
+                    // All Chats does not leave early rows showing initials indefinitely.
+                    val usersById = users.associateBy { it.id }
+                    var changedMessages = false
+                    synchronized(chatMessages) {
+                        chatMessages.forEach { chatMessage ->
+                            val sourceId = chatMessage.sourceRoomId
+                            val user = sourceId?.let(usersById::get)
+                            val imageUrl = user?.profileImageURL?.takeIf { it.isNotBlank() }
+                            if (imageUrl != null &&
+                                (chatMessage.sourceChannelImageUrl != imageUrl ||
+                                    chatMessage.sourceChannelName.isNullOrBlank())
+                            ) {
+                                chatMessage.sourceChannelImageUrl = imageUrl
+                                chatMessage.sourceChannelName = user.displayName ?: user.login
+                                changedMessages = true
+                            }
+                        }
+                    }
+                    if (changedMessages) {
+                        reloadMessages.value = reloadMessages.value + 1
+                    }
                     // Do not stop after the first successful profile: keep retrying
                     // while any Shared Chat participant is still missing an avatar.
                     val allProfilesLoaded = participantIds.all { participantId ->
