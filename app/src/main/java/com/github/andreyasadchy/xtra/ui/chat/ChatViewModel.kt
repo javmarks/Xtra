@@ -489,6 +489,19 @@ class ChatViewModel(
                     (sharedChatParticipants.value + sourceChannelId).distinct()
                 sharedChatParticipantUsers.value =
                     (sharedChatParticipantUsers.value.filterNot { it.id == sourceChannelId } + user)
+                // Attach the resolved broadcaster identity to messages already received
+                // from this source so RecyclerView can redraw their source avatar.
+                var changedMessages = false
+                synchronized(chatMessages) {
+                    chatMessages.forEach { chatMessage ->
+                        if (chatMessage.sourceRoomId == sourceChannelId) {
+                            chatMessage.sourceChannelImageUrl = user.profileImageURL
+                            chatMessage.sourceChannelName = user.displayName ?: user.login
+                            changedMessages = true
+                        }
+                    }
+                }
+                if (changedMessages) reloadMessages.value = reloadMessages.value + 1
             } catch (_: Exception) {
                 resolvedSharedChatSourceIds.remove(sourceChannelId)
             }
@@ -2387,9 +2400,19 @@ class ChatViewModel(
     }
 
     private suspend fun onChatMessage(message: ChatMessage, networkLibrary: String?, isLoggedIn: Boolean, accountId: String?, channelId: String?) {
-        // Shared Chat IRC tags identify the real source broadcaster. Resolve that ID
-        // directly instead of relying only on the session participant list.
-        loadSharedChatSourceProfile(message.sourceRoomId ?: message.roomId)
+        // Twitch supplies source-room-id for messages mirrored from another
+        // broadcaster in a native Shared Chat session. Ordinary channel messages
+        // (including the primary channel's own messages) keep their existing layout.
+        val sourceChannelId = message.sourceRoomId
+        if (!sourceChannelId.isNullOrBlank() && sourceChannelId != channelId) {
+            val knownProfile = sharedChatParticipantUsers.value.firstOrNull { it.id == sourceChannelId }
+            if (knownProfile != null) {
+                message.sourceChannelImageUrl = knownProfile.profileImageURL
+                message.sourceChannelName = knownProfile.displayName ?: knownProfile.login
+            } else {
+                loadSharedChatSourceProfile(sourceChannelId)
+            }
+        }
         onMessage(message)
         addChatter(message.userName)
         if (isLoggedIn && !accountId.isNullOrBlank() && message.userId == accountId) {
