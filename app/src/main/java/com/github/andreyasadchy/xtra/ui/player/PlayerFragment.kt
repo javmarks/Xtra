@@ -443,7 +443,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                         xVelocity < -1500 -> {
                             isAnimating = true
                             slidingLayout.animate().apply {
-                                translationX(slidingLayout.translationX - (slidingLayout.width * slidingLayout.scaleX))
+                                translationX(-slidingLayout.right.toFloat())
                                 setDuration(250L)
                                 setListener(object : AnimatorListenerAdapter() {
                                     override fun onAnimationEnd(animation: Animator) {
