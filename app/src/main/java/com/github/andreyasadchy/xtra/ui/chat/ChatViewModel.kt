@@ -2428,12 +2428,14 @@ class ChatViewModel(
         // broadcaster in a native Shared Chat session. Ordinary channel messages
         // (including the primary channel's own messages) keep their existing layout.
         val sourceChannelId = message.sourceRoomId
-        if (!sourceChannelId.isNullOrBlank() && sourceChannelId != channelId) {
+        if (!sourceChannelId.isNullOrBlank()) {
             val knownProfile = sharedChatParticipantUsers.value.firstOrNull { it.id == sourceChannelId }
-            if (knownProfile != null) {
+            if (knownProfile != null && sharedChatParticipants.value.contains(sourceChannelId)) {
+                // This also covers the host broadcaster: Twitch can mark host messages
+                // with the host's own source-room-id during a confirmed Shared Chat.
                 message.sourceChannelImageUrl = knownProfile.profileImageURL
                 message.sourceChannelName = knownProfile.displayName ?: knownProfile.login
-            } else {
+            } else if (sourceChannelId != channelId) {
                 loadSharedChatSourceProfile(sourceChannelId)
             }
         }
