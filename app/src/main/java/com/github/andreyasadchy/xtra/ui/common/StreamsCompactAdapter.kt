@@ -15,6 +15,7 @@ import androidx.navigation.fragment.findNavController
 import androidx.paging.PagingDataAdapter
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
+import kotlinx.coroutines.Job
 import coil3.imageLoader
 import coil3.request.ImageRequest
 import coil3.request.crossfade
@@ -55,6 +56,19 @@ class StreamsCompactAdapter(
 
     override fun onBindViewHolder(holder: PagingViewHolder, position: Int) {
         holder.bind(getItem(position))
+        if (holder.itemView.isAttachedToWindow) {
+            holder.loadSharedChatParticipants()
+        }
+    }
+
+    override fun onViewAttachedToWindow(holder: PagingViewHolder) {
+        super.onViewAttachedToWindow(holder)
+        holder.loadSharedChatParticipants()
+    }
+
+    override fun onViewRecycled(holder: PagingViewHolder) {
+        holder.clearSharedChatParticipants()
+        super.onViewRecycled(holder)
     }
 
     inner class PagingViewHolder(
@@ -62,9 +76,39 @@ class StreamsCompactAdapter(
         private val fragment: Fragment,
         private val showGame: Boolean,
     ) : RecyclerView.ViewHolder(binding.root) {
+        private var boundBroadcasterId: String? = null
+        private var sharedChatJob: Job? = null
+
+        fun loadSharedChatParticipants() {
+            val broadcasterId = boundBroadcasterId ?: return
+            if (!itemView.isAttachedToWindow || sharedChatJob?.isActive == true) return
+            sharedChatJob = SharedChatStreamAvatars.load(
+                fragment,
+                broadcasterId,
+                binding.sharedChatAvatars
+            ) {
+                boundBroadcasterId == broadcasterId && itemView.isAttachedToWindow
+            }
+        }
+
+        fun clearSharedChatParticipants() {
+            sharedChatJob?.cancel()
+            sharedChatJob = null
+            boundBroadcasterId = null
+            binding.sharedChatAvatars.removeAllViews()
+            binding.sharedChatAvatars.visibility = View.GONE
+        }
+
         fun bind(item: Stream?) {
             with(binding) {
                 if (item != null) {
+                    if (boundBroadcasterId != item.channelId) {
+                        sharedChatJob?.cancel()
+                        sharedChatJob = null
+                        boundBroadcasterId = item.channelId
+                        sharedChatAvatars.removeAllViews()
+                        sharedChatAvatars.visibility = View.GONE
+                    }
                     val context = fragment.requireContext()
                     val channelListener: (View) -> Unit = {
                         fragment.findNavController().navigate(
