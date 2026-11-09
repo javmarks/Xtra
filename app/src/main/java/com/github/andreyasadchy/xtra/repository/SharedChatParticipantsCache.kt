@@ -24,6 +24,7 @@ class SharedChatParticipantsCache(
 
     private val cache = LinkedHashMap<String, Entry>(16, 0.75f, true)
     private val locks = ConcurrentHashMap<String, Mutex>()
+    private val generations = ConcurrentHashMap<String, Long>()
     private val requests = Semaphore(2)
 
     suspend fun getParticipants(
@@ -40,6 +41,7 @@ class SharedChatParticipantsCache(
             readCache(broadcasterId)?.let { return@withLock it }
 
             requests.withPermit {
+                val generation = generations[broadcasterId] ?: 0L
                 val session = helixRepository.getSharedChatSession(
                     networkLibrary,
                     headers,
@@ -47,7 +49,9 @@ class SharedChatParticipantsCache(
                 ).data.firstOrNull()
 
                 if (session == null) {
-                    writeCache(broadcasterId, emptyList(), NEGATIVE_TTL_MS)
+                    if ((generations[broadcasterId] ?: 0L) == generation) {
+                        writeCache(broadcasterId, emptyList(), NEGATIVE_TTL_MS)
+                    }
                     return@withPermit emptyList()
                 }
 
@@ -69,6 +73,15 @@ class SharedChatParticipantsCache(
                 writeCache(broadcasterId, users, CACHE_TTL_MS)
                 users
             }
+        }
+    }
+
+    /** Force the next stream-list bind to fetch current session participants. */
+    fun invalidate(broadcasterId: String) {
+        if (broadcasterId.isBlank()) return
+        generations[broadcasterId] = (generations[broadcasterId] ?: 0L) + 1L
+        synchronized(cache) {
+            cache.remove(broadcasterId)
         }
     }
 
