@@ -542,7 +542,12 @@ class ChatViewModel(
                     } else {
                         emptyList()
                     }
-                    sharedChatParticipantUsers.value = users
+                    // Keep last-known-good profiles when Twitch temporarily returns a partial
+                    // users response; missing profiles can still be resolved individually.
+                    sharedChatParticipantUsers.value =
+                        (sharedChatParticipantUsers.value.filterNot { existing ->
+                            users.any { it.id == existing.id }
+                        } + users)
 
                     // A session/profile response can arrive after chat messages. Attach
                     // the batched profile results to those messages in one pass so
@@ -574,10 +579,8 @@ class ChatViewModel(
                     }
                     if (allProfilesLoaded) return@launch
                 } catch (_: Exception) {
-                    if (attempt == 2) {
-                        sharedChatParticipants.value = emptyList()
-                        sharedChatParticipantUsers.value = emptyList()
-                    }
+                    // A failed refresh must not erase profiles already attached to chat messages.
+                    // Keep the last-known-good data and let the next reconnect retry.
                 }
             }
         }
