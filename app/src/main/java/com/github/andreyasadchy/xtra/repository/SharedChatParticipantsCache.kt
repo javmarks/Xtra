@@ -63,14 +63,18 @@ class SharedChatParticipantsCache(
                 }.distinct()
 
                 if (participantIds.isEmpty()) {
-                    writeCache(broadcasterId, emptyList(), NEGATIVE_TTL_MS)
+                    if ((generations[broadcasterId] ?: 0L) == generation) {
+                        writeCache(broadcasterId, emptyList(), NEGATIVE_TTL_MS)
+                    }
                     return@withPermit emptyList()
                 }
 
                 val users = participantIds.chunked(100).flatMap { ids ->
                     helixRepository.getUsers(networkLibrary, headers, ids = ids).data
                 }
-                writeCache(broadcasterId, users, CACHE_TTL_MS)
+                if ((generations[broadcasterId] ?: 0L) == generation) {
+                    writeCache(broadcasterId, users, CACHE_TTL_MS)
+                }
                 users
             }
         }
