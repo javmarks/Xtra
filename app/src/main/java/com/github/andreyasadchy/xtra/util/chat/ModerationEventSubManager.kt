@@ -87,6 +87,10 @@ class ModerationEventSubManager {
             listenerFor(event)?.onModerate(event, timestamp)
         }
 
+        override suspend fun onSharedChat(event: JSONObject, subscriptionType: String) {
+            listenerFor(event)?.onSharedChat(event, subscriptionType)
+        }
+
         override suspend fun onDisconnect(message: String, fullMsg: String?) {
             val active = synchronized(lock) {
                 this@ModerationEventSubManager.sessionId = null
