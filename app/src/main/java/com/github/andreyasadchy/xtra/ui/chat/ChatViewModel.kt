@@ -1913,6 +1913,9 @@ class ChatViewModel(
         override suspend fun onWelcomeMessage(sessionId: String) {
             val subscriptions = if (moderationOnly) listOf(
                 Triple("channel.moderate", "2", true),
+                Triple("channel.shared_chat.begin", "1", false),
+                Triple("channel.shared_chat.update", "1", false),
+                Triple("channel.shared_chat.end", "1", false),
             ) else listOf(
                 Triple("channel.chat.clear", "1", false),
                 Triple("channel.chat.message", "1", false),
@@ -1984,6 +1987,15 @@ class ChatViewModel(
 
         override suspend fun onRoomState(event: JSONObject, timestamp: String?) {
             roomState.value = EventSubUtils.parseRoomState(event)
+        }
+
+        override suspend fun onSharedChat(event: JSONObject, subscriptionType: String) {
+            // Refresh only this broadcaster's participant state when Twitch reports
+            // a Shared Chat session starting, changing, or ending.
+            if (moderationOnly && event.optString("broadcaster_user_id") == channelId) {
+                if (subscriptionType == "channel.shared_chat.end") delay(500L)
+                loadSharedChatParticipants(channelId)
+            }
         }
 
         override suspend fun onModerate(event: JSONObject, timestamp: String?) {
