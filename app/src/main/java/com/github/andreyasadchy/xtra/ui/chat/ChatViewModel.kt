@@ -1926,7 +1926,10 @@ class ChatViewModel(
             subscriptions.forEach { (type, version, moderatorCondition) ->
                 viewModelScope.launch {
                     try {
-                        helixRepository.createEventSubSubscription(networkLibrary, helixHeaders, accountId, channelId, type, sessionId, version, moderatorCondition)?.let {
+                        helixRepository.createEventSubSubscription(
+                            networkLibrary, helixHeaders, accountId, channelId, type, sessionId, version,
+                            moderatorCondition, broadcasterOnlyCondition = type.startsWith("channel.shared_chat.")
+                        )?.let {
                             if (type != "channel.moderate") onMessage(ChatMessage(systemMsg = it))
                         }
                     } catch (e: Exception) {
