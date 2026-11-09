@@ -41,7 +41,7 @@ class SharedChatParticipantsCache(
             readCache(broadcasterId)?.let { return@withLock it }
 
             requests.withPermit {
-                val generation = generations[broadcasterId] ?: 0L
+                val generation = synchronized(cache) { generations[broadcasterId] ?: 0L }
                 val session = helixRepository.getSharedChatSession(
                     networkLibrary,
                     headers,
@@ -49,9 +49,7 @@ class SharedChatParticipantsCache(
                 ).data.firstOrNull()
 
                 if (session == null) {
-                    if ((generations[broadcasterId] ?: 0L) == generation) {
-                        writeCache(broadcasterId, emptyList(), NEGATIVE_TTL_MS)
-                    }
+                    writeCacheIfCurrent(broadcasterId, emptyList(), NEGATIVE_TTL_MS, generation)
                     return@withPermit emptyList()
                 }
 
@@ -63,18 +61,14 @@ class SharedChatParticipantsCache(
                 }.distinct()
 
                 if (participantIds.isEmpty()) {
-                    if ((generations[broadcasterId] ?: 0L) == generation) {
-                        writeCache(broadcasterId, emptyList(), NEGATIVE_TTL_MS)
-                    }
+                    writeCacheIfCurrent(broadcasterId, emptyList(), NEGATIVE_TTL_MS, generation)
                     return@withPermit emptyList()
                 }
 
                 val users = participantIds.chunked(100).flatMap { ids ->
                     helixRepository.getUsers(networkLibrary, headers, ids = ids).data
                 }
-                if ((generations[broadcasterId] ?: 0L) == generation) {
-                    writeCache(broadcasterId, users, CACHE_TTL_MS)
-                }
+                writeCacheIfCurrent(broadcasterId, users, CACHE_TTL_MS, generation)
                 users
             }
         }
@@ -83,9 +77,17 @@ class SharedChatParticipantsCache(
     /** Force the next stream-list bind to fetch current session participants. */
     fun invalidate(broadcasterId: String) {
         if (broadcasterId.isBlank()) return
-        generations[broadcasterId] = (generations[broadcasterId] ?: 0L) + 1L
         synchronized(cache) {
+            generations[broadcasterId] = (generations[broadcasterId] ?: 0L) + 1L
             cache.remove(broadcasterId)
+        }
+    }
+
+    private fun writeCacheIfCurrent(key: String, users: List<User>, ttlMs: Long, generation: Long) {
+        synchronized(cache) {
+            if ((generations[key] ?: 0L) == generation) {
+                writeCache(key, users, ttlMs)
+            }
         }
     }
 
