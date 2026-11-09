@@ -115,6 +115,8 @@ class ChatViewModel(
     private var predictionTimeoutJob: Job? = null
     private var pinnedChatExpiryJob: Job? = null
     private var started = false
+    // Ignore the first ROOMSTATE snapshot after each connection; it is a baseline, not a mode change.
+    private var roomStateInitialized = false
     private var rendererResourcesLoaded = false
     var autoReconnect = true
 
@@ -1492,6 +1494,7 @@ class ChatViewModel(
         loadModerationLogs(channelId)
         stopLiveChat()
         started = true
+        roomStateInitialized = false
         val gqlHeaders = TwitchApiHelper.getGQLHeaders(applicationContext, true)
         val helixHeaders = TwitchApiHelper.getHelixHeaders(applicationContext)
         val networkLibrary = applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP)
@@ -1818,7 +1821,9 @@ class ChatViewModel(
             // Twitch sends a full ROOMSTATE snapshot on connection and can repeat
             // unchanged fields alongside a single mode change. Treat the first snapshot
             // as a baseline and only log fields that actually changed afterwards.
-            val modeChanges = buildList {
+            // The first ROOMSTATE after connecting/reconnecting is a snapshot of the
+            // current settings. Do not report differences from the previous socket session.
+            val modeChanges = if (roomStateInitialized) buildList {
                 emote?.takeIf { previous?.emote != null && previous.emote != it }?.let {
                     add(if (it == "1") "Emote-only enabled" else "Emote-only disabled")
                 }
@@ -1834,7 +1839,8 @@ class ChatViewModel(
                 subs?.takeIf { previous?.subs != null && previous.subs != it }?.let {
                     add(if (it == "1") "Subscriber-only mode enabled" else "Subscriber-only mode disabled")
                 }
-            }
+            } else emptyList()
+            roomStateInitialized = true
             if (modeChanges.isNotEmpty()) {
                 saveModerationLog(channelId, buildString {
                     append(java.text.DateFormat.getDateTimeInstance().format(java.util.Date()))
