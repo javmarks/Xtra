@@ -15,6 +15,9 @@ class ModerationEventSubManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
     private val listeners = LinkedHashMap<String, EventSubWebSocket.Listener>()
+    // Keep subscriptions alive for the lifetime of the shared socket session.
+    // Reopening a channel replaces its listener, but must not create duplicate subscriptions.
+    private val subscribedChannels = HashSet<String>()
     private var socket: EventSubWebSocket? = null
     private var socketJob: Job? = null
     private var sessionId: String? = null
@@ -24,7 +27,9 @@ class ModerationEventSubManager {
             listeners[channelId] = listener
             val activeSessionId = sessionId
             if (activeSessionId != null) {
-                scope.launch { listener.onWelcomeMessage(activeSessionId) }
+                if (subscribedChannels.add(channelId)) {
+                    scope.launch { listener.onWelcomeMessage(activeSessionId) }
+                }
             } else if (socket == null) {
                 val sharedSocket = EventSubWebSocket(SharedListener())
                 socket = sharedSocket
@@ -40,6 +45,7 @@ class ModerationEventSubManager {
             if (listeners[channelId] !== listener) return
             listeners.remove(channelId)
             if (listeners.isNotEmpty()) return
+            subscribedChannels.clear()
             oldSocket = socket
             oldJob = socketJob
             socket = null
@@ -62,6 +68,8 @@ class ModerationEventSubManager {
         override suspend fun onWelcomeMessage(sessionId: String) {
             val active = synchronized(lock) {
                 this@ModerationEventSubManager.sessionId = sessionId
+                subscribedChannels.clear()
+                subscribedChannels.addAll(listeners.keys)
                 listeners.values.toList()
             }
             active.forEach { it.onWelcomeMessage(sessionId) }
@@ -94,6 +102,7 @@ class ModerationEventSubManager {
         override suspend fun onDisconnect(message: String, fullMsg: String?) {
             val active = synchronized(lock) {
                 this@ModerationEventSubManager.sessionId = null
+                subscribedChannels.clear()
                 listeners.values.toList()
             }
             active.forEach { it.onDisconnect(message, fullMsg) }
