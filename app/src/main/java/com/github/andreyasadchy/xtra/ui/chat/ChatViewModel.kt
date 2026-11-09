@@ -37,6 +37,7 @@ import com.github.andreyasadchy.xtra.model.helix.user.User
 import com.github.andreyasadchy.xtra.model.gql.chat.PinnedChatResponse
 import com.github.andreyasadchy.xtra.model.helix.chat.PinnedChatMessageResponse
 import com.github.andreyasadchy.xtra.repository.GraphQLRepository
+import com.github.andreyasadchy.xtra.XtraApp
 import com.github.andreyasadchy.xtra.repository.HelixRepository
 import com.github.andreyasadchy.xtra.repository.PlayerRepository
 import com.github.andreyasadchy.xtra.util.C
@@ -1996,6 +1997,10 @@ class ChatViewModel(
             // Refresh only this broadcaster's participant state when Twitch reports
             // a Shared Chat session starting, changing, or ending.
             if (moderationOnly && event.optString("broadcaster_user_id") == channelId) {
+                // Invalidate the stream-list cache as well as refreshing the open chat.
+                // A generation guard prevents an older in-flight request from restoring stale data.
+                (applicationContext.applicationContext as? XtraApp)
+                    ?.xtraModule?.sharedChatParticipantsCache?.invalidate(channelId.orEmpty())
                 if (subscriptionType == "channel.shared_chat.end") delay(500L)
                 loadSharedChatParticipants(channelId)
             }
