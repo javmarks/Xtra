@@ -49,6 +49,7 @@ class WebSocket(
     private var nextFrameCompressed = false
     private var connectionAttempt = 0
     private var delayReconnect = false
+    private var reconnectDelaySeconds = 60L
     var coroutineScope: CoroutineScope? = null
 
     suspend fun start() = withContext(Dispatchers.IO) {
@@ -61,12 +62,13 @@ class WebSocket(
                     if (delayReconnect) {
                         delayReconnect = false
                         if (connectionAttempt >= 20) return@withContext
-                        delay(1.minutes)
+                        delay(reconnectDelaySeconds.seconds)
                         continue
                     }
                     return@withContext
                 }
                 connectionAttempt = 0
+                reconnectDelaySeconds = 60L
                 var end = false
                 while (!end) {
                     end = readNextFrame()
@@ -88,7 +90,7 @@ class WebSocket(
             }
             if (delayReconnect) {
                 delayReconnect = false
-                delay(1.minutes)
+                delay(reconnectDelaySeconds.seconds)
             } else {
                 delay(1.seconds)
             }
@@ -133,6 +135,11 @@ class WebSocket(
             // Close it and let start() perform a paced retry instead of reading
             // the HTTP response as if it were WebSocket data.
             delayReconnect = true
+            reconnectDelaySeconds = if (line.startsWith("HTTP/1.1 429", true)) {
+                (60L shl (connectionAttempt - 1).coerceIn(0, 4)).coerceAtMost(900L)
+            } else {
+                60L
+            }
             return@withContext true
         }
         line = reader.readLine()
