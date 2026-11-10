@@ -157,7 +157,6 @@ class ChatReadWebSocketManager {
                 login = userLogin
                 token = userToken
                 channels = registrations.values.map { it.channelLogin }.distinctBy { it.lowercase() }
-                connected = true
             }
             if (!token.isNullOrBlank() && !login.isNullOrBlank()) {
                 webSocket.write("PASS oauth:$token")
@@ -166,6 +165,16 @@ class ChatReadWebSocketManager {
                 webSocket.write("NICK justinfan${Random.nextInt(1000, 10000)}")
             }
             channels.forEach { webSocket.write("JOIN #$it") }
+            val additionalChannels = synchronized(lock) {
+                if (this@ChatReadWebSocketManager.webSocket !== webSocket) return
+                val alreadyJoined = channels.map { it.lowercase() }.toSet()
+                val additional = registrations.values.map { it.channelLogin }
+                    .distinctBy { it.lowercase() }
+                    .filter { it.lowercase() !in alreadyJoined }
+                connected = true
+                additional
+            }
+            additionalChannels.forEach { webSocket.write("JOIN #$it") }
             val current = synchronized(lock) { registrations.values.toList() }
             current.forEach {
                 it.readListener.onConnect()
