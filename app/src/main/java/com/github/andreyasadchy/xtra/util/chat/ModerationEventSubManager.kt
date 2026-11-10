@@ -25,9 +25,19 @@ class ModerationEventSubManager {
     // several seconds; starting a replacement before it finishes can briefly
     // leave multiple transports alive for the same user/client pair.
     private var disconnecting = false
+    private var subscriptionErrorReported = false
+
+    /** Allow only one subscription-failure row for the lifetime of a shared socket. */
+    fun shouldReportSubscriptionError(): Boolean = synchronized(lock) {
+        if (subscriptionErrorReported) false else {
+            subscriptionErrorReported = true
+            true
+        }
+    }
 
     private fun startSocketLocked() {
         if (socket != null || disconnecting || listeners.isEmpty()) return
+        subscriptionErrorReported = false
         val sharedSocket = EventSubWebSocket(SharedListener())
         socket = sharedSocket
         socketJob = sharedSocket.connect(scope)
