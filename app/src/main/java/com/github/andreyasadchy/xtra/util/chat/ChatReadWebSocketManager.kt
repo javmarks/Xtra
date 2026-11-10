@@ -25,7 +25,7 @@ class ChatReadWebSocketManager {
 
     private val lock = Any()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val registrations = LinkedHashMap<String, Registration>()
+    private val registrations = LinkedHashMap<Job, Registration>()
     private var webSocket: WebSocket? = null
     private var connectionJob: Job? = null
     private var connected = false
@@ -41,15 +41,16 @@ class ChatReadWebSocketManager {
         readListener: ChatReadWebSocket.Listener,
         writeListener: ChatReadWebSocket.Listener?,
     ): Job {
-        val key = channelLogin.lowercase()
         val registration = Registration(channelLogin, readListener, writeListener)
         var shouldConnect = false
         var shouldJoin = false
         var currentSocket: WebSocket? = null
 
         synchronized(lock) {
-            registrations.remove(key)?.job?.cancel()
-            registrations[key] = registration
+            val channelAlreadyRegistered = registrations.values.any {
+                it.channelLogin.equals(channelLogin, ignoreCase = true)
+            }
+            registrations[registration.job] = registration
             if (webSocket == null || connectionJob?.isActive != true) {
                 this.userLogin = userLogin
                 this.userToken = userToken
@@ -58,7 +59,7 @@ class ChatReadWebSocketManager {
                 this.userLogin = userLogin
                 this.userToken = userToken
                 shouldConnect = true
-            } else if (connected) {
+            } else if (connected && !channelAlreadyRegistered) {
                 shouldJoin = true
                 currentSocket = webSocket
             }
@@ -73,21 +74,23 @@ class ChatReadWebSocketManager {
     }
 
     fun unregister(channelLogin: String, registrationJob: Job?) {
-        val key = channelLogin.lowercase()
         var socketToPart: WebSocket? = null
         var shouldStop = false
+        var shouldPart = false
         synchronized(lock) {
-            val registration = registrations[key]
-            if (registration != null && (registrationJob == null || registration.job === registrationJob)) {
-                registrations.remove(key)
+            val registration = registrationJob?.let { registrations.remove(it) }
+            if (registration != null) {
                 registration.job.cancel()
-                if (connected) socketToPart = webSocket
                 shouldStop = registrations.isEmpty()
+                shouldPart = !shouldStop && registrations.values.none {
+                    it.channelLogin.equals(channelLogin, ignoreCase = true)
+                }
+                if (connected && shouldPart) socketToPart = webSocket
             }
         }
         if (shouldStop) {
             stopConnection()
-        } else {
+        } else if (shouldPart) {
             scope.launch { socketToPart?.write("PART #$channelLogin") }
         }
     }
@@ -134,7 +137,7 @@ class ChatReadWebSocketManager {
                 if (this@ChatReadWebSocketManager.webSocket !== webSocket) return
                 login = userLogin
                 token = userToken
-                channels = registrations.values.map { it.channelLogin }.distinct()
+                channels = registrations.values.map { it.channelLogin }.distinctBy { it.lowercase() }
                 connected = true
             }
             if (!token.isNullOrBlank() && !login.isNullOrBlank()) {
@@ -196,7 +199,7 @@ class ChatReadWebSocketManager {
             if (target.isNullOrBlank() || target == "*") {
                 registrations.values.toList()
             } else {
-                listOfNotNull(registrations[target])
+                registrations.values.filter { it.channelLogin.equals(target, ignoreCase = true) }
             }
         }
         recipients.forEach { registration ->
