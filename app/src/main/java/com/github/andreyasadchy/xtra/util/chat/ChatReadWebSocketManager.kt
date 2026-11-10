@@ -34,7 +34,7 @@ class ChatReadWebSocketManager {
     private var pongTimer: Timer? = null
     private var userLogin: String? = null
     private var userToken: String? = null
-    private var last429NoticeAt = 0L
+    private var hasNotified429 = false
 
     fun register(
         channelLogin: String,
@@ -175,6 +175,7 @@ class ChatReadWebSocketManager {
                 additional
             }
             additionalChannels.forEach { webSocket.write("JOIN #$it") }
+            synchronized(lock) { hasNotified429 = false }
             val current = synchronized(lock) { registrations.values.toList() }
             current.forEach {
                 it.readListener.onConnect()
@@ -212,10 +213,11 @@ class ChatReadWebSocketManager {
             // A single shared 429 should not create one duplicate error row per channel,
             // nor repeat the same error on every automatic retry.
             if (message.contains("429", ignoreCase = true) || fullMsg?.contains("429", ignoreCase = true) == true) {
-                val now = System.currentTimeMillis()
+                // Keep one 429 row for the entire outage. Repeated failed
+                // reconnects must never flood every active chat's history.
                 val shouldNotify = synchronized(lock) {
-                    if (now - last429NoticeAt >= 300000L) {
-                        last429NoticeAt = now
+                    if (!hasNotified429) {
+                        hasNotified429 = true
                         true
                     } else false
                 }
