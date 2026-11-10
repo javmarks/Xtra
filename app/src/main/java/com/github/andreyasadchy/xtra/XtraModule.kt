@@ -23,6 +23,7 @@ import com.github.andreyasadchy.xtra.repository.PlayerRepository
 import com.github.andreyasadchy.xtra.repository.RecentSearchesRepository
 import com.github.andreyasadchy.xtra.repository.SavedFiltersRepository
 import com.github.andreyasadchy.xtra.util.chat.ModerationEventSubManager
+import com.github.andreyasadchy.xtra.util.chat.ChatReadWebSocketManager
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -92,6 +93,8 @@ class XtraModule(application: Application) {
     }
 
     val moderationEventSubManager by lazy { ModerationEventSubManager() }
+
+    val chatReadWebSocketManager by lazy { ChatReadWebSocketManager() }
 
     val json by lazy {
         Json { ignoreUnknownKeys = true }
