@@ -96,7 +96,7 @@ class ChatReadWebSocketManager {
     }
 
     private fun restartConnection() {
-        stopConnection()
+        stopConnection(force = true)
         synchronized(lock) {
             if (registrations.isEmpty()) return
             val socket = WebSocket("wss://irc-ws.chat.twitch.tv", SocketListener())
@@ -107,10 +107,11 @@ class ChatReadWebSocketManager {
         }
     }
 
-    private fun stopConnection() {
+    private fun stopConnection(force: Boolean = false) {
         val oldSocket: WebSocket?
         val oldJob: Job?
         synchronized(lock) {
+            if (!force && registrations.isNotEmpty()) return
             connected = false
             oldSocket = webSocket
             oldJob = connectionJob
@@ -121,9 +122,9 @@ class ChatReadWebSocketManager {
             pingTimer = null
             pongTimer = null
         }
+        oldJob?.cancel()
         scope.launch(Dispatchers.IO) {
             runCatching { oldSocket?.disconnect() }
-            oldJob?.cancel()
         }
     }
 
