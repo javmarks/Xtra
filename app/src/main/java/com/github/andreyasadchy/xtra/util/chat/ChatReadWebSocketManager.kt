@@ -111,48 +111,46 @@ class ChatReadWebSocketManager {
             if (restartJob?.isActive == true) return
             restartJob = scope.launch {
                 lifecycleMutex.withLock {
-                val oldSocket: WebSocket?
-                val oldJob: Job?
-                synchronized(lock) {
-                    connected = false
-                    oldSocket = webSocket
-                    oldJob = connectionJob
-                    webSocket = null
-                    connectionJob = null
-                    pingTimer?.cancel()
-                    pongTimer?.cancel()
-                    pingTimer = null
-                    pongTimer = null
-                }
-
-                // Wait for the old transport's close handshake before opening
-                // another one. Cancelling the reader alone does not close its
-                // underlying socket.
-                oldJob?.cancel()
-                runCatching { oldSocket?.disconnect() }
-
-                synchronized(lock) {
-                    if (registrations.isEmpty() || connectionJob?.isActive == true) {
-                        return@withLock
+                    val oldSocket: WebSocket?
+                    val oldJob: Job?
+                    synchronized(lock) {
+                        connected = false
+                        oldSocket = webSocket
+                        oldJob = connectionJob
+                        webSocket = null
+                        connectionJob = null
+                        pingTimer?.cancel()
+                        pongTimer?.cancel()
+                        pingTimer = null
+                        pongTimer = null
                     }
-                    connected = false
-                    connectionJob = scope.launch(Dispatchers.IO) {
-                        while (isActive && synchronized(lock) { registrations.isNotEmpty() }) {
-                            val socket = WebSocket("wss://irc-ws.chat.twitch.tv", SocketListener())
-                            synchronized(lock) {
-                                webSocket = socket
-                                connected = false
-                            }
-                            socket.coroutineScope = scope
-                            runCatching { socket.start() }
-                            synchronized(lock) {
-                                if (webSocket === socket) {
-                                    webSocket = null
+
+                    oldJob?.cancel()
+                    runCatching { oldSocket?.disconnect() }
+
+                    synchronized(lock) {
+                        if (registrations.isEmpty() || connectionJob?.isActive == true) {
+                            return@withLock
+                        }
+                        connected = false
+                        connectionJob = scope.launch(Dispatchers.IO) {
+                            while (isActive && synchronized(lock) { registrations.isNotEmpty() }) {
+                                val socket = WebSocket("wss://irc-ws.chat.twitch.tv", SocketListener())
+                                synchronized(lock) {
+                                    webSocket = socket
                                     connected = false
                                 }
-                            }
-                            if (isActive && synchronized(lock) { registrations.isNotEmpty() }) {
-                                delay(5000)
+                                socket.coroutineScope = scope
+                                runCatching { socket.start() }
+                                synchronized(lock) {
+                                    if (webSocket === socket) {
+                                        webSocket = null
+                                        connected = false
+                                    }
+                                }
+                                if (isActive && synchronized(lock) { registrations.isNotEmpty() }) {
+                                    delay(5000)
+                                }
                             }
                         }
                     }
