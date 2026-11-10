@@ -21,6 +21,17 @@ class ModerationEventSubManager {
     private var socket: EventSubWebSocket? = null
     private var socketJob: Job? = null
     private var sessionId: String? = null
+    // Keep shutdown and restart serialized. EventSub's close handshake can take
+    // several seconds; starting a replacement before it finishes can briefly
+    // leave multiple transports alive for the same user/client pair.
+    private var disconnecting = false
+
+    private fun startSocketLocked() {
+        if (socket != null || disconnecting || listeners.isEmpty()) return
+        val sharedSocket = EventSubWebSocket(SharedListener())
+        socket = sharedSocket
+        socketJob = sharedSocket.connect(scope)
+    }
 
     fun register(channelId: String, listener: EventSubWebSocket.Listener) {
         synchronized(lock) {
@@ -30,10 +41,8 @@ class ModerationEventSubManager {
                 if (subscribedChannels.add(channelId)) {
                     scope.launch { listener.onWelcomeMessage(activeSessionId) }
                 }
-            } else if (socket == null) {
-                val sharedSocket = EventSubWebSocket(SharedListener())
-                socket = sharedSocket
-                socketJob = sharedSocket.connect(scope)
+            } else {
+                startSocketLocked()
             }
         }
     }
@@ -51,9 +60,20 @@ class ModerationEventSubManager {
             socket = null
             socketJob = null
             sessionId = null
+            disconnecting = true
         }
         scope.launch {
-            oldSocket?.disconnect(oldJob)
+            try {
+                oldSocket?.disconnect(oldJob)
+            } finally {
+                synchronized(lock) {
+                    disconnecting = false
+                    // A stream may have been reopened while the old socket was
+                    // shutting down. Start exactly one replacement only after
+                    // the previous transport has completed its close.
+                    startSocketLocked()
+                }
+            }
         }
     }
 
