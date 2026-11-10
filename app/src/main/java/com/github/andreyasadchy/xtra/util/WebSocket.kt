@@ -34,7 +34,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 class WebSocket(
-    private val url: String,
+    @Volatile private var url: String,
     private val listener: Listener,
     private val headers: Map<String, String>? = null,
     private val sendPings: Boolean = false,
@@ -51,6 +51,13 @@ class WebSocket(
     private var delayReconnect = false
     private var reconnectDelaySeconds = 60L
     var coroutineScope: CoroutineScope? = null
+
+    /** Use Twitch's EventSub session_reconnect URL on the next socket attempt. */
+    fun reconnectTo(url: String) {
+        if (url.startsWith("wss://")) {
+            this.url = url
+        }
+    }
 
     suspend fun start() = withContext(Dispatchers.IO) {
         while (isActive) {
