@@ -43,6 +43,7 @@ import com.github.andreyasadchy.xtra.util.C
 import com.github.andreyasadchy.xtra.util.TwitchApiHelper
 import com.github.andreyasadchy.xtra.util.chat.ChatReadIRCSocket
 import com.github.andreyasadchy.xtra.util.chat.ChatReadWebSocket
+import com.github.andreyasadchy.xtra.util.chat.ChatReadWebSocketManager
 import com.github.andreyasadchy.xtra.util.chat.ChatUtils
 import com.github.andreyasadchy.xtra.util.chat.ChatWriteIRCSocket
 import com.github.andreyasadchy.xtra.util.chat.ChatWriteWebSocket
@@ -88,6 +89,7 @@ class ChatViewModel(
     private val playerRepository: PlayerRepository,
     private val json: Json,
     private val moderationEventSubManager: ModerationEventSubManager,
+    private val chatReadWebSocketManager: ChatReadWebSocketManager,
 ) : ViewModel() {
 
     val integrity = MutableSharedFlow<String?>()
@@ -97,6 +99,7 @@ class ChatViewModel(
     private var chatReadWebSocket: ChatReadWebSocket? = null
     private var chatWriteWebSocket: ChatWriteWebSocket? = null
     private var chatReadJob: Job? = null
+    private var sharedChatReadChannelLogin: String? = null
     private var chatWriteJob: Job? = null
     private var eventSub: EventSubWebSocket? = null
     private var moderationEventSubListener: EventSubWebSocket.Listener? = null
@@ -1519,17 +1522,24 @@ class ChatViewModel(
             val gqlToken = gqlHeaders[C.HEADER_TOKEN]?.removePrefix("OAuth ")
             val helixToken = helixHeaders[C.HEADER_TOKEN]?.removePrefix("Bearer ")
             if (applicationContext.prefs().getBoolean(C.CHAT_USE_WEBSOCKET, true)) {
-                chatReadWebSocket = ChatReadWebSocket(channelLogin, ChatReadListener(channelLogin, nameDisplay, showUserNotice, showClearMsg, showClearChat, usePubSub, networkLibrary, isLoggedIn, accountId, channelId))
-                chatReadJob = chatReadWebSocket?.connect(viewModelScope)
-                if (isLoggedIn && (!gqlToken.isNullOrBlank() || !helixHeaders[C.HEADER_TOKEN].isNullOrBlank() && !useApiChatMessages)) {
-                    chatWriteWebSocket = ChatWriteWebSocket(
-                        userLogin = accountLogin,
-                        userToken = gqlToken?.takeIf { it.isNotBlank() } ?: helixToken,
-                        channelLogin = channelLogin,
-                        listener = ChatWriteListener(channelId, showWebSocketDebugInfo)
-                    )
-                    chatWriteJob = chatWriteWebSocket?.connect(viewModelScope)
-                }
+                val readListener = ChatReadListener(
+                    channelLogin, nameDisplay, showUserNotice, showClearMsg, showClearChat,
+                    usePubSub, networkLibrary, isLoggedIn, accountId, channelId
+                )
+                val writeListener = if (isLoggedIn &&
+                    (!gqlToken.isNullOrBlank() || !helixHeaders[C.HEADER_TOKEN].isNullOrBlank() && !useApiChatMessages)
+                ) {
+                    ChatWriteListener(channelId, showWebSocketDebugInfo)
+                } else null
+                sharedChatReadChannelLogin = channelLogin
+                chatReadJob = chatReadWebSocketManager.register(
+                    channelLogin = channelLogin,
+                    userLogin = accountLogin.takeIf { isLoggedIn },
+                    userToken = (gqlToken?.takeIf { it.isNotBlank() } ?: helixToken).takeIf { isLoggedIn },
+                    readListener = readListener,
+                    writeListener = writeListener
+                )
+                chatWriteJob = null
             } else {
                 val useSSL = applicationContext.prefs().getBoolean(C.CHAT_USE_SSL, true)
                 chatReadIRCSocket = ChatReadIRCSocket(useSSL, channelLogin, ChatReadListener(channelLogin, nameDisplay, showUserNotice, showClearMsg, showClearChat, usePubSub, networkLibrary, isLoggedIn, accountId, channelId))
@@ -1628,6 +1638,7 @@ class ChatViewModel(
             val oldChatReadWebSocket = chatReadWebSocket
             val oldChatWriteWebSocket = chatWriteWebSocket
             val oldChatReadJob = chatReadJob
+            val oldSharedChatReadChannelLogin = sharedChatReadChannelLogin
             val oldChatWriteJob = chatWriteJob
             val oldEventSub = eventSub
             val oldModerationEventSubListener = moderationEventSubListener
@@ -1642,6 +1653,7 @@ class ChatViewModel(
             chatReadWebSocket = null
             chatWriteWebSocket = null
             chatReadJob = null
+            sharedChatReadChannelLogin = null
             chatWriteJob = null
             eventSub = null
             moderationEventSubListener = null
@@ -1655,6 +1667,11 @@ class ChatViewModel(
                 // One failed socket close must not abort the remaining cleanup or crash the app.
                 runCatching { oldChatReadIRCSocket?.disconnect(oldChatReadJob) }
                 runCatching { oldChatReadWebSocket?.disconnect(oldChatReadJob) }
+                runCatching {
+                    if (!oldSharedChatReadChannelLogin.isNullOrBlank() && oldChatReadJob != null) {
+                        chatReadWebSocketManager.unregister(oldSharedChatReadChannelLogin, oldChatReadJob)
+                    }
+                }
                 runCatching { oldEventSub?.disconnect(oldChatReadJob) }
                 runCatching { oldChatWriteIRCSocket?.disconnect(oldChatWriteJob) }
                 runCatching { oldChatWriteWebSocket?.disconnect(oldChatWriteJob) }
@@ -3842,7 +3859,7 @@ class ChatViewModel(
             initializer {
                 val application = (this[APPLICATION_KEY] as XtraApp)
                 val xtraModule = application.xtraModule
-                ChatViewModel(application.applicationContext, xtraModule.graphQLRepository, xtraModule.helixRepository, xtraModule.playerRepository, xtraModule.json, xtraModule.moderationEventSubManager)
+                ChatViewModel(application.applicationContext, xtraModule.graphQLRepository, xtraModule.helixRepository, xtraModule.playerRepository, xtraModule.json, xtraModule.moderationEventSubManager, xtraModule.chatReadWebSocketManager)
             }
         }
     }
