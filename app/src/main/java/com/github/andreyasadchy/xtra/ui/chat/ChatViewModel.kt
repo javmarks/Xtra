@@ -1740,6 +1740,9 @@ class ChatViewModel(
         private val channelId: String?,
     ) : ChatReadWebSocket.Listener {
         override suspend fun onConnect() {
+            // Every socket reconnect starts with a fresh ROOMSTATE snapshot.
+            // Do not interpret that baseline as a real mode change.
+            roomStateInitialized = false
             // Do not add a permanent "Connected to" system row for every source
             // channel; these rows flood the merged All Chats timeline.
         }
