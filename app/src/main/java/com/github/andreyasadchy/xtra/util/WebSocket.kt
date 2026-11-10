@@ -58,6 +58,12 @@ class WebSocket(
                 val error = connect()
                 if (error) {
                     close()
+                    if (delayReconnect) {
+                        delayReconnect = false
+                        if (connectionAttempt >= 20) return@withContext
+                        delay(1.minutes)
+                        continue
+                    }
                     return@withContext
                 }
                 connectionAttempt = 0
@@ -123,12 +129,11 @@ class WebSocket(
         if (!line.startsWith("HTTP/1.1 101", true)) {
             val endpoint = url.substringAfter("://").substringBefore("/")
             listener.onDisconnect(this@WebSocket, "$line ($endpoint)")
-            if (line.startsWith("HTTP/1.1 429", true)) {
-                delayReconnect = true
-                return@withContext false
-            } else {
-                return@withContext true
-            }
+            // A rejected HTTP handshake is not a WebSocket frame stream.
+            // Close it and let start() perform a paced retry instead of reading
+            // the HTTP response as if it were WebSocket data.
+            delayReconnect = true
+            return@withContext true
         }
         line = reader.readLine()
         while (!line.isNullOrBlank()) {
