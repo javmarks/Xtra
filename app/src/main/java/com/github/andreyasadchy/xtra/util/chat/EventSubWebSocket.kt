@@ -100,10 +100,18 @@ class EventSubWebSocket(
                             startPongTimer()
                         }
                         "session_reconnect" -> {
-                            //val payload = json.optJSONObject("payload")
-                            //val session = payload?.optJSONObject("session")
-                            //val reconnectUrl = if (session?.isNull("reconnect_url") == false) session.optString("reconnect_url").takeIf { it.isNotBlank() } else null
+                            val payload = json.optJSONObject("payload")
+                            val session = payload?.optJSONObject("session")
+                            val reconnectUrl = if (session?.isNull("reconnect_url") == false) {
+                                session.optString("reconnect_url").takeIf { it.startsWith("wss://") }
+                            } else null
                             pongTimer?.cancel()
+                            // Reuse Twitch's handoff URL instead of opening a fresh
+                            // EventSub session, which would require resubscribing and
+                            // can consume another concurrent transport slot.
+                            if (!reconnectUrl.isNullOrBlank()) {
+                                webSocket.reconnectTo(reconnectUrl)
+                            }
                             webSocket.disconnect()
                         }
                         "session_welcome" -> {
