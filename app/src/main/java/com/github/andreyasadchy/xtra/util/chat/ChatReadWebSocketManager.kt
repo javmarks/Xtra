@@ -5,7 +5,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.Timer
 import kotlin.concurrent.schedule
@@ -33,6 +34,7 @@ class ChatReadWebSocketManager {
     private var pongTimer: Timer? = null
     private var userLogin: String? = null
     private var userToken: String? = null
+    private var last429NoticeAt = 0L
 
     fun register(
         channelLogin: String,
@@ -99,11 +101,27 @@ class ChatReadWebSocketManager {
         stopConnection(force = true)
         synchronized(lock) {
             if (registrations.isEmpty()) return
-            val socket = WebSocket("wss://irc-ws.chat.twitch.tv", SocketListener())
-            webSocket = socket
             connected = false
-            socket.coroutineScope = scope
-            connectionJob = scope.launch(Dispatchers.IO) { socket.start() }
+            connectionJob = scope.launch(Dispatchers.IO) {
+                while (isActive && synchronized(lock) { registrations.isNotEmpty() }) {
+                    val socket = WebSocket("wss://irc-ws.chat.twitch.tv", SocketListener())
+                    synchronized(lock) {
+                        webSocket = socket
+                        connected = false
+                    }
+                    socket.coroutineScope = scope
+                    socket.start()
+                    synchronized(lock) {
+                        if (webSocket === socket) {
+                            webSocket = null
+                            connected = false
+                        }
+                    }
+                    if (isActive && synchronized(lock) { registrations.isNotEmpty() }) {
+                        delay(5000)
+                    }
+                }
+            }
         }
     }
 
@@ -182,9 +200,17 @@ class ChatReadWebSocketManager {
                 if (this@ChatReadWebSocketManager.webSocket === webSocket) connected = false
                 registrations.values.toList()
             }
-            // A single shared 429 should not create one duplicate error row per channel.
+            // A single shared 429 should not create one duplicate error row per channel,
+            // nor repeat the same error on every automatic retry.
             if (message.contains("429", ignoreCase = true) || fullMsg?.contains("429", ignoreCase = true) == true) {
-                current.firstOrNull()?.readListener?.onDisconnect(message, fullMsg)
+                val now = System.currentTimeMillis()
+                val shouldNotify = synchronized(lock) {
+                    if (now - last429NoticeAt >= 300000L) {
+                        last429NoticeAt = now
+                        true
+                    } else false
+                }
+                if (shouldNotify) current.firstOrNull()?.readListener?.onDisconnect(message, fullMsg)
             } else {
                 current.forEach { it.readListener.onDisconnect(message, fullMsg) }
             }
