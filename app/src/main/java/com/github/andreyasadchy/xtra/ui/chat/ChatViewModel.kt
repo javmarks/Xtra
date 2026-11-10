@@ -117,6 +117,7 @@ class ChatViewModel(
     private var usedPredictionId: String? = null
     private var predictionTimeoutJob: Job? = null
     private var pinnedChatExpiryJob: Job? = null
+    private var sharedChatRefreshJob: Job? = null
     private var started = false
     // Ignore the first ROOMSTATE snapshot after each connection; it is a baseline, not a mode change.
     private var roomStateInitialized = false
@@ -202,6 +203,15 @@ class ChatViewModel(
             this.streamId = streamId
             startLiveChat(channelId, channelLogin)
             loadSharedChatParticipants(channelId)
+            // Refresh Shared Chat participants periodically instead of creating three
+            // cost-bearing EventSub subscriptions for every open channel.
+            sharedChatRefreshJob?.cancel()
+            sharedChatRefreshJob = viewModelScope.launch {
+                while (started) {
+                    delay(60_000L)
+                    if (started) loadSharedChatParticipants(channelId)
+                }
+            }
             refreshChannelPointsBalance(channelLogin)
             refreshWatchStreak(channelId)
             refreshPinnedChatMessage(channelId)
@@ -1629,6 +1639,8 @@ class ChatViewModel(
     fun stopLiveChat() {
         if (started) {
             started = false
+            sharedChatRefreshJob?.cancel()
+            sharedChatRefreshJob = null
 
             // Capture the exact connections being stopped before launching asynchronous cleanup.
             // startLiveChat() may immediately install replacement sockets; cleanup must never
@@ -1941,10 +1953,10 @@ class ChatViewModel(
 
         override suspend fun onWelcomeMessage(sessionId: String) {
             val subscriptions = if (moderationOnly) listOf(
+                // Shared Chat participants are refreshed through Get Shared Chat Session.
+                // Avoid per-channel begin/update/end subscriptions consuming the account's
+                // 10-point EventSub WebSocket cost budget.
                 Triple("channel.moderate", "2", true),
-                Triple("channel.shared_chat.begin", "1", false),
-                Triple("channel.shared_chat.update", "1", false),
-                Triple("channel.shared_chat.end", "1", false),
             ) else listOf(
                 Triple("channel.chat.clear", "1", false),
                 Triple("channel.chat.message", "1", false),
