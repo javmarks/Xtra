@@ -8,6 +8,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.Timer
 import kotlin.concurrent.schedule
 import kotlin.random.Random
@@ -25,6 +27,9 @@ class ChatReadWebSocketManager {
     )
 
     private val lock = Any()
+    // Serialize socket replacement and shutdown so Twitch never sees overlapping
+    // IRC transports while a previous connection is still closing.
+    private val lifecycleMutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val registrations = LinkedHashMap<Job, Registration>()
     private var webSocket: WebSocket? = null
@@ -98,27 +103,52 @@ class ChatReadWebSocketManager {
     }
 
     private fun restartConnection() {
-        stopConnection(force = true)
-        synchronized(lock) {
-            if (registrations.isEmpty()) return
-            connected = false
-            connectionJob = scope.launch(Dispatchers.IO) {
-                while (isActive && synchronized(lock) { registrations.isNotEmpty() }) {
-                    val socket = WebSocket("wss://irc-ws.chat.twitch.tv", SocketListener())
-                    synchronized(lock) {
-                        webSocket = socket
-                        connected = false
+        scope.launch {
+            lifecycleMutex.withLock {
+                val oldSocket: WebSocket?
+                val oldJob: Job?
+                synchronized(lock) {
+                    connected = false
+                    oldSocket = webSocket
+                    oldJob = connectionJob
+                    webSocket = null
+                    connectionJob = null
+                    pingTimer?.cancel()
+                    pongTimer?.cancel()
+                    pingTimer = null
+                    pongTimer = null
+                }
+
+                // Wait for the old transport's close handshake before opening
+                // another one. Cancelling the reader alone does not close its
+                // underlying socket.
+                oldJob?.cancel()
+                runCatching { oldSocket?.disconnect() }
+
+                synchronized(lock) {
+                    if (registrations.isEmpty() || connectionJob?.isActive == true) {
+                        return@withLock
                     }
-                    socket.coroutineScope = scope
-                    runCatching { socket.start() }
-                    synchronized(lock) {
-                        if (webSocket === socket) {
-                            webSocket = null
-                            connected = false
+                    connected = false
+                    connectionJob = scope.launch(Dispatchers.IO) {
+                        while (isActive && synchronized(lock) { registrations.isNotEmpty() }) {
+                            val socket = WebSocket("wss://irc-ws.chat.twitch.tv", SocketListener())
+                            synchronized(lock) {
+                                webSocket = socket
+                                connected = false
+                            }
+                            socket.coroutineScope = scope
+                            runCatching { socket.start() }
+                            synchronized(lock) {
+                                if (webSocket === socket) {
+                                    webSocket = null
+                                    connected = false
+                                }
+                            }
+                            if (isActive && synchronized(lock) { registrations.isNotEmpty() }) {
+                                delay(5000)
+                            }
                         }
-                    }
-                    if (isActive && synchronized(lock) { registrations.isNotEmpty() }) {
-                        delay(5000)
                     }
                 }
             }
@@ -126,23 +156,25 @@ class ChatReadWebSocketManager {
     }
 
     private fun stopConnection(force: Boolean = false) {
-        val oldSocket: WebSocket?
-        val oldJob: Job?
-        synchronized(lock) {
-            if (!force && registrations.isNotEmpty()) return
-            connected = false
-            oldSocket = webSocket
-            oldJob = connectionJob
-            webSocket = null
-            connectionJob = null
-            pingTimer?.cancel()
-            pongTimer?.cancel()
-            pingTimer = null
-            pongTimer = null
-        }
-        oldJob?.cancel()
-        scope.launch(Dispatchers.IO) {
-            runCatching { oldSocket?.disconnect() }
+        scope.launch {
+            lifecycleMutex.withLock {
+                val oldSocket: WebSocket?
+                val oldJob: Job?
+                synchronized(lock) {
+                    if (!force && registrations.isNotEmpty()) return@withLock
+                    connected = false
+                    oldSocket = webSocket
+                    oldJob = connectionJob
+                    webSocket = null
+                    connectionJob = null
+                    pingTimer?.cancel()
+                    pongTimer?.cancel()
+                    pingTimer = null
+                    pongTimer = null
+                }
+                oldJob?.cancel()
+                runCatching { oldSocket?.disconnect() }
+            }
         }
     }
 
