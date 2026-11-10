@@ -34,6 +34,8 @@ class ChatReadWebSocketManager {
     private val registrations = LinkedHashMap<Job, Registration>()
     private var webSocket: WebSocket? = null
     private var connectionJob: Job? = null
+    // Coalesce simultaneous restart requests while the socket is being replaced.
+    private var restartJob: Job? = null
     private var connected = false
     private var pingTimer: Timer? = null
     private var pongTimer: Timer? = null
@@ -58,14 +60,16 @@ class ChatReadWebSocketManager {
                 it.channelLogin.equals(channelLogin, ignoreCase = true)
             }
             registrations[registration.job] = registration
-            if (webSocket == null || connectionJob?.isActive != true) {
+            if (connectionJob?.isActive != true && restartJob?.isActive != true) {
                 this.userLogin = userLogin
                 this.userToken = userToken
                 shouldConnect = true
             } else if (this.userToken != userToken || this.userLogin != userLogin) {
                 this.userLogin = userLogin
                 this.userToken = userToken
-                shouldConnect = true
+                // A pending restart will use the latest credentials. If a socket is
+                // already running, replace it so the authenticated session is updated.
+                shouldConnect = connectionJob?.isActive == true
             } else if (connected && !channelAlreadyRegistered) {
                 shouldJoin = true
                 currentSocket = webSocket
@@ -103,8 +107,10 @@ class ChatReadWebSocketManager {
     }
 
     private fun restartConnection() {
-        scope.launch {
-            lifecycleMutex.withLock {
+        synchronized(lock) {
+            if (restartJob?.isActive == true) return
+            restartJob = scope.launch {
+                lifecycleMutex.withLock {
                 val oldSocket: WebSocket?
                 val oldJob: Job?
                 synchronized(lock) {
