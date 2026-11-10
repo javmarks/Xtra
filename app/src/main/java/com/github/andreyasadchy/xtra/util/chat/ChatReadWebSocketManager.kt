@@ -110,7 +110,7 @@ class ChatReadWebSocketManager {
                         connected = false
                     }
                     socket.coroutineScope = scope
-                    socket.start()
+                    runCatching { socket.start() }
                     synchronized(lock) {
                         if (webSocket === socket) {
                             webSocket = null
