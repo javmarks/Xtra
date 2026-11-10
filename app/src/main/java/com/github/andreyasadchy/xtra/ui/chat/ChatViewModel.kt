@@ -1970,10 +1970,27 @@ class ChatViewModel(
                         helixRepository.createEventSubSubscription(
                             networkLibrary, helixHeaders, accountId, channelId, type, sessionId, version,
                             moderatorCondition, broadcasterOnlyCondition = type.startsWith("channel.shared_chat.")
-                        )?.let {
-                            if (type != "channel.moderate") onMessage(ChatMessage(systemMsg = it))
+                        )?.let { error ->
+                            if (type != "channel.moderate" ||
+                                moderationEventSubManager.shouldReportSubscriptionError()
+                            ) {
+                                onMessage(ChatMessage(
+                                    systemMsg = if (type == "channel.moderate") {
+                                        "Twitch EventSub subscription failed: $error"
+                                    } else error,
+                                    fullMsg = error
+                                ))
+                            }
                         }
                     } catch (e: Exception) {
+                        if (type == "channel.moderate" &&
+                            moderationEventSubManager.shouldReportSubscriptionError()
+                        ) {
+                            onMessage(ChatMessage(
+                                systemMsg = "Twitch EventSub subscription failed: ${e.message ?: "Unknown error"}",
+                                fullMsg = e.stackTraceToString()
+                            ))
+                        }
                     }
                 }
             }
