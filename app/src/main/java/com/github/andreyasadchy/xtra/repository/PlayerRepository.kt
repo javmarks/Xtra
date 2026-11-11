@@ -695,171 +695,66 @@ class PlayerRepository(
         }
     }
 
-    suspend fun sendMinuteWatched(networkLibrary: String?, userId: String?, streamId: String?, channelId: String?, channelLogin: String?, gameId: String? = null, gameName: String? = null) = withContext(Dispatchers.IO) {
-        val pageResponse = channelLogin?.let {
-            val pageUrl = "https://www.twitch.tv/${channelLogin}"
-            when {
-                networkLibrary == C.HTTP_ENGINE && httpEngine.value != null -> @SuppressLint("NewApi") {
-                    val response = suspendCancellableCoroutine { continuation ->
-                        val timeout = NetworkUtils.HttpEngineTimeout()
-                        val request = httpEngine.value!!.newUrlRequestBuilder(
-                            pageUrl,
-                            cronetExecutor.value,
-                            NetworkUtils.ByteArrayUrlCallback(continuation, timeout)
-                        ).build()
-                        timeout.start(request, continuation)
-                        request.start()
-                        continuation.invokeOnCancellation {
-                            request.cancel()
-                            timeout.stop()
-                        }
-                    }
-                    response.body.decodeToString()
-                }
-                networkLibrary == C.CRONET && cronetEngine.value != null -> {
-                    val response = suspendCancellableCoroutine { continuation ->
-                        val timeout = NetworkUtils.CronetTimeout()
-                        val request = cronetEngine.value!!.newUrlRequestBuilder(
-                            pageUrl,
-                            NetworkUtils.ByteArrayCronetCallback(continuation, timeout),
-                            cronetExecutor.value
-                        ).build()
-                        timeout.start(request, continuation)
-                        request.start()
-                        continuation.invokeOnCancellation {
-                            request.cancel()
-                            timeout.stop()
-                        }
-                    }
-                    response.body.decodeToString()
-                }
-                else -> {
-                    okHttpClient.value.newCall(Request.Builder().url(pageUrl).build()).executeAsync().use { response ->
-                        response.body.string()
-                    }
-                }
-            }
+    suspend fun sendMinuteWatched(
+        networkLibrary: String?,
+        userId: String?,
+        streamId: String?,
+        channelId: String?,
+        channelLogin: String?,
+        gameId: String? = null,
+        gameName: String? = null,
+        gqlHeaders: Map<String, String> = emptyMap()
+    ) = withContext(Dispatchers.IO) {
+        if (userId.isNullOrBlank() || streamId.isNullOrBlank() || channelId.isNullOrBlank() || channelLogin.isNullOrBlank() || gqlHeaders.isEmpty()) {
+            return@withContext
         }
-        if (!pageResponse.isNullOrBlank()) {
-            val settingsRegex = Regex("https://[\\w.]+/config/settings\\.\\w+?\\.js")
-            val settingsUrl = settingsRegex.find(pageResponse)?.value
-            val settingsResponse = settingsUrl?.let {
-                when {
-                    networkLibrary == C.HTTP_ENGINE && httpEngine.value != null -> @SuppressLint("NewApi") {
-                        val response = suspendCancellableCoroutine { continuation ->
-                            val timeout = NetworkUtils.HttpEngineTimeout()
-                            val request = httpEngine.value!!.newUrlRequestBuilder(
-                                settingsUrl,
-                                cronetExecutor.value,
-                                NetworkUtils.ByteArrayUrlCallback(continuation, timeout)
-                            ).build()
-                            timeout.start(request, continuation)
-                            request.start()
-                            continuation.invokeOnCancellation {
-                                request.cancel()
-                                timeout.stop()
-                            }
-                        }
-                        response.body.decodeToString()
-                    }
-                    networkLibrary == C.CRONET && cronetEngine.value != null -> {
-                        val response = suspendCancellableCoroutine { continuation ->
-                            val timeout = NetworkUtils.CronetTimeout()
-                            val request = cronetEngine.value!!.newUrlRequestBuilder(
-                                settingsUrl,
-                                NetworkUtils.ByteArrayCronetCallback(continuation, timeout),
-                                cronetExecutor.value
-                            ).build()
-                            timeout.start(request, continuation)
-                            request.start()
-                            continuation.invokeOnCancellation {
-                                request.cancel()
-                                timeout.stop()
-                            }
-                        }
-                        response.body.decodeToString()
-                    }
-                    else -> {
-                        okHttpClient.value.newCall(Request.Builder().url(settingsUrl).build()).executeAsync().use { response ->
-                            response.body.string()
-                        }
-                    }
+
+        val watchEvents = buildJsonArray {
+            add(buildJsonObject {
+                put("event", "minute-watched")
+                putJsonObject("properties") {
+                    put("broadcast_id", streamId)
+                    put("channel_id", channelId)
+                    put("channel", channelLogin)
+                    put("client_time", java.time.Instant.now().toString())
+                    put("game", gameName.orEmpty())
+                    put("game_id", gameId.orEmpty())
+                    put("hidden", false)
+                    put("is_live", true)
+                    put("live", true)
+                    put("logged_in", true)
+                    put("minutes_logged", 1)
+                    put("muted", false)
+                    put("user_id", userId)
                 }
-            }
-            if (!settingsResponse.isNullOrBlank()) {
-                val spadeRegex = Regex("\"(?:beacon_url|spade_url)\":\"(.*?)\"")
-                val spadeUrl = spadeRegex.find(settingsResponse)?.groups?.get(1)?.value
-                if (!spadeUrl.isNullOrBlank()) {
-                    val body = buildJsonArray {
-                        add(buildJsonObject {
-                            put("event", "minute-watched")
-                            putJsonObject("properties") {
-                                put("channel_id", channelId.orEmpty())
-                                put("broadcast_id", streamId.orEmpty())
-                                put("player", "site")
-                                put("user_id", userId?.toLongOrNull())
-                                put("channel", channelLogin.orEmpty())
-                                put("client_time", java.time.Instant.now().toString())
-                                put("game", gameName.orEmpty())
-                                put("game_id", gameId.orEmpty())
-                                put("hidden", false)
-                                put("is_live", true)
-                                put("live", true)
-                                put("logged_in", true)
-                                put("minutes_logged", 1)
-                                put("muted", false)
-                            }
-                        })
-                    }.toString()
-                    val spadeRequest = "data=" + Base64.encodeToString(body.toByteArray(), Base64.NO_WRAP)
-                    when {
-                        networkLibrary == C.HTTP_ENGINE && httpEngine.value != null -> @SuppressLint("NewApi") {
-                            suspendCancellableCoroutine { continuation ->
-                                val timeout = NetworkUtils.HttpEngineTimeout()
-                                val request = httpEngine.value!!.newUrlRequestBuilder(
-                                    spadeUrl,
-                                    cronetExecutor.value,
-                                    NetworkUtils.ByteArrayUrlCallback(continuation, timeout)
-                                ).apply {
-                                    addHeader("Content-Type", "application/x-www-form-urlencoded")
-                                    setUploadDataProvider(NetworkUtils.ByteArrayUploadProvider(spadeRequest.toByteArray()), cronetExecutor.value)
-                                }.build()
-                                timeout.start(request, continuation)
-                                request.start()
-                                continuation.invokeOnCancellation {
-                                    request.cancel()
-                                    timeout.stop()
-                                }
-                            }
-                        }
-                        networkLibrary == C.CRONET && cronetEngine.value != null -> {
-                            suspendCancellableCoroutine<NetworkUtils.CronetResponse> { continuation ->
-                                val timeout = NetworkUtils.CronetTimeout()
-                                val request = cronetEngine.value!!.newUrlRequestBuilder(
-                                    spadeUrl,
-                                    NetworkUtils.ByteArrayCronetCallback(continuation, timeout),
-                                    cronetExecutor.value
-                                ).apply {
-                                    addHeader("Content-Type", "application/x-www-form-urlencoded")
-                                    setUploadDataProvider(UploadDataProviders.create(spadeRequest.toByteArray()), cronetExecutor.value)
-                                }.build()
-                                timeout.start(request, continuation)
-                                request.start()
-                                continuation.invokeOnCancellation {
-                                    request.cancel()
-                                    timeout.stop()
-                                }
-                            }
-                        }
-                        else -> {
-                            okHttpClient.value.newCall(Request.Builder().apply {
-                                url(spadeUrl)
-                                header("Content-Type", "application/x-www-form-urlencoded")
-                                post(spadeRequest.toRequestBody())
-                            }.build()).executeAsync()
-                        }
-                    }
-                }
+            })
+        }.toString().toByteArray(Charsets.UTF_8)
+
+        val compressed = java.io.ByteArrayOutputStream().use { output ->
+            java.util.zip.GZIPOutputStream(output).use { it.write(watchEvents) }
+            output.toByteArray()
+        }
+        val encoded = Base64.encodeToString(compressed, Base64.NO_WRAP)
+        val gqlBody = JSONObject()
+            .put("query", "mutation SendEvents(\u0024input: SendSpadeEventsInput!) { sendSpadeEvents(input: \u0024input) { statusCode } }")
+            .put("variables", JSONObject().put("input", JSONObject()
+                .put("data", encoded)
+                .put("repository", "twilight")
+                .put("encoding", "GZIP_B64")))
+            .toString()
+
+        okHttpClient.value.newCall(Request.Builder().url("https://gql.twitch.tv/gql").apply {
+            gqlHeaders.forEach { (key, value) -> header(key, value) }
+            header("Content-Type", "application/json")
+            post(gqlBody.toRequestBody())
+        }.build()).executeAsync().use { response ->
+            if (!response.isSuccessful) return@withContext
+            val result = JSONObject(response.body.string())
+                .optJSONObject("data")
+                ?.optJSONObject("sendSpadeEvents")
+                ?.optInt("statusCode", 0)
+            if (result != 204) {
+                // Twitch did not confirm acceptance; keep this best-effort and retry next minute.
             }
         }
     }
