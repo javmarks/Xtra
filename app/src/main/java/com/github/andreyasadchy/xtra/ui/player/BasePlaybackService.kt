@@ -3,6 +3,13 @@ package com.github.andreyasadchy.xtra.ui.player
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.lifecycle.LifecycleService
+import androidx.lifecycle.lifecycleScope
+import com.github.andreyasadchy.xtra.util.tokenPrefs
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import com.github.andreyasadchy.xtra.XtraModule
 import com.github.andreyasadchy.xtra.model.PlaybackState
 import com.github.andreyasadchy.xtra.model.VideoQuality
@@ -59,6 +66,59 @@ abstract class BasePlaybackService : LifecycleService() {
     var chatUrl: String? = null
     var started = false
     var loaded = false
+
+    private var dropsWatchJob: Job? = null
+
+    protected fun updateDropsWatchTracking(isPlaying: Boolean) {
+        val canTrack = isPlaying
+                && type == STREAM
+                && !streamId.isNullOrBlank()
+                && !channelId.isNullOrBlank()
+                && !channelLogin.isNullOrBlank()
+                && !tokenPrefs().getString(C.USER_ID, null).isNullOrBlank()
+        if (!canTrack) {
+            dropsWatchJob?.cancel()
+            dropsWatchJob = null
+            return
+        }
+        if (dropsWatchJob?.isActive == true) return
+        dropsWatchJob = lifecycleScope.launch {
+            while (isActive) {
+                delay(59_000)
+                if (!isActive) break
+                val currentStreamId = streamId
+                val currentChannelId = channelId
+                val currentChannelLogin = channelLogin
+                val currentUserId = tokenPrefs().getString(C.USER_ID, null)
+                if (type != STREAM || currentStreamId.isNullOrBlank()
+                    || currentChannelId.isNullOrBlank() || currentChannelLogin.isNullOrBlank()
+                    || currentUserId.isNullOrBlank()) {
+                    break
+                }
+                try {
+                    xtraModule.playerRepository.sendMinuteWatched(
+                        networkLibrary = prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                        userId = currentUserId,
+                        streamId = currentStreamId,
+                        channelId = currentChannelId,
+                        channelLogin = currentChannelLogin,
+                        gameId = gameId,
+                        gameName = gameName
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Drops tracking is best-effort and must never interrupt playback.
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        dropsWatchJob?.cancel()
+        dropsWatchJob = null
+        super.onDestroy()
+    }
 
     protected suspend fun restorePlaybackState() {
         val savedState = xtraModule.playerRepository.getPlaybackStates().firstOrNull()
