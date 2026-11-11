@@ -3,6 +3,8 @@ package com.github.andreyasadchy.xtra.ui.chat
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.text.format.DateUtils
@@ -189,6 +191,14 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         counts[index].isVisible = gifter != null
                     }
                 }
+            }
+        }
+        binding.dropsButton.setOnClickListener {
+            val dropsInventory = Uri.parse("https://www.twitch.tv/drops/inventory")
+            runCatching {
+                startActivity(Intent(Intent.ACTION_VIEW, dropsInventory))
+            }.onFailure {
+                Toast.makeText(requireContext(), "No browser is available to open Twitch Drops.", Toast.LENGTH_LONG).show()
             }
         }
         binding.moderationLogsButton.setOnClickListener {
