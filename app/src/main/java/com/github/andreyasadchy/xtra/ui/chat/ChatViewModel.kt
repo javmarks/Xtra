@@ -166,6 +166,7 @@ class ChatViewModel(
     private val topGifterTotals = linkedMapOf<String, TopGifter>()
     private val seenTopGifterEventIds = LinkedHashSet<String>()
     private val seenCommunityGiftIds = LinkedHashSet<String>()
+    private val requestedTopGifterProfileIds = ConcurrentHashMap.newKeySet<String>()
     // Source-channel IDs observed in actual Shared Chat messages; dedupe profile lookups.
     private val resolvedSharedChatSourceIds = ConcurrentHashMap.newKeySet<String>()
     val streamInfo: StateFlow<PubSubUtils.StreamInfo?> = _streamInfo
@@ -2029,10 +2030,11 @@ class ChatViewModel(
         topGifterTotals.clear()
         seenTopGifterEventIds.clear()
         seenCommunityGiftIds.clear()
+        requestedTopGifterProfileIds.clear()
         topGifters.value = emptyList()
     }
 
-    private fun recordTopGifterEvent(event: JSONObject) {
+    private fun recordTopGifterEvent(event: JSONObject, networkLibrary: String?, helixHeaders: Map<String, String>) {
         // Shared-chat notices from another broadcaster belong to that channel's leaderboard,
         // not the main channel's board.
         if (event.has("source_broadcaster_user_id") && !event.isNull("source_broadcaster_user_id")) return
@@ -2088,6 +2090,29 @@ class ChatViewModel(
         topGifters.value = topGifterTotals.values.sortedWith(
             compareByDescending<TopGifter> { it.giftCount }.thenBy { it.displayName.lowercase() }
         ).take(10)
+        refreshTopGifterProfiles(networkLibrary, helixHeaders)
+    }
+
+    private fun refreshTopGifterProfiles(networkLibrary: String?, helixHeaders: Map<String, String>) {
+        val ids = topGifters.value.filter { it.profileImageUrl.isNullOrBlank() }
+            .map { it.userId }
+            .filter { requestedTopGifterProfileIds.add(it) }
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val users = helixRepository.getUsers(networkLibrary, helixHeaders, ids = ids).data
+                users.forEach { user ->
+                    val id = user.id ?: return@forEach
+                    val current = topGifterTotals[id] ?: return@forEach
+                    topGifterTotals[id] = current.copy(profileImageUrl = user.profileImageURL)
+                }
+                topGifters.value = topGifterTotals.values.sortedWith(
+                    compareByDescending<TopGifter> { it.giftCount }.thenBy { it.displayName.lowercase() }
+                ).take(10)
+            } catch (_: Exception) {
+                ids.forEach { requestedTopGifterProfileIds.remove(it) }
+            }
+        }
     }
 
     private inner class EventSubListener(
@@ -2179,7 +2204,7 @@ class ChatViewModel(
                     }
                 }
             } else if (showUserNotice) {
-                recordTopGifterEvent(event)
+                recordTopGifterEvent(event, networkLibrary, helixHeaders)
                 onChatMessage(EventSubUtils.parseUserNotice(event, timestamp), networkLibrary, isLoggedIn, accountId, channelId)
             }
         }
