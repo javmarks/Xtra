@@ -13,13 +13,11 @@ class PinnedChatMessageResponse(
         val messageId: String? = null,
         @SerialName("broadcaster_id")
         val broadcasterId: String? = null,
-        @SerialName("broadcaster_name")
-        val broadcasterName: String? = null,
-        @SerialName("sender_id")
+        @SerialName("sender_user_id")
         val senderId: String? = null,
-        @SerialName("sender_name")
+        @SerialName("sender_user_name")
         val senderName: String? = null,
-        @SerialName("sender_login")
+        @SerialName("sender_user_login")
         val senderLogin: String? = null,
         @SerialName("pinned_by_user_id")
         val pinnedById: String? = null,
@@ -28,14 +26,53 @@ class PinnedChatMessageResponse(
         @SerialName("pinned_by_user_login")
         val pinnedByLogin: String? = null,
         val message: Message? = null,
-        @SerialName("pinned_at")
+        @SerialName("starts_at")
         val pinnedAt: String? = null,
-        @SerialName("expires_at")
+        @SerialName("ends_at")
         val expiresAt: String? = null,
+        @SerialName("updated_at")
+        val updatedAt: String? = null,
     )
 
     @Serializable
     class Message(
         val text: String? = null,
+        val fragments: List<Fragment> = emptyList(),
+    )
+
+    @Serializable
+    class Fragment(
+        val type: String? = null,
+        val text: String? = null,
+        val cheermote: Cheermote? = null,
+        val emote: Emote? = null,
+        val mention: Mention? = null,
+    )
+
+    @Serializable
+    class Cheermote(
+        val prefix: String? = null,
+        val bits: Int? = null,
+        val tier: Int? = null,
+    )
+
+    @Serializable
+    class Emote(
+        val id: String? = null,
+        @SerialName("emote_set_id")
+        val emoteSetId: String? = null,
+        @SerialName("owner_id")
+        val ownerId: String? = null,
+        val format: List<String> = emptyList(),
+    )
+
+    @Serializable
+    class Mention(
+        @SerialName("user_id")
+        val userId: String? = null,
+        @SerialName("user_login")
+        val userLogin: String? = null,
+        @SerialName("user_name")
+        val userName: String? = null,
     )
 }
