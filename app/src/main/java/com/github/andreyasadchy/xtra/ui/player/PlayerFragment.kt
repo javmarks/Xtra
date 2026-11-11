@@ -1365,11 +1365,14 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                                 ?: source.arguments?.getString("channel_login") ?: "Chat"
                             val balance = source.mergedChatViewModel.channelPointsBalance.value
                             val streak = source.mergedChatViewModel.watchStreak.value
+                            val pointsStatus = source.mergedChatViewModel.channelPointRewardsStatus.value
+                            val streakStatus = source.mergedChatViewModel.watchStreakStatus.value
                             buildString {
                                 append(name)
                                 balance?.let { append(" · ◆ ").append(NumberFormat.getIntegerInstance().format(it)) }
+                                    ?: append(" · ").append(if (pointsStatus.startsWith("Loading")) "Points loading" else "Points unavailable")
                                 streak?.let { append(" · 🔥 ").append(it.count) }
-                                if (balance == null && streak == null) append(" · Loading")
+                                    ?: if (streakStatus.startsWith("Loading")) append(" · Streak loading")
                             }
                         }
                         if (sources.isEmpty()) {
@@ -1380,20 +1383,19 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                                 .setItems(labels.toTypedArray()) { _, index ->
                                     val source = sources[index]
                                     val streak = source.mergedChatViewModel.watchStreak.value
-                                    val actions = if (streak != null) {
-                                        arrayOf("Channel Points & Rewards", "Watch Streak")
+                                    if (streak == null) {
+                                        source.showChannelPointsFromAllChats()
                                     } else {
-                                        arrayOf("Channel Points & Rewards")
+                                        requireContext().getAlertDialogBuilder()
+                                            .setTitle(source.arguments?.getString("channel_name")
+                                                ?: source.arguments?.getString("channel_login") ?: "Channel")
+                                            .setItems(arrayOf("Channel Points & Rewards", "Watch Streak")) { _, action ->
+                                                if (action == 0) source.showChannelPointsFromAllChats()
+                                                else source.showWatchStreakFromAllChats()
+                                            }
+                                            .setNegativeButton(android.R.string.cancel, null)
+                                            .show()
                                     }
-                                    requireContext().getAlertDialogBuilder()
-                                        .setTitle(source.arguments?.getString("channel_name")
-                                            ?: source.arguments?.getString("channel_login") ?: "Channel")
-                                        .setItems(actions) { _, action ->
-                                            if (action == 0) source.showChannelPointsFromAllChats()
-                                            else source.showWatchStreakFromAllChats()
-                                        }
-                                        .setNegativeButton(android.R.string.cancel, null)
-                                        .show()
                                 }
                                 .setNegativeButton(android.R.string.cancel, null)
                                 .show()
