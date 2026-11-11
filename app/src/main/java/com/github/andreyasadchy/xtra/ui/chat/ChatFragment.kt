@@ -310,7 +310,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             val time = java.time.Instant.parse(expiry).toEpochMilli()
                             "Expires " + DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
                         }.getOrNull()
-                    }.orEmpty()
+                    } ?: if (pinned != null) "Until stream ends" else ""
                 }
             }
         }
