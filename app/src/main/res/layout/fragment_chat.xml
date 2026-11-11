@@ -23,6 +23,15 @@
             android:visibility="gone">
 
             <Button
+                android:id="@+id/dropsButton"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:minHeight="36dp"
+                android:text="Drops" />
+
+            <Button
                 android:id="@+id/moderationLogsButton"
                 style="?attr/materialButtonOutlinedStyle"
                 android:layout_width="wrap_content"
