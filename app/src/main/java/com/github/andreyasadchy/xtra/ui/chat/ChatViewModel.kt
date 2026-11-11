@@ -1574,13 +1574,20 @@ class ChatViewModel(
             !channelId.isNullOrBlank() && !accountId.isNullOrBlank() &&
             !helixHeaders[C.HEADER_TOKEN].isNullOrBlank()
         ) {
-            val listener = EventSubListener(
-                helixHeaders, channelLogin, showUserNotice, showClearChat, usePubSub,
-                networkLibrary, isLoggedIn, accountId, channelId, moderationOnly = true
-            )
-            moderationEventSubListener = listener
-            moderationEventSubChannelId = channelId
-            moderationEventSubManager.register(channelId, listener)
+            // channel.moderate is only valid for channels this account moderates.
+            // Resolve that list once per account/token and skip unauthorized subscriptions.
+            viewModelScope.launch {
+                val canModerate = isModeratedChannel(channelId, accountId, helixHeaders)
+                if (canModerate && started && moderationEventSubListener == null) {
+                    val listener = EventSubListener(
+                        helixHeaders, channelLogin, showUserNotice, showClearChat, usePubSub,
+                        networkLibrary, isLoggedIn, accountId, channelId, moderationOnly = true
+                    )
+                    moderationEventSubListener = listener
+                    moderationEventSubChannelId = channelId
+                    moderationEventSubManager.register(channelId, listener)
+                }
+            }
         }
         if (usePubSub && !channelId.isNullOrBlank()) {
             val collectPoints = applicationContext.prefs().getBoolean(C.CHAT_POINTS_COLLECT, true)
@@ -1634,6 +1641,33 @@ class ChatViewModel(
                 }
             }
         }
+    }
+
+    private suspend fun isModeratedChannel(
+        channelId: String,
+        accountId: String,
+        headers: Map<String, String>,
+    ): Boolean {
+        if (channelId == accountId) return true
+        val token = headers[C.HEADER_TOKEN].orEmpty()
+        val cacheKey = "$accountId:${token.hashCode()}"
+        val now = System.currentTimeMillis()
+        val moderatedChannels = moderatedChannelsMutex.withLock {
+            val cached = moderatedChannelsCache
+            if (cached != null && cached.first == cacheKey) {
+                val cacheAge = now - cached.second.first
+                val cacheDuration = if (cached.second.second.isEmpty()) 60_000L else 10 * 60_000L
+                if (cacheAge in 0..cacheDuration) {
+                    return@withLock cached.second.second
+                }
+            }
+            val loaded = runCatching {
+                helixRepository.getModeratedChannels(headers, accountId)
+            }.getOrElse { emptySet() }
+            moderatedChannelsCache = cacheKey to (System.currentTimeMillis() to loaded)
+            loaded
+        }
+        return channelId in moderatedChannels
     }
 
     fun stopLiveChat() {
@@ -3880,6 +3914,9 @@ class ChatViewModel(
     }
 
     companion object {
+        private val moderatedChannelsMutex = Mutex()
+        private var moderatedChannelsCache: Pair<String, Pair<Long, Set<String>>>? = null
+
         private var savedEmoteSets: List<String>? = null
         private var savedUserEmotes: List<TwitchEmote>? = null
         private var savedGlobalBadges: List<TwitchBadge>? = null
