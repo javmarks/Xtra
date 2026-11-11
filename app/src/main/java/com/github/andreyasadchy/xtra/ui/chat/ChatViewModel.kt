@@ -2029,6 +2029,7 @@ class ChatViewModel(
         }
     }
 
+    @Synchronized
     private fun clearTopGifters() {
         topGifterTotals.clear()
         seenTopGifterEventIds.clear()
@@ -2037,6 +2038,7 @@ class ChatViewModel(
         topGifters.value = emptyList()
     }
 
+    @Synchronized
     private fun recordTopGifterEvent(event: JSONObject, networkLibrary: String?, helixHeaders: Map<String, String>) {
         // Shared-chat notices from another broadcaster belong to that channel's leaderboard,
         // not the main channel's board.
