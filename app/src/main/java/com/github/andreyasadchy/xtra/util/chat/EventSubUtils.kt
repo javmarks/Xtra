@@ -48,8 +48,9 @@ object EventSubUtils {
                 val badge = badges.get(i) as? JSONObject
                 val set = if (badge?.isNull("set_id") == false) badge.optString("set_id").takeIf { it.isNotBlank() } else null
                 val id = if (badge?.isNull("id") == false) badge.optString("id").takeIf { it.isNotBlank() } else null
+                val info = if (badge?.isNull("info") == false) badge.optString("info") else ""
                 if (!set.isNullOrBlank() && !id.isNullOrBlank()) {
-                    badgesList.add(Badge(set, id))
+                    badgesList.add(Badge(set, id, info))
                 }
             }
         }
@@ -115,8 +116,9 @@ object EventSubUtils {
                     val badge = badges.get(i) as? JSONObject
                     val set = if (badge?.isNull("set_id") == false) badge.optString("set_id").takeIf { it.isNotBlank() } else null
                     val id = if (badge?.isNull("id") == false) badge.optString("id").takeIf { it.isNotBlank() } else null
+                    val info = if (badge?.isNull("info") == false) badge.optString("info") else ""
                     if (!set.isNullOrBlank() && !id.isNullOrBlank()) {
-                        badgesList.add(Badge(set, id))
+                        badgesList.add(Badge(set, id, info))
                     }
                 }
             }
