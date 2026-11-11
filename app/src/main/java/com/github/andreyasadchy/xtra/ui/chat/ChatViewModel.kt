@@ -2088,23 +2088,39 @@ class ChatViewModel(
         }
 
         override suspend fun onRoomState(event: JSONObject, timestamp: String?) {
+            val previous = roomState.value
             val updated = EventSubUtils.parseRoomState(event)
+            // EventSub and IRC can report the same setting change. Only log a field
+            // when its value actually changes, and preserve fields omitted by a
+            // partial EventSub payload instead of resetting them to defaults.
+            fun includes(field: String) = event.has(field) && !event.isNull(field)
+            val hasEmote = includes("emote_mode")
+            val hasFollowers = includes("follower_mode")
+            val hasUnique = includes("unique_chat_mode")
+            val hasSlow = includes("slow_mode")
+            val hasSubs = includes("subscriber_mode")
             val changes = buildList {
-                if (event.has("emote_mode")) add(if (updated.emote == "1") "Emote-only enabled" else "Emote-only disabled")
-                if (event.has("follower_mode")) {
+                if (hasEmote && previous?.emote != null && previous.emote != updated.emote) {
+                    add(if (updated.emote == "1") "Emote-only enabled" else "Emote-only disabled")
+                }
+                if (hasFollowers && previous?.followers != null && previous.followers != updated.followers) {
                     val duration = event.optInt("follower_mode_duration_minutes", 0)
                     add(if (updated.followers != "-1") {
                         if (duration > 0) "Followers-only enabled ($duration min)" else "Followers-only enabled"
                     } else "Followers-only disabled")
                 }
-                if (event.has("unique_chat_mode")) add(if (updated.unique == "1") "Unique chat enabled" else "Unique chat disabled")
-                if (event.has("slow_mode")) {
+                if (hasUnique && previous?.unique != null && previous.unique != updated.unique) {
+                    add(if (updated.unique == "1") "Unique chat enabled" else "Unique chat disabled")
+                }
+                if (hasSlow && previous?.slow != null && previous.slow != updated.slow) {
                     val duration = event.optInt("slow_mode_wait_time_seconds", 0)
                     add(if (updated.slow != "0") {
                         if (duration > 0) "Slow mode enabled ($duration sec)" else "Slow mode enabled"
                     } else "Slow mode disabled")
                 }
-                if (event.has("subscriber_mode")) add(if (updated.subs == "1") "Subscriber-only mode enabled" else "Subscriber-only mode disabled")
+                if (hasSubs && previous?.subs != null && previous.subs != updated.subs) {
+                    add(if (updated.subs == "1") "Subscriber-only mode enabled" else "Subscriber-only mode disabled")
+                }
             }
             if (changes.isNotEmpty()) {
                 val eventTime = timestamp?.let { Instant.parseOrNull(it)?.toEpochMilliseconds()?.takeIf { ms -> ms > 0L } }
@@ -2118,7 +2134,13 @@ class ChatViewModel(
                 }
                 saveModerationLog(channelId, logEntry.toString())
             }
-            roomState.value = updated
+            roomState.value = RoomState(
+                emote = if (hasEmote) updated.emote else previous?.emote,
+                followers = if (hasFollowers) updated.followers else previous?.followers,
+                unique = if (hasUnique) updated.unique else previous?.unique,
+                slow = if (hasSlow) updated.slow else previous?.slow,
+                subs = if (hasSubs) updated.subs else previous?.subs,
+            )
         }
 
         override suspend fun onSharedChat(event: JSONObject, subscriptionType: String) {
