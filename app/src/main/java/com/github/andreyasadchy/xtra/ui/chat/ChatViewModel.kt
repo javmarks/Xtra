@@ -2210,9 +2210,12 @@ class ChatViewModel(
                         onMessage(ChatMessage(systemMsg = message, fullMsg = event.toString()))
                     }
                 }
-            } else if (showUserNotice) {
+            } else {
+                // Leaderboard tracking must not depend on whether the user has chat notices hidden.
                 recordTopGifterEvent(event, networkLibrary, helixHeaders)
-                onChatMessage(EventSubUtils.parseUserNotice(event, timestamp), networkLibrary, isLoggedIn, accountId, channelId)
+                if (showUserNotice) {
+                    onChatMessage(EventSubUtils.parseUserNotice(event, timestamp), networkLibrary, isLoggedIn, accountId, channelId)
+                }
             }
         }
 
