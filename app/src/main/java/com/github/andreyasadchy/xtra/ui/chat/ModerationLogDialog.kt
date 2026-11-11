@@ -28,13 +28,21 @@ object ModerationLogDialog {
         private val list: LinearLayout, private val emptyMessage: String,
     ) {
         private var renderedEntries: List<String> = emptyList()
+        private var visibleLimit = 60
+        private var latestEntries: List<String> = emptyList()
+        private var footer: TextView? = null
 
         fun update(rawEntries: List<String>) {
             if (!dialog.isShowing) return
-            // Keep the dialog lightweight: the full history remains stored, but only the
-            // newest 60 cards are displayed. New live entries are inserted incrementally.
-            val visibleEntries = rawEntries.take(60)
-            if (visibleEntries == renderedEntries) return
+            latestEntries = rawEntries
+            footer?.let(list::removeView)
+            footer = null
+            // Keep rendering lightweight while allowing older saved entries to be loaded on demand.
+            val visibleEntries = rawEntries.take(visibleLimit)
+            if (visibleEntries == renderedEntries) {
+                addLoadOlderFooter(rawEntries.size, visibleEntries.size)
+                return
+            }
             val density = context.resources.displayMetrics.density
             fun dp(value: Int) = (value * density).toInt()
             if (visibleEntries.isEmpty()) {
@@ -59,7 +67,7 @@ object ModerationLogDialog {
             val canAppendIncrementally = overlap > 0
             val entriesToRender = if (canAppendIncrementally) {
                 // Existing entries are the suffix of the new list; trim entries that
-                // fell outside the 60-entry window, then prepend only genuinely new cards.
+                // fell outside the visible window, then prepend only genuinely new cards.
                 while (list.childCount > overlap) list.removeViewAt(list.childCount - 1)
                 visibleEntries.take(visibleEntries.size - overlap)
             } else {
@@ -117,6 +125,27 @@ object ModerationLogDialog {
                 list.addView(card, index, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(8) })
             }
             renderedEntries = visibleEntries
+            addLoadOlderFooter(rawEntries.size, visibleEntries.size)
+        }
+
+        private fun addLoadOlderFooter(total: Int, visible: Int) {
+            if (total <= visible || visibleLimit >= 300) return
+            val density = context.resources.displayMetrics.density
+            val remaining = (total - visible).coerceAtMost(60)
+            footer = TextView(context).apply {
+                text = "Load $remaining older entries"
+                textSize = 13f
+                gravity = android.view.Gravity.CENTER
+                setTextColor(MaterialColors.getColor(context, com.google.android.material.R.attr.colorPrimary, 0xFF3F51B5.toInt()))
+                setPadding((12 * density).toInt())
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    visibleLimit = (visibleLimit + 60).coerceAtMost(300)
+                    update(latestEntries)
+                }
+            }
+            list.addView(footer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
     }
 
