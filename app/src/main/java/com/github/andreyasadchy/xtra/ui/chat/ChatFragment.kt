@@ -179,6 +179,16 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 }
             }
         }
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.channelPointRewardsStatus.collectLatest { status ->
+                    if (viewModel.channelPointsBalance.value == null) {
+                        binding.channelPointsBalance.text =
+                            if (status.startsWith("Loading")) "Loading…" else "Unavailable"
+                    }
+                }
+            }
+        }
         val showChannelPointsRewards = {
             val rewards = viewModel.channelPointRewards.value
             val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
@@ -341,8 +351,37 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 }
             }
         }
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.watchStreakStatus.collectLatest { status ->
+                    if (viewModel.watchStreak.value == null) {
+                        val loading = status.startsWith("Loading")
+                        val unavailable = status != "Not loaded" && status != "No active watch streak returned by Twitch"
+                        binding.watchStreakIndicator.isVisible = loading || unavailable
+                        binding.watchStreakIndicator.text = when {
+                            loading -> "🔥 Loading"
+                            unavailable -> "🔥 Status"
+                            else -> ""
+                        }
+                    }
+                }
+            }
+        }
         binding.watchStreakIndicator.setOnClickListener {
-            val streak = viewModel.watchStreak.value ?: return@setOnClickListener
+            val streak = viewModel.watchStreak.value
+            if (streak == null) {
+                val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
+                    ?: requireArguments().getString(KEY_CHANNEL_LOGIN) ?: "channel"
+                requireContext().getAlertDialogBuilder()
+                    .setTitle("Watch Streak · #$channelName")
+                    .setMessage(viewModel.watchStreakStatus.value)
+                    .setPositiveButton("Retry") { _, _ ->
+                        viewModel.refreshWatchStreakForUi(requireArguments().getString(KEY_CHANNEL_ID))
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
+                return@setOnClickListener
+            }
             val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
                 ?: requireArguments().getString(KEY_CHANNEL_LOGIN) ?: "channel"
             val expiry = streak.expiresAt?.let { value ->
