@@ -156,6 +156,7 @@ class ChatViewModel(
     val channelPointRewards = MutableStateFlow<List<ChannelPointReward>>(emptyList())
     val channelPointRewardsStatus = MutableStateFlow("Not loaded")
     val watchStreak = MutableStateFlow<WatchStreakInfo?>(null)
+    val watchStreakStatus = MutableStateFlow("Not loaded")
     val pinnedChatMessage = MutableStateFlow<PinnedChatMessageResponse.PinnedMessage?>(null)
     val moderationLogs = MutableStateFlow<List<String>>(emptyList())
     val sharedChatParticipantUsers = MutableStateFlow<List<User>>(emptyList())
@@ -356,11 +357,18 @@ class ChatViewModel(
     }
 
     private fun refreshWatchStreak(channelId: String?) {
-        if (channelId.isNullOrBlank()) return
+        if (channelId.isNullOrBlank()) {
+            watchStreakStatus.value = "Missing channel ID"
+            return
+        }
         val headers = TwitchApiHelper.getGQLHeaders(applicationContext, true).toMutableMap().apply {
             put(C.HEADER_CLIENT_ID, "kimne78kx3ncx6brgo4mv6wki5h1ko")
         }
-        if (headers[C.HEADER_TOKEN].isNullOrBlank()) return
+        if (headers[C.HEADER_TOKEN].isNullOrBlank()) {
+            watchStreakStatus.value = "Twitch sign-in token is missing"
+            return
+        }
+        watchStreakStatus.value = "Loading watch streak…"
         viewModelScope.launch {
             try {
                 val response = graphQLRepository.loadWatchStreak(
@@ -370,6 +378,7 @@ class ChatViewModel(
                 )
                 if (applicationContext.prefs().getBoolean(C.ENABLE_INTEGRITY, false)) {
                     response.errors?.find { it.message == C.FAILED_INTEGRITY_CHECK }?.let {
+                        watchStreakStatus.value = "Integrity check failed"
                         integrity.emit("refresh")
                         return@launch
                     }
@@ -388,7 +397,15 @@ class ChatViewModel(
                         )
                     }
                 }
-            } catch (_: Exception) {
+                watchStreakStatus.value = if (watchStreak.value == null) {
+                    response.errors?.firstOrNull()?.message?.let { "Twitch GraphQL error: $it" }
+                        ?: "No active watch streak returned by Twitch"
+                } else {
+                    "Watch streak loaded"
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                watchStreakStatus.value = "Request failed: ${e.javaClass.simpleName}: ${e.message ?: "no details"}"
                 // Keep the last known streak during transient GraphQL/network failures.
             }
         }
