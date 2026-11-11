@@ -506,6 +506,43 @@ class HelixRepository(
         }
     }
 
+    /**
+     * Returns every broadcaster the authenticated user moderates.
+     * This is a low-frequency lookup used to avoid unauthorized channel.moderate subscriptions.
+     */
+    suspend fun getModeratedChannels(headers: Map<String, String>, userId: String): Set<String> = withContext(Dispatchers.IO) {
+        val moderatedChannels = linkedSetOf<String>()
+        var cursor: String? = null
+        do {
+            val url = "https://api.twitch.tv/helix/moderation/channels".toUri().buildUpon().apply {
+                appendQueryParameter("user_id", userId)
+                appendQueryParameter("first", "100")
+                cursor?.let { appendQueryParameter("after", it) }
+            }.build().toString()
+            okHttpClient.value.newCall(Request.Builder().apply {
+                url(url)
+                headers(headers.toHeaders())
+            }.build()).executeAsync().use { response ->
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("Get Moderated Channels failed: HTTP ${response.code}")
+                }
+                val payload = org.json.JSONObject(response.body.string())
+                val data = payload.optJSONArray("data")
+                if (data != null) {
+                    for (index in 0 until data.length()) {
+                        data.optJSONObject(index)?.optString("broadcaster_id")
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let(moderatedChannels::add)
+                    }
+                }
+                cursor = payload.optJSONObject("pagination")
+                    ?.optString("cursor")
+                    ?.takeIf { it.isNotBlank() }
+            }
+        } while (cursor != null)
+        moderatedChannels
+    }
+
     suspend fun getSharedChatSession(networkLibrary: String?, headers: Map<String, String>, broadcasterId: String?): SharedChatSessionResponse = withContext(Dispatchers.IO) {
         val url = "https://api.twitch.tv/helix/shared_chat/session".toUri().buildUpon().apply {
             broadcasterId?.let { appendQueryParameter("broadcaster_id", it) }
