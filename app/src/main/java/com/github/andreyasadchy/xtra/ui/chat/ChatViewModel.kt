@@ -209,7 +209,10 @@ class ChatViewModel(
             sharedChatRefreshJob = viewModelScope.launch {
                 while (started) {
                     delay(60_000L)
-                    if (started) loadSharedChatParticipants(channelId)
+                    if (started) {
+                        loadSharedChatParticipants(channelId)
+                        refreshPinnedChatMessage(channelId)
+                    }
                 }
             }
             refreshChannelPointsBalance(channelLogin)
