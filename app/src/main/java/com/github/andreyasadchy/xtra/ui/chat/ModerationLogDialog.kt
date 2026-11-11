@@ -136,7 +136,7 @@ object ModerationLogDialog {
                 text = "Load $remaining older entries"
                 textSize = 13f
                 gravity = android.view.Gravity.CENTER
-                setTextColor(MaterialColors.getColor(context, com.google.android.material.R.attr.colorPrimary, 0xFF3F51B5.toInt()))
+                setTextColor(MaterialColors.getColor(context, com.google.android.material.R.attr.colorOnSurface, 0xFF3F51B5.toInt()))
                 setPadding((12 * density).toInt())
                 isClickable = true
                 isFocusable = true
