@@ -356,6 +356,8 @@ class ChatViewModel(
         throw lastError ?: IllegalStateException("7TV request failed")
     }
 
+    fun refreshWatchStreakForUi(channelId: String?) = refreshWatchStreak(channelId)
+
     private fun refreshWatchStreak(channelId: String?) {
         if (channelId.isNullOrBlank()) {
             watchStreakStatus.value = "Missing channel ID"
