@@ -112,13 +112,23 @@ object ChatUtils {
                 }
             }
         }
+        val badgeInfo = (message.tags["source-badge-info"] ?: message.tags["badge-info"])
+            ?.split(',')
+            ?.mapNotNull { entry ->
+                val split = entry.split("/", limit = 2)
+                val id = split.getOrNull(0)
+                val info = split.getOrNull(1)
+                if (id != null && info != null) id to info else null
+            }
+            ?.toMap()
+            .orEmpty()
         val badges = (message.tags["source-badges"] ?: message.tags["badges"])?.let { value ->
             value.split(',').mapNotNull { badge ->
                 val split = badge.split("/")
                 val id = split.getOrNull(0)
                 val version = split.getOrNull(1)
                 if (id != null && version != null) {
-                    Badge(id, version)
+                    Badge(id, version, badgeInfo[id].orEmpty())
                 } else null
             }
         }
