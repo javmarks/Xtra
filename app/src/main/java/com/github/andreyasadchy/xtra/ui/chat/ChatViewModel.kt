@@ -207,13 +207,16 @@ class ChatViewModel(
     private val chatters = ConcurrentHashMap<String, Chatter>()
 
     fun startLive(networkLibrary: String?, recentMessagesUrl: String?, channelId: String?, channelLogin: String?, channelName: String?, streamId: String?) {
+        // Reset session-scoped rankings even when the existing channel reader can be reused.
+        if (this.streamId != streamId) {
+            clearTopGifters()
+            this.streamId = streamId
+        }
         // The shared read-socket manager stores its connection in chatReadJob, not chatReadWebSocket.
         // Avoid tearing down and re-registering an already-active shared reader when the chat view is recreated.
         if (started && sharedChatReadChannelLogin == channelLogin && chatReadJob?.isActive == true) return
         if (chatReadIRCSocket == null && chatReadWebSocket == null && eventSub == null && channelLogin != null) {
             messageLimit = applicationContext.prefs().getInt(C.CHAT_LIMIT, 600)
-            if (this.streamId != streamId) clearTopGifters()
-            this.streamId = streamId
             startLiveChat(channelId, channelLogin)
             loadSharedChatParticipants(channelId)
             // Refresh Shared Chat participants periodically instead of creating three
@@ -2080,16 +2083,18 @@ class ChatViewModel(
             }
         }
 
-        val previous = topGifterTotals[gifterId]
-        topGifterTotals[gifterId] = TopGifter(
-            userId = gifterId,
-            displayName = previous?.displayName ?: gifterName,
-            giftCount = (previous?.giftCount ?: 0) + giftCount,
-            profileImageUrl = previous?.profileImageUrl,
-        )
-        topGifters.value = topGifterTotals.values.sortedWith(
-            compareByDescending<TopGifter> { it.giftCount }.thenBy { it.displayName.lowercase() }
-        ).take(10)
+        synchronized(topGifterTotals) {
+            val previous = topGifterTotals[gifterId]
+            topGifterTotals[gifterId] = TopGifter(
+                userId = gifterId,
+                displayName = previous?.displayName ?: gifterName,
+                giftCount = (previous?.giftCount ?: 0) + giftCount,
+                profileImageUrl = previous?.profileImageUrl,
+            )
+            topGifters.value = topGifterTotals.values.sortedWith(
+                compareByDescending<TopGifter> { it.giftCount }.thenBy { it.displayName.lowercase() }
+            ).take(10)
+        }
         refreshTopGifterProfiles(networkLibrary, helixHeaders)
     }
 
@@ -2101,14 +2106,16 @@ class ChatViewModel(
         viewModelScope.launch {
             try {
                 val users = helixRepository.getUsers(networkLibrary, helixHeaders, ids = ids).data
-                users.forEach { user ->
-                    val id = user.id ?: return@forEach
-                    val current = topGifterTotals[id] ?: return@forEach
-                    topGifterTotals[id] = current.copy(profileImageUrl = user.profileImageURL)
+                synchronized(topGifterTotals) {
+                    users.forEach { user ->
+                        val id = user.id ?: return@forEach
+                        val current = topGifterTotals[id] ?: return@forEach
+                        topGifterTotals[id] = current.copy(profileImageUrl = user.profileImageURL)
+                    }
+                    topGifters.value = topGifterTotals.values.sortedWith(
+                        compareByDescending<TopGifter> { it.giftCount }.thenBy { it.displayName.lowercase() }
+                    ).take(10)
                 }
-                topGifters.value = topGifterTotals.values.sortedWith(
-                    compareByDescending<TopGifter> { it.giftCount }.thenBy { it.displayName.lowercase() }
-                ).take(10)
             } catch (_: Exception) {
                 ids.forEach { requestedTopGifterProfileIds.remove(it) }
             }
