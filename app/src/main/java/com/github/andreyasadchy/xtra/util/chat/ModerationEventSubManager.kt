@@ -5,6 +5,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 
 /**
@@ -14,6 +16,8 @@ import org.json.JSONObject
 class ModerationEventSubManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
+    // All subscription creation for this transport must be sequential.
+    private val subscriptionMutex = Mutex()
     private val listeners = LinkedHashMap<String, EventSubWebSocket.Listener>()
     // Keep subscriptions alive for the lifetime of the shared socket session.
     // Reopening a channel replaces its listener, but must not create duplicate subscriptions.
@@ -49,7 +53,7 @@ class ModerationEventSubManager {
             val activeSessionId = sessionId
             if (activeSessionId != null) {
                 if (subscribedChannels.add(channelId)) {
-                    scope.launch { listener.onWelcomeMessage(activeSessionId) }
+                    scope.launch { subscriptionMutex.withLock { listener.onWelcomeMessage(activeSessionId) } }
                 }
             } else {
                 startSocketLocked()
@@ -102,7 +106,9 @@ class ModerationEventSubManager {
                 subscribedChannels.addAll(listeners.keys)
                 listeners.values.toList()
             }
-            active.forEach { it.onWelcomeMessage(sessionId) }
+            active.forEach { listener ->
+                subscriptionMutex.withLock { listener.onWelcomeMessage(sessionId) }
+            }
         }
 
         override suspend fun onChatMessage(event: JSONObject, timestamp: String?) {
