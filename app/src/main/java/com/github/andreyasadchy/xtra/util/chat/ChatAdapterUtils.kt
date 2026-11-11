@@ -496,28 +496,43 @@ object ChatAdapterUtils {
                 if (streak > 0) details.add("$streak-month streak")
                 if (event?.optBoolean("is_prime") == true) details.add("Prime")
                 if (event?.optBoolean("is_gift") == true) {
-                    val gifter = event?.optString("gifter_user_name")?.takeIf { it.isNotBlank() && it != "null" }
-                    details.add(if (gifter != null) "Gifted by $gifter" else "Gift subscription")
+                    val gifter = event.optString("gifter_user_name").takeIf { it.isNotBlank() && it != "null" }
+                    val anonymous = event.optBoolean("gifter_is_anonymous", false)
+                    details.add(when {
+                        gifter != null -> "Gifted by $gifter"
+                        anonymous -> "Anonymous gift"
+                        else -> "Gift subscription"
+                    })
                 }
             }
             "sub_gift" -> {
                 val recipient = event?.optString("recipient_user_name")?.takeIf { !it.isNullOrBlank() && it != "null" }
                 val duration = event?.optInt("duration_months", 0) ?: 0
                 val cumulative = event?.optInt("cumulative_total", 0) ?: 0
+                val anonymous = event?.has("cumulative_total") == true && event.isNull("cumulative_total")
                 if (recipient != null) details.add("to $recipient")
                 if (duration > 0) details.add("$duration months")
                 if (cumulative > 0) details.add("$cumulative gifts given")
+                if (anonymous) details.add("Anonymous gift")
             }
             "community_sub_gift" -> {
                 val total = event?.optInt("total", 0) ?: 0
                 val cumulative = event?.optInt("cumulative_total", 0) ?: 0
+                val anonymous = event?.has("cumulative_total") == true && event.isNull("cumulative_total")
                 if (total > 0) details.add("$total gifted")
                 if (cumulative > 0) details.add("$cumulative gifts given")
+                if (anonymous) details.add("Anonymous gift")
             }
             "prime_paid_upgrade" -> details.add("Prime upgrade")
             "gift_paid_upgrade" -> {
                 val gifter = event?.optString("gifter_user_name")?.takeIf { !it.isNullOrBlank() && it != "null" }
                 if (gifter != null) details.add("Gifted by $gifter")
+                else if (event?.optBoolean("gifter_is_anonymous", false) == true) details.add("Anonymous gifter")
+            }
+            "pay_it_forward" -> {
+                val gifter = event?.optString("gifter_user_name")?.takeIf { !it.isNullOrBlank() && it != "null" }
+                if (gifter != null) details.add("Gifted by $gifter")
+                else if (event?.optBoolean("gifter_is_anonymous", false) == true) details.add("Anonymous gifter")
             }
         }
         return details.distinct().takeIf { it.isNotEmpty() }?.joinToString(" • ")
