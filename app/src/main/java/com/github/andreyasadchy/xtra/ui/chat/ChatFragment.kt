@@ -164,8 +164,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     val avatars = listOf(binding.topGifterAvatar1, binding.topGifterAvatar2, binding.topGifterAvatar3)
                     val names = listOf(binding.topGifterName1, binding.topGifterName2, binding.topGifterName3)
                     val counts = listOf(binding.topGifterCount1, binding.topGifterCount2, binding.topGifterCount3)
+                    val places = listOf(binding.topGifterPlace1, binding.topGifterPlace2, binding.topGifterPlace3)
                     for (index in 0 until 3) {
                         val gifter = gifters.getOrNull(index)
+                        places[index].isVisible = gifter != null
                         names[index].text = gifter?.displayName.orEmpty()
                         counts[index].text = gifter?.let {
                             "${NumberFormat.getIntegerInstance().format(it.giftCount)} gifts"
