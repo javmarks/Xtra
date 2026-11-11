@@ -2084,7 +2084,37 @@ class ChatViewModel(
         }
 
         override suspend fun onRoomState(event: JSONObject, timestamp: String?) {
-            roomState.value = EventSubUtils.parseRoomState(event)
+            val updated = EventSubUtils.parseRoomState(event)
+            val changes = buildList {
+                if (event.has("emote_mode")) add(if (updated.emote == "1") "Emote-only enabled" else "Emote-only disabled")
+                if (event.has("follower_mode")) {
+                    val duration = event.optInt("follower_mode_duration_minutes", 0)
+                    add(if (updated.followers != "-1") {
+                        if (duration > 0) "Followers-only enabled ($duration min)" else "Followers-only enabled"
+                    } else "Followers-only disabled")
+                }
+                if (event.has("unique_chat_mode")) add(if (updated.unique == "1") "Unique chat enabled" else "Unique chat disabled")
+                if (event.has("slow_mode")) {
+                    val duration = event.optInt("slow_mode_wait_time_seconds", 0)
+                    add(if (updated.slow != "0") {
+                        if (duration > 0) "Slow mode enabled ($duration sec)" else "Slow mode enabled"
+                    } else "Slow mode disabled")
+                }
+                if (event.has("subscriber_mode")) add(if (updated.subs == "1") "Subscriber-only mode enabled" else "Subscriber-only mode disabled")
+            }
+            if (changes.isNotEmpty()) {
+                val eventTime = timestamp?.let { Instant.parseOrNull(it)?.toEpochMilliseconds()?.takeIf { ms -> ms > 0L } }
+                    ?.let { java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it)) }
+                val logEntry = JSONObject().apply {
+                    put("action", "Chat settings updated")
+                    put("moderator", JSONObject.NULL)
+                    put("time", eventTime ?: JSONObject.NULL)
+                    put("channel", channelLogin)
+                    put("message", changes.joinToString(" · "))
+                }
+                saveModerationLog(channelId, logEntry.toString())
+            }
+            roomState.value = updated
         }
 
         override suspend fun onSharedChat(event: JSONObject, subscriptionType: String) {
