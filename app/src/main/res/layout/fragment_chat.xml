@@ -67,6 +67,12 @@
                     android:gravity="center"
                     android:orientation="vertical"
                     android:paddingTop="5dp">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🥈 2"
+                        android:textStyle="bold"
+                        android:textAppearance="?attr/textAppearanceLabelSmall" />
                     <ImageView
                         android:id="@+id/topGifterAvatar2"
                         android:layout_width="42dp"
@@ -131,6 +137,12 @@
                     android:gravity="center"
                     android:orientation="vertical"
                     android:paddingTop="5dp">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🥉 3"
+                        android:textStyle="bold"
+                        android:textAppearance="?attr/textAppearanceLabelSmall" />
                     <ImageView
                         android:id="@+id/topGifterAvatar3"
                         android:layout_width="42dp"
