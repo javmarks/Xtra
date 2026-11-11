@@ -278,7 +278,13 @@ object ChatAdapterUtils {
                         if (imageClick != null) {
                             builder.setSpan(object : ClickableSpan() {
                                 override fun onClick(widget: View) {
-                                    imageClick(badge.url4x ?: badge.url3x ?: badge.url2x ?: badge.url1x, badge.title, null, null, null, null, null)
+                                    val subscriberMonths = chatBadge.info.toIntOrNull()?.takeIf { chatBadge.setId == "subscriber" && it > 0 }
+                                    val badgeDetails = if (subscriberMonths != null) {
+                                        "${badge.title ?: "Subscriber"} • $subscriberMonths months subscribed"
+                                    } else {
+                                        badge.title
+                                    }
+                                    imageClick(badge.url4x ?: badge.url3x ?: badge.url2x ?: badge.url1x, badgeDetails, null, null, null, null, null)
                                 }
 
                                 override fun updateDrawState(ds: TextPaint) {}
