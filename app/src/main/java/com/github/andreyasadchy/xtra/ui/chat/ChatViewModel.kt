@@ -31,6 +31,7 @@ import com.github.andreyasadchy.xtra.model.chat.STVBadge
 import com.github.andreyasadchy.xtra.model.chat.STVUser
 import com.github.andreyasadchy.xtra.model.chat.TwitchBadge
 import com.github.andreyasadchy.xtra.model.chat.TwitchEmote
+import com.github.andreyasadchy.xtra.model.chat.TopGifter
 import com.github.andreyasadchy.xtra.model.chat.VideoChatMessage
 import com.github.andreyasadchy.xtra.model.ui.TranslatedChannel
 import com.github.andreyasadchy.xtra.model.helix.user.User
@@ -160,6 +161,11 @@ class ChatViewModel(
     val pinnedChatMessage = MutableStateFlow<PinnedChatMessageResponse.PinnedMessage?>(null)
     val moderationLogs = MutableStateFlow<List<String>>(emptyList())
     val sharedChatParticipantUsers = MutableStateFlow<List<User>>(emptyList())
+    // Top Gifters is scoped to the current live stream and uses the existing EventSub chat feed.
+    val topGifters = MutableStateFlow<List<TopGifter>>(emptyList())
+    private val topGifterTotals = linkedMapOf<String, TopGifter>()
+    private val seenTopGifterEventIds = LinkedHashSet<String>()
+    private val seenCommunityGiftIds = LinkedHashSet<String>()
     // Source-channel IDs observed in actual Shared Chat messages; dedupe profile lookups.
     private val resolvedSharedChatSourceIds = ConcurrentHashMap.newKeySet<String>()
     val streamInfo: StateFlow<PubSubUtils.StreamInfo?> = _streamInfo
@@ -205,6 +211,7 @@ class ChatViewModel(
         if (started && sharedChatReadChannelLogin == channelLogin && chatReadJob?.isActive == true) return
         if (chatReadIRCSocket == null && chatReadWebSocket == null && eventSub == null && channelLogin != null) {
             messageLimit = applicationContext.prefs().getInt(C.CHAT_LIMIT, 600)
+            if (this.streamId != streamId) clearTopGifters()
             this.streamId = streamId
             startLiveChat(channelId, channelLogin)
             loadSharedChatParticipants(channelId)
@@ -1783,6 +1790,7 @@ class ChatViewModel(
 
     fun disconnect() {
         stopLiveChat()
+        clearTopGifters()
         usedRaidId = null
         raidClosed = true
         usedPollId = null
@@ -2017,6 +2025,71 @@ class ChatViewModel(
         }
     }
 
+    private fun clearTopGifters() {
+        topGifterTotals.clear()
+        seenTopGifterEventIds.clear()
+        seenCommunityGiftIds.clear()
+        topGifters.value = emptyList()
+    }
+
+    private fun recordTopGifterEvent(event: JSONObject) {
+        // Shared-chat notices from another broadcaster belong to that channel's leaderboard,
+        // not the main channel's board.
+        if (event.has("source_broadcaster_user_id") && !event.isNull("source_broadcaster_user_id")) return
+
+        val noticeType = event.optString("notice_type")
+        val isCommunityGift = noticeType == "community_sub_gift"
+        val isIndividualGift = noticeType == "sub_gift"
+        if (!isCommunityGift && !isIndividualGift) return
+
+        if (event.optBoolean("chatter_is_anonymous", false)) return
+        val gifterId = event.optString("chatter_user_id").takeIf { it.isNotBlank() } ?: return
+        val gifterName = event.optString("chatter_user_name").takeIf { it.isNotBlank() }
+            ?: event.optString("chatter_user_login").takeIf { it.isNotBlank() }
+            ?: return
+
+        val giftDetails = event.optJSONObject(if (isCommunityGift) "community_sub_gift" else "sub_gift") ?: return
+        // Twitch reports zero when a gifter has opted out of sharing their gifting total.
+        // Such users are intentionally omitted, matching the privacy behavior of its leaderboard.
+        if (giftDetails.has("cumulative_total") && !giftDetails.isNull("cumulative_total") &&
+            giftDetails.optInt("cumulative_total", -1) == 0
+        ) return
+
+        val eventId = event.optString("message_id").takeIf { it.isNotBlank() }
+        if (eventId != null && !seenTopGifterEventIds.add(eventId)) return
+        if (seenTopGifterEventIds.size > 1000) {
+            val iterator = seenTopGifterEventIds.iterator()
+            repeat(seenTopGifterEventIds.size - 750) { if (iterator.hasNext()) { iterator.next(); iterator.remove() } }
+        }
+
+        val communityGiftId = if (isCommunityGift) {
+            giftDetails.optString("id").takeIf { it.isNotBlank() }
+        } else {
+            giftDetails.optString("community_gift_id").takeIf { it.isNotBlank() }
+        }
+        val giftCount = if (isCommunityGift) giftDetails.optInt("total", 0) else 1
+        if (giftCount <= 0) return
+
+        if (communityGiftId != null) {
+            if (!seenCommunityGiftIds.add(communityGiftId)) return
+            if (seenCommunityGiftIds.size > 1000) {
+                val iterator = seenCommunityGiftIds.iterator()
+                repeat(seenCommunityGiftIds.size - 750) { if (iterator.hasNext()) { iterator.next(); iterator.remove() } }
+            }
+        }
+
+        val previous = topGifterTotals[gifterId]
+        topGifterTotals[gifterId] = TopGifter(
+            userId = gifterId,
+            displayName = previous?.displayName ?: gifterName,
+            giftCount = (previous?.giftCount ?: 0) + giftCount,
+            profileImageUrl = previous?.profileImageUrl,
+        )
+        topGifters.value = topGifterTotals.values.sortedWith(
+            compareByDescending<TopGifter> { it.giftCount }.thenBy { it.displayName.lowercase() }
+        ).take(10)
+    }
+
     private inner class EventSubListener(
         private val helixHeaders: Map<String, String>,
         private val channelLogin: String,
@@ -2106,6 +2179,7 @@ class ChatViewModel(
                     }
                 }
             } else if (showUserNotice) {
+                recordTopGifterEvent(event)
                 onChatMessage(EventSubUtils.parseUserNotice(event, timestamp), networkLibrary, isLoggedIn, accountId, channelId)
             }
         }
