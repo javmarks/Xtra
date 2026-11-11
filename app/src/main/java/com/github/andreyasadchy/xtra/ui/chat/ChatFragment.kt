@@ -174,8 +174,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.channelPointsBalance.collectLatest { balance ->
-                    binding.channelPointsBar.isVisible = (balance != null || viewModel.watchStreak.value != null) && !isMergedRendererOnly
-                    binding.channelPointsBalance.text = balance?.let { NumberFormat.getIntegerInstance().format(it) } ?: ""
+                    binding.channelPointsBar.isVisible = requireArguments().getBoolean(KEY_IS_LIVE) && !isMergedRendererOnly
+                    binding.channelPointsBalance.text = balance?.let { NumberFormat.getIntegerInstance().format(it) } ?: "Loading…"
                 }
             }
         }
@@ -337,7 +337,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 viewModel.watchStreak.collectLatest { streak ->
                     binding.watchStreakIndicator.isVisible = streak != null
                     binding.watchStreakIndicator.text = streak?.let { "🔥 ${it.count}" }.orEmpty()
-                    binding.channelPointsBar.isVisible = (viewModel.channelPointsBalance.value != null || streak != null) && !isMergedRendererOnly
+                    binding.channelPointsBar.isVisible = requireArguments().getBoolean(KEY_IS_LIVE) && !isMergedRendererOnly
                 }
             }
         }
