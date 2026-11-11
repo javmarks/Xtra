@@ -2074,16 +2074,16 @@ class ChatViewModel(
         } else {
             giftDetails.optString("community_gift_id").takeIf { it.isNotBlank() }
         }
+        // A community gift is counted once from its bundle notice. Its following
+        // per-recipient sub_gift notices must not add another gift to the total.
+        if (isIndividualGift && communityGiftId != null) return
+        if (isCommunityGift && communityGiftId != null && !seenCommunityGiftIds.add(communityGiftId)) return
+        if (seenCommunityGiftIds.size > 1000) {
+            val iterator = seenCommunityGiftIds.iterator()
+            repeat(seenCommunityGiftIds.size - 750) { if (iterator.hasNext()) { iterator.next(); iterator.remove() } }
+        }
         val giftCount = if (isCommunityGift) giftDetails.optInt("total", 0) else 1
         if (giftCount <= 0) return
-
-        if (communityGiftId != null) {
-            if (!seenCommunityGiftIds.add(communityGiftId)) return
-            if (seenCommunityGiftIds.size > 1000) {
-                val iterator = seenCommunityGiftIds.iterator()
-                repeat(seenCommunityGiftIds.size - 750) { if (iterator.hasNext()) { iterator.next(); iterator.remove() } }
-            }
-        }
 
         synchronized(topGifterTotals) {
             val previous = topGifterTotals[gifterId]
