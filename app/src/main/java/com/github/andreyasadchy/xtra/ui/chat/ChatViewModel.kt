@@ -118,6 +118,7 @@ class ChatViewModel(
     private var predictionTimeoutJob: Job? = null
     private var pinnedChatExpiryJob: Job? = null
     private var sharedChatRefreshJob: Job? = null
+    private var channelPointsRetryJob: Job? = null
     private var started = false
     // Ignore the first ROOMSTATE snapshot after each connection; it is a baseline, not a mode change.
     private var roomStateInitialized = false
@@ -217,6 +218,17 @@ class ChatViewModel(
             }
             refreshChannelPointsBalance(channelLogin)
             refreshWatchStreak(channelId)
+            // Retry only the initial account/channel data fetches; do not create
+            // additional chat sockets or EventSub subscriptions.
+            channelPointsRetryJob?.cancel()
+            channelPointsRetryJob = viewModelScope.launch {
+                for (waitMs in listOf(20_000L, 60_000L, 120_000L)) {
+                    delay(waitMs)
+                    if (!started) break
+                    if (channelPointsBalance.value == null) refreshChannelPointsBalance(channelLogin)
+                    if (watchStreak.value == null) refreshWatchStreak(channelId)
+                }
+            }
             refreshPinnedChatMessage(channelId)
             addChatter(channelName)
             loadEmotes(channelId, channelLogin)
@@ -1684,6 +1696,8 @@ class ChatViewModel(
             started = false
             sharedChatRefreshJob?.cancel()
             sharedChatRefreshJob = null
+            channelPointsRetryJob?.cancel()
+            channelPointsRetryJob = null
 
             // Capture the exact connections being stopped before launching asynchronous cleanup.
             // startLiveChat() may immediately install replacement sockets; cleanup must never
