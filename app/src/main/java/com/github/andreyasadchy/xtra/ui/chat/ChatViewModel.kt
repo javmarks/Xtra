@@ -2056,9 +2056,11 @@ class ChatViewModel(
             ?: return
 
         val giftDetails = event.optJSONObject(if (isCommunityGift) "community_sub_gift" else "sub_gift") ?: return
-        // Twitch reports null when a gift is anonymous or the gifter opted out of
-        // sharing their gifting total. Omit both cases to respect leaderboard privacy.
-        if (!giftDetails.has("cumulative_total") || giftDetails.isNull("cumulative_total")) return
+        // Null identifies anonymous gifts. Twitch has also been observed to send
+        // zero for users who opted out of sharing their gifting total.
+        if (!giftDetails.has("cumulative_total") || giftDetails.isNull("cumulative_total") ||
+            giftDetails.optInt("cumulative_total", -1) == 0
+        ) return
 
         val eventId = event.optString("message_id").takeIf { it.isNotBlank() }
         if (eventId != null && !seenTopGifterEventIds.add(eventId)) return
