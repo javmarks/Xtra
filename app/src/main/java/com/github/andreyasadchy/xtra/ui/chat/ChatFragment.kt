@@ -143,6 +143,52 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         super.onViewCreated(view, savedInstanceState)
         val isLiveChannel = requireArguments().getBoolean(KEY_IS_LIVE)
         binding.moderationLogsBar.isVisible = isLiveChannel && !isMergedRendererOnly
+        binding.topGiftersBar.isVisible = isLiveChannel && !isMergedRendererOnly && viewModel.topGifters.value.isNotEmpty()
+        binding.topGiftersBar.setOnClickListener {
+            val gifters = viewModel.topGifters.value
+            if (gifters.isNotEmpty()) {
+                val entries = gifters.mapIndexed { index, gifter ->
+                    "\${index + 1}. \${gifter.displayName} · \${NumberFormat.getIntegerInstance().format(gifter.giftCount)} gifts"
+                }
+                requireContext().getAlertDialogBuilder()
+                    .setTitle("Top Gifters · This stream")
+                    .setItems(entries.toTypedArray(), null)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+            }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.topGifters.collectLatest { gifters ->
+                    binding.topGiftersBar.isVisible = isLiveChannel && !isMergedRendererOnly && gifters.isNotEmpty()
+                    val avatars = listOf(binding.topGifterAvatar1, binding.topGifterAvatar2, binding.topGifterAvatar3)
+                    val names = listOf(binding.topGifterName1, binding.topGifterName2, binding.topGifterName3)
+                    val counts = listOf(binding.topGifterCount1, binding.topGifterCount2, binding.topGifterCount3)
+                    for (index in 0 until 3) {
+                        val gifter = gifters.getOrNull(index)
+                        names[index].text = gifter?.displayName.orEmpty()
+                        counts[index].text = gifter?.let {
+                            "\${NumberFormat.getIntegerInstance().format(it.giftCount)} gifts"
+                        }.orEmpty()
+                        avatars[index].isVisible = gifter != null
+                        if (gifter?.profileImageUrl.isNullOrBlank()) {
+                            avatars[index].setImageDrawable(null)
+                        } else {
+                            requireContext().imageLoader.enqueue(
+                                ImageRequest.Builder(requireContext()).apply {
+                                    data(gifter?.profileImageUrl)
+                                    transformations(CircleCropTransformation())
+                                    crossfade(true)
+                                    target(avatars[index])
+                                }.build()
+                            )
+                        }
+                        names[index].isVisible = gifter != null
+                        counts[index].isVisible = gifter != null
+                    }
+                }
+            }
+        }
         binding.moderationLogsButton.setOnClickListener {
             val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
                 ?: requireArguments().getString(KEY_CHANNEL_LOGIN)
