@@ -1934,6 +1934,7 @@ class MediaPlayerService : BasePlaybackService() {
     }
 
     fun updatePlayingState() {
+        updateDropsWatchTracking(player?.isPlaying == true)
         updatePlaybackState()
         updateNotification()
         player?.let { player ->
