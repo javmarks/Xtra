@@ -509,7 +509,7 @@ object ChatAdapterUtils {
                 val recipient = event?.optString("recipient_user_name")?.takeIf { !it.isNullOrBlank() && it != "null" }
                 val duration = event?.optInt("duration_months", 0) ?: 0
                 val cumulative = event?.optInt("cumulative_total", 0) ?: 0
-                val anonymous = event?.has("cumulative_total") == true && event.isNull("cumulative_total")
+                val anonymous = event?.let { it.has("cumulative_total") && it.isNull("cumulative_total") } == true
                 if (recipient != null) details.add("to $recipient")
                 if (duration > 0) details.add("$duration months")
                 if (cumulative > 0) details.add("$cumulative gifts given")
