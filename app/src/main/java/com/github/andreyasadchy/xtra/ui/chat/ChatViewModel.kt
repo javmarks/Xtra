@@ -1870,6 +1870,9 @@ class ChatViewModel(
                 put("durationLabel", duration?.let {
                     TwitchApiHelper.getDurationFromSeconds(applicationContext, it.toString())
                 } ?: JSONObject.NULL)
+                // Twitch IRC CLEARCHAT can include the moderator-supplied ban reason.
+                // Keep it separate from the affected user's message context.
+                put("reason", message.tags["ban-reason"]?.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
                 put("time", eventAt ?: JSONObject.NULL)
                 put("channel", channelLogin)
                 put("message", associatedMessage ?: JSONObject.NULL)
