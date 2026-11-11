@@ -148,7 +148,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             val gifters = viewModel.topGifters.value
             if (gifters.isNotEmpty()) {
                 val entries = gifters.mapIndexed { index, gifter ->
-                    "\${index + 1}. \${gifter.displayName} · \${NumberFormat.getIntegerInstance().format(gifter.giftCount)} gifts"
+                    "${index + 1}. ${gifter.displayName} · ${NumberFormat.getIntegerInstance().format(gifter.giftCount)} gifts"
                 }
                 requireContext().getAlertDialogBuilder()
                     .setTitle("Top Gifters · This stream")
@@ -168,7 +168,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         val gifter = gifters.getOrNull(index)
                         names[index].text = gifter?.displayName.orEmpty()
                         counts[index].text = gifter?.let {
-                            "\${NumberFormat.getIntegerInstance().format(it.giftCount)} gifts"
+                            "${NumberFormat.getIntegerInstance().format(it.giftCount)} gifts"
                         }.orEmpty()
                         avatars[index].isVisible = gifter != null
                         if (gifter?.profileImageUrl.isNullOrBlank()) {
