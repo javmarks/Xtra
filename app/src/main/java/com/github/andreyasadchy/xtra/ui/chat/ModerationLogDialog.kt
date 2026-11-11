@@ -35,7 +35,7 @@ object ModerationLogDialog {
         fun update(rawEntries: List<String>) {
             if (!dialog.isShowing) return
             latestEntries = rawEntries
-            footer?.let(list::removeView)
+            footer?.let { list.removeView(it) }
             footer = null
             // Keep rendering lightweight while allowing older saved entries to be loaded on demand.
             val visibleEntries = rawEntries.take(visibleLimit)
@@ -132,7 +132,7 @@ object ModerationLogDialog {
             if (total <= visible || visibleLimit >= 300) return
             val density = context.resources.displayMetrics.density
             val remaining = (total - visible).coerceAtMost(60)
-            footer = TextView(context).apply {
+            val loadOlder = TextView(context).apply {
                 text = "Load $remaining older entries"
                 textSize = 13f
                 gravity = android.view.Gravity.CENTER
@@ -145,7 +145,8 @@ object ModerationLogDialog {
                     update(latestEntries)
                 }
             }
-            list.addView(footer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            footer = loadOlder
+            list.addView(loadOlder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
     }
 
