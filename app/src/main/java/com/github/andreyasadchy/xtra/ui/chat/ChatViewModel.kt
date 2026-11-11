@@ -1493,6 +1493,10 @@ class ChatViewModel(
         if (channelId.isNullOrBlank()) return
         viewModelScope.launch {
             moderationLogMutex.withLock {
+                // Twitch can deliver the same moderation event through overlapping IRC
+                // and EventSub paths. Suppress an exact repeat in the recent window while
+                // preserving distinct actions and the existing persisted history.
+                if (moderationLogs.value.take(25).any { it == entry }) return@withLock
                 // Update from the in-memory flow instead of re-reading SharedPreferences
                 // for every event. This prevents concurrent callbacks from overwriting one
                 // another and keeps the rolling 300-entry window moving indefinitely.
