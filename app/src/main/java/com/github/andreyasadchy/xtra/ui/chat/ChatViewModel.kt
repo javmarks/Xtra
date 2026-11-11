@@ -1998,33 +1998,33 @@ class ChatViewModel(
                 Triple("channel.chat_settings.update", "1", false),
                 Triple("channel.moderate", "2", true),
             )
-            subscriptions.forEach { (type, version, moderatorCondition) ->
-                viewModelScope.launch {
-                    try {
-                        helixRepository.createEventSubSubscription(
-                            networkLibrary, helixHeaders, accountId, channelId, type, sessionId, version,
-                            moderatorCondition, broadcasterOnlyCondition = type.startsWith("channel.shared_chat.")
-                        )?.let { error ->
-                            if (type != "channel.moderate" ||
-                                moderationEventSubManager.shouldReportSubscriptionError()
-                            ) {
-                                onMessage(ChatMessage(
-                                    systemMsg = if (type == "channel.moderate") {
-                                        "Twitch EventSub subscription failed: $error"
-                                    } else error,
-                                    fullMsg = error
-                                ))
-                            }
-                        }
-                    } catch (e: Exception) {
-                        if (type == "channel.moderate" &&
+            // Create subscriptions one at a time. Parallel POSTs from every open
+            // chat can race Twitch's per-transport cost accounting and trigger 429s.
+            for ((type, version, moderatorCondition) in subscriptions) {
+                try {
+                    helixRepository.createEventSubSubscription(
+                        networkLibrary, helixHeaders, accountId, channelId, type, sessionId, version,
+                        moderatorCondition, broadcasterOnlyCondition = type.startsWith("channel.shared_chat.")
+                    )?.let { error ->
+                        if (type != "channel.moderate" ||
                             moderationEventSubManager.shouldReportSubscriptionError()
                         ) {
                             onMessage(ChatMessage(
-                                systemMsg = "Twitch EventSub subscription failed: ${e.message ?: "Unknown error"}",
-                                fullMsg = e.stackTraceToString()
+                                systemMsg = if (type == "channel.moderate") {
+                                    "Twitch EventSub subscription failed: $error"
+                                } else error,
+                                fullMsg = error
                             ))
                         }
+                    }
+                } catch (e: Exception) {
+                    if (type == "channel.moderate" &&
+                        moderationEventSubManager.shouldReportSubscriptionError()
+                    ) {
+                        onMessage(ChatMessage(
+                            systemMsg = "Twitch EventSub subscription failed: ${e.message ?: "Unknown error"}",
+                            fullMsg = e.stackTraceToString()
+                        ))
                     }
                 }
             }
