@@ -200,6 +200,9 @@ class ChatViewModel(
     private val chatters = ConcurrentHashMap<String, Chatter>()
 
     fun startLive(networkLibrary: String?, recentMessagesUrl: String?, channelId: String?, channelLogin: String?, channelName: String?, streamId: String?) {
+        // The shared read-socket manager stores its connection in chatReadJob, not chatReadWebSocket.
+        // Avoid tearing down and re-registering an already-active shared reader when the chat view is recreated.
+        if (started && sharedChatReadChannelLogin == channelLogin && chatReadJob?.isActive == true) return
         if (chatReadIRCSocket == null && chatReadWebSocket == null && eventSub == null && channelLogin != null) {
             messageLimit = applicationContext.prefs().getInt(C.CHAT_LIMIT, 600)
             this.streamId = streamId
