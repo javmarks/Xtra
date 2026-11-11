@@ -286,43 +286,6 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         binding.channelPointsIcon.setOnClickListener { showChannelPointsRewards() }
         binding.channelPointsBalance.setOnClickListener { showChannelPointsRewards() }
         binding.channelPointsLabel.setOnClickListener { showChannelPointsRewards() }
-        binding.pinnedChatBar.setOnClickListener {
-            val pinned = viewModel.pinnedChatMessage.value ?: return@setOnClickListener
-            val messageText = pinned.message?.text.orEmpty()
-            val sender = pinned.senderName ?: pinned.senderLogin ?: "viewer"
-            val pinnedBy = pinned.pinnedByName ?: pinned.pinnedByLogin ?: "moderator"
-            val pinnedAt = pinned.pinnedAt?.let { value ->
-                runCatching {
-                    val time = java.time.Instant.parse(value).toEpochMilli()
-                    "Pinned " + DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
-                }.getOrNull()
-            }
-            val expiry = pinned.expiresAt?.let { value ->
-                runCatching {
-                    val time = java.time.Instant.parse(value).toEpochMilli()
-                    "Expires " + DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
-                }.getOrNull()
-            } ?: "Pinned until the stream ends"
-            val details = buildString {
-                append(messageText.ifBlank { "Message content is unavailable." })
-                append("\n\nSent by ").append(sender)
-                append("\nPinned by ").append(pinnedBy)
-                pinnedAt?.let { append("\n").append(it) }
-                append("\n").append(expiry)
-            }
-            requireContext().getAlertDialogBuilder()
-                .setTitle("Pinned message")
-                .setMessage(details)
-                .setPositiveButton(android.R.string.ok, null)
-                .setNeutralButton("Copy message") { _, _ ->
-                    if (messageText.isNotBlank()) {
-                        val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                        clipboard?.setPrimaryClip(ClipData.newPlainText("Pinned chat message", messageText))
-                        Toast.makeText(requireContext(), "Pinned message copied", Toast.LENGTH_SHORT).show()
-                    }
-                }
-                .show()
-        }
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.pinnedChatMessage.collectLatest { pinned ->
@@ -420,26 +383,36 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             val pinned = viewModel.pinnedChatMessage.value ?: return@setOnClickListener
             val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
                 ?: requireArguments().getString(KEY_CHANNEL_LOGIN) ?: "channel"
+            val messageText = pinned.message?.text.orEmpty()
             val pinnedBy = pinned.pinnedByName ?: pinned.pinnedByLogin ?: "moderator"
             val sender = pinned.senderName ?: pinned.senderLogin ?: "viewer"
+            val pinnedAt = pinned.pinnedAt?.let { value ->
+                runCatching {
+                    val time = java.time.Instant.parse(value).toEpochMilli()
+                    "Pinned " + DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
+                }.getOrNull()
+            }
             val expiry = pinned.expiresAt?.let { value ->
                 runCatching {
                     val time = java.time.Instant.parse(value).toEpochMilli()
                     "Expires " + DateUtils.getRelativeTimeSpanString(time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS)
                 }.getOrNull()
-            }
+            } ?: "Pinned until the stream ends"
             requireContext().getAlertDialogBuilder()
                 .setTitle("Pinned message · #$channelName")
                 .setMessage(buildString {
-                    append(pinned.message?.text.orEmpty())
-                    append("\n\nSent by $sender")
-                    append("\nPinned by $pinnedBy")
-                    expiry?.let { append("\n$it") }
+                    append(messageText.ifBlank { "Message content is unavailable." })
+                    append("\\n\\nSent by ").append(sender)
+                    append("\\nPinned by ").append(pinnedBy)
+                    pinnedAt?.let { append("\\n").append(it) }
+                    append("\\n").append(expiry)
                 })
                 .setPositiveButton("Copy message") { _, _ ->
-                    val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("Pinned chat message", pinned.message?.text.orEmpty()))
-                    Toast.makeText(requireContext(), "Pinned message copied", Toast.LENGTH_SHORT).show()
+                    if (messageText.isNotBlank()) {
+                        val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Pinned chat message", messageText))
+                        Toast.makeText(requireContext(), "Pinned message copied", Toast.LENGTH_SHORT).show()
+                    }
                 }
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
