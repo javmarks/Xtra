@@ -695,7 +695,7 @@ class PlayerRepository(
         }
     }
 
-    suspend fun sendMinuteWatched(networkLibrary: String?, userId: String?, streamId: String?, channelId: String?, channelLogin: String?, gameId: String?, gameName: String?) = withContext(Dispatchers.IO) {
+    suspend fun sendMinuteWatched(networkLibrary: String?, userId: String?, streamId: String?, channelId: String?, channelLogin: String?, gameId: String? = null, gameName: String? = null) = withContext(Dispatchers.IO) {
         val pageResponse = channelLogin?.let {
             val pageUrl = "https://www.twitch.tv/${channelLogin}"
             when {
