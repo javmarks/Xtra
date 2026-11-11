@@ -257,9 +257,11 @@ class ChatViewModel(
                     }
                 }
                 val channel = response.data?.community?.channel
-                channelPointsBalance.value = channel?.self?.communityPoints?.balance
+                // Do not erase a previously loaded balance/reward list on a partial
+                // GraphQL response; transient Twitch failures must not hide the UI.
+                channel?.self?.communityPoints?.balance?.let { channelPointsBalance.value = it }
                 val settings = channel?.communityPointsSettings
-                channelPointRewards.value = if (settings?.isEnabled == true) {
+                if (settings != null) channelPointRewards.value = if (settings.isEnabled == true) {
                     settings.customRewards.orEmpty().mapNotNull { reward ->
                         val id = reward.id?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
                         val title = reward.title?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
@@ -375,7 +377,7 @@ class ChatViewModel(
                     }
                 }
             } catch (_: Exception) {
-                watchStreak.value = null
+                // Keep the last known streak during transient GraphQL/network failures.
             }
         }
     }
