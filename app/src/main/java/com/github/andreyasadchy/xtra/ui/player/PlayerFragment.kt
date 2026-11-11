@@ -88,7 +88,6 @@ import com.github.andreyasadchy.xtra.util.tokenPrefs
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.timepicker.MaterialTimePicker
-import java.text.NumberFormat
 import com.google.android.material.timepicker.TimeFormat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
