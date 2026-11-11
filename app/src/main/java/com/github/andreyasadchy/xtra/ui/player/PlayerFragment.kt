@@ -1353,6 +1353,59 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                 )
+                val pointsTab = Button(requireContext()).apply {
+                    text = "Points"
+                    isAllCaps = false
+                    contentDescription = "Show Channel Points and Watch Streaks for open chats"
+                    setOnClickListener {
+                        val sources = fragments.filter { it.isAdded && !it.isMergedRendererOnly }
+                        val labels = sources.map { source ->
+                            val name = source.arguments?.getString("channel_name")
+                                ?: source.arguments?.getString("channel_login") ?: "Chat"
+                            val balance = source.mergedChatViewModel.channelPointsBalance.value
+                            val streak = source.mergedChatViewModel.watchStreak.value
+                            buildString {
+                                append(name)
+                                balance?.let { append(" · ◆ ").append(NumberFormat.getIntegerInstance().format(it)) }
+                                streak?.let { append(" · 🔥 ").append(it.count) }
+                                if (balance == null && streak == null) append(" · Loading")
+                            }
+                        }
+                        if (sources.isEmpty()) {
+                            Toast.makeText(requireContext(), "No open channel chats", Toast.LENGTH_SHORT).show()
+                        } else {
+                            requireContext().getAlertDialogBuilder()
+                                .setTitle("Channel Points · All Chats")
+                                .setItems(labels.toTypedArray()) { _, index ->
+                                    val source = sources[index]
+                                    val streak = source.mergedChatViewModel.watchStreak.value
+                                    val actions = if (streak != null) {
+                                        arrayOf("Channel Points & Rewards", "Watch Streak")
+                                    } else {
+                                        arrayOf("Channel Points & Rewards")
+                                    }
+                                    requireContext().getAlertDialogBuilder()
+                                        .setTitle(source.arguments?.getString("channel_name")
+                                            ?: source.arguments?.getString("channel_login") ?: "Channel")
+                                        .setItems(actions) { _, action ->
+                                            if (action == 0) source.showChannelPointsFromAllChats()
+                                            else source.showWatchStreakFromAllChats()
+                                        }
+                                        .setNegativeButton(android.R.string.cancel, null)
+                                        .show()
+                                }
+                                .setNegativeButton(android.R.string.cancel, null)
+                                .show()
+                        }
+                    }
+                }
+                binding.chatTabsContainer.addView(
+                    pointsTab,
+                    LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                )
             }
         }
         fragments.forEach { fragment ->
