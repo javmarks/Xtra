@@ -92,6 +92,24 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
     val isMergedRendererOnly: Boolean
         get() = arguments?.getBoolean(KEY_RENDERER_ONLY) == true
 
+    // All Chats opens channel-specific controls through the owning source fragment,
+    // so reward redemptions and streak shares always use the correct broadcaster.
+    fun showChannelPointsFromAllChats() {
+        if (!isAdded || _binding == null) return
+        val wasVisible = binding.channelPointsBar.isVisible
+        binding.channelPointsBar.isVisible = true
+        binding.channelPointsBar.performClick()
+        binding.channelPointsBar.isVisible = wasVisible
+    }
+
+    fun showWatchStreakFromAllChats() {
+        if (!isAdded || _binding == null || viewModel.watchStreak.value == null) return
+        val wasVisible = binding.watchStreakIndicator.isVisible
+        binding.watchStreakIndicator.isVisible = true
+        binding.watchStreakIndicator.performClick()
+        binding.watchStreakIndicator.isVisible = wasVisible
+    }
+
     // Keep following state independent of the finger's current touch state. A reader
     // who scrolls upward must not be pulled back to the newest message when a new row arrives.
     private var isFollowingChat = true
