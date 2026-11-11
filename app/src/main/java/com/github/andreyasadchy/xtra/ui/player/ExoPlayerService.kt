@@ -571,6 +571,7 @@ class ExoPlayerService : BasePlaybackService() {
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    updateDropsWatchTracking(isPlaying)
                     updatePlaybackState()
                     if (isPlaying) {
                         if (savePositionTimer == null && type != STREAM) {
