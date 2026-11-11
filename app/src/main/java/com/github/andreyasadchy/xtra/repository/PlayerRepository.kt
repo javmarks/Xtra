@@ -51,6 +51,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
@@ -694,7 +695,7 @@ class PlayerRepository(
         }
     }
 
-    suspend fun sendMinuteWatched(networkLibrary: String?, userId: String?, streamId: String?, channelId: String?, channelLogin: String?) = withContext(Dispatchers.IO) {
+    suspend fun sendMinuteWatched(networkLibrary: String?, userId: String?, streamId: String?, channelId: String?, channelLogin: String?, gameId: String?, gameName: String?) = withContext(Dispatchers.IO) {
         val pageResponse = channelLogin?.let {
             val pageUrl = "https://www.twitch.tv/${channelLogin}"
             when {
@@ -789,14 +790,26 @@ class PlayerRepository(
                 val spadeRegex = Regex("\"(?:beacon_url|spade_url)\":\"(.*?)\"")
                 val spadeUrl = spadeRegex.find(settingsResponse)?.groups?.get(1)?.value
                 if (!spadeUrl.isNullOrBlank()) {
-                    val body = buildJsonObject {
-                        put("event", "minute-watched")
-                        putJsonObject("properties") {
-                            put("channel_id", channelId)
-                            put("broadcast_id", streamId)
-                            put("player", "site")
-                            put("user_id", userId?.toLong())
-                        }
+                    val body = buildJsonArray {
+                        add(buildJsonObject {
+                            put("event", "minute-watched")
+                            putJsonObject("properties") {
+                                put("channel_id", channelId.orEmpty())
+                                put("broadcast_id", streamId.orEmpty())
+                                put("player", "site")
+                                put("user_id", userId?.toLongOrNull())
+                                put("channel", channelLogin.orEmpty())
+                                put("client_time", java.time.Instant.now().toString())
+                                put("game", gameName.orEmpty())
+                                put("game_id", gameId.orEmpty())
+                                put("hidden", false)
+                                put("is_live", true)
+                                put("live", true)
+                                put("logged_in", true)
+                                put("minutes_logged", 1)
+                                put("muted", false)
+                            }
+                        })
                     }.toString()
                     val spadeRequest = "data=" + Base64.encodeToString(body.toByteArray(), Base64.NO_WRAP)
                     when {
