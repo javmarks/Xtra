@@ -198,10 +198,27 @@ object ChatAdapterUtils {
                 itemView.setBackgroundResource(if (!chatMessage.msgId.isNullOrBlank()) R.color.chatMessageNotice else 0)
             }
             else -> {
+                // Keep subscription and gift events visually consistent when Twitch
+                // includes a custom chat message (for example, a resub message).
+                val noticeLabel = getSubscriptionNoticeLabel(chatMessage.msgId)
+                if (noticeLabel != null) {
+                    builder.append("$noticeLabel\n")
+                    builder.setSpan(StyleSpan(Typeface.BOLD), builderIndex, builderIndex + noticeLabel.length, SPAN_EXCLUSIVE_EXCLUSIVE)
+                    builder.setSpan(ForegroundColorSpan(getSavedColor("#A970FF", savedColors, useReadableColors, isLightTheme)), builderIndex, builderIndex + noticeLabel.length, SPAN_EXCLUSIVE_EXCLUSIVE)
+                    builderIndex += noticeLabel.length + 1
+                }
                 if (chatMessage.systemMsg != null) {
                     builder.append("${chatMessage.systemMsg}\n")
                     builderIndex += chatMessage.systemMsg.length + 1
-                } else {
+                }
+                val subscriptionDetails = getSubscriptionNoticeDetails(chatMessage.msgId, chatMessage.fullMsg)
+                if (!subscriptionDetails.isNullOrBlank()) {
+                    val detailsText = "$subscriptionDetails\n"
+                    builder.append(detailsText)
+                    builder.setSpan(ForegroundColorSpan(getSavedColor("#B8A0D8", savedColors, useReadableColors, isLightTheme)), builderIndex, builderIndex + detailsText.length, SPAN_EXCLUSIVE_EXCLUSIVE)
+                    builderIndex = builder.length
+                }
+                if (chatMessage.systemMsg == null) {
                     if (chatMessage.msgId != null) {
                         val msgId = TwitchApiHelper.getMessageIdString(context, chatMessage.msgId) ?: chatMessage.msgId
                         builder.append("$msgId\n")
