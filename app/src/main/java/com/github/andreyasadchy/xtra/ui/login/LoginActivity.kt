@@ -160,6 +160,7 @@ class LoginActivity : AppCompatActivity() {
                 "user:read:chat",
                 "user:read:emotes", // chat/emotes/user
                 "user:read:follows", // streams/followed, channels/followed
+                "user:read:moderated_channels", // moderation/channels
                 "user:write:chat", // chat/messages
             )
             val helixAuthUrl = "https://id.twitch.tv/oauth2/authorize".toUri().buildUpon().apply {
