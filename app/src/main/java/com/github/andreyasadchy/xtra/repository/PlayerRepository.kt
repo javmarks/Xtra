@@ -736,7 +736,7 @@ class PlayerRepository(
         }
         val encoded = Base64.encodeToString(compressed, Base64.NO_WRAP)
         val gqlBody = JSONObject()
-            .put("query", "mutation SendEvents(\\$input: SendSpadeEventsInput!) { sendSpadeEvents(input: \\$input) { statusCode } }")
+            .put("query", "mutation SendEvents(\$input: SendSpadeEventsInput!) { sendSpadeEvents(input: \$input) { statusCode } }")
             .put("variables", JSONObject().put("input", JSONObject()
                 .put("data", encoded)
                 .put("repository", "twilight")
