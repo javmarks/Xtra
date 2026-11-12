@@ -5,7 +5,6 @@ import android.net.NetworkCapabilities
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.github.andreyasadchy.xtra.util.tokenPrefs
-import com.github.andreyasadchy.xtra.util.TwitchApiHelper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -104,8 +103,7 @@ abstract class BasePlaybackService : LifecycleService() {
                         channelId = currentChannelId,
                         channelLogin = currentChannelLogin,
                         gameId = gameId,
-                        gameName = gameName,
-                        gqlHeaders = TwitchApiHelper.getGQLHeaders(this@BasePlaybackService, includeToken = true)
+                        gameName = gameName
                     )
                 } catch (e: CancellationException) {
                     throw e
