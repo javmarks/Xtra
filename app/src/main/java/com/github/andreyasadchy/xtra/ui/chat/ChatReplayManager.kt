@@ -6,6 +6,7 @@ import com.github.andreyasadchy.xtra.model.chat.TwitchEmote
 import com.github.andreyasadchy.xtra.model.chat.VideoChatMessage
 import com.github.andreyasadchy.xtra.repository.GraphQLRepository
 import com.github.andreyasadchy.xtra.util.C
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,6 +41,8 @@ class ChatReplayManager(
     private var messageJob: Job? = null
     private var lastCheckedPosition = 0L
     private var playbackSpeed: Float? = null
+    // Invalidates responses from requests started before a seek.
+    private var loadGeneration = 0
     var isActive = true
 
     fun start() {
@@ -63,7 +66,9 @@ class ChatReplayManager(
     }
 
     private fun load(position: Long? = null) {
+        if (isLoading && position == null) return
         isLoading = true
+        val requestGeneration = loadGeneration
         loadJob = coroutineScope.launch(Dispatchers.IO) {
             try {
                 val response = if (position != null) {
@@ -120,6 +125,7 @@ class ChatReplayManager(
                         }
                     }
                 }
+                if (requestGeneration != loadGeneration || !isActive) return@launch
                 // VideoComment createdAt is wrong on highlights
                 useOffsetSeconds = if (createdAt != null) {
                     val first = messages.firstOrNull()
@@ -137,7 +143,10 @@ class ChatReplayManager(
                 cursor = if (comments.pageInfo?.hasNextPage != false) comments.edges.lastOrNull()?.cursor?.toString() else null
                 isLoading = false
                 startJob()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                if (requestGeneration != loadGeneration || !isActive) return@launch
                 try {
                     val response = if (position != null) {
                         graphQLRepository.loadVideoMessages(networkLibrary, gqlHeaders, videoId, offset = position.div(1000).toInt())
@@ -193,6 +202,7 @@ class ChatReplayManager(
                             }
                         }
                     }
+                    if (requestGeneration != loadGeneration || !isActive) return@launch
                     useOffsetSeconds = if (createdAt != null) {
                         val first = messages.firstOrNull()
                         val last = messages.lastOrNull()
@@ -209,9 +219,15 @@ class ChatReplayManager(
                     cursor = if (comments.pageInfo?.hasNextPage != false) comments.edges.lastOrNull()?.cursor else null
                     isLoading = false
                     startJob()
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-
+                    // A failed fallback should not terminate playback chat.
+                } finally {
+                    if (requestGeneration == loadGeneration) isLoading = false
                 }
+            } finally {
+                if (requestGeneration == loadGeneration) isLoading = false
             }
         }
     }
@@ -272,8 +288,11 @@ class ChatReplayManager(
     fun updatePosition(position: Long) {
         if (started && lastCheckedPosition != position) {
             if (position - lastCheckedPosition !in 0..20000) {
+                loadGeneration++
                 loadJob?.cancel()
                 messageJob?.cancel()
+                isLoading = false
+                cursor = null
                 list.clear()
                 coroutineScope.launch {
                     listener.clearMessages()
