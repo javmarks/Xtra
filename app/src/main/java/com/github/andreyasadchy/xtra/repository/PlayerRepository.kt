@@ -57,9 +57,11 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import okhttp3.Credentials
+import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.util.concurrent.ConcurrentHashMap
 import okio.buffer
 import okio.source
 import org.chromium.net.CronetEngine
@@ -92,6 +94,38 @@ class PlayerRepository(
     private val graphQLRepository: GraphQLRepository,
     private val helixRepository: HelixRepository,
 ) {
+
+    private val spadeUrlCache = ConcurrentHashMap<String, String>()
+
+    private suspend fun getSpadeUrl(channelLogin: String): String? = withContext(Dispatchers.IO) {
+        spadeUrlCache[channelLogin]?.let { return@withContext it }
+        val settingsPattern = Regex("""src="(https://[\\w.]+/config/settings\\.[0-9a-f]{32}\\.js)"""", RegexOption.IGNORE_CASE)
+        val spadePattern = Regex(""""spade_?url"\\s*:\\s*"(https://[.\\w/-]+)"""", RegexOption.IGNORE_CASE)
+        val pageRequest = Request.Builder()
+            .url("https://www.twitch.tv/$channelLogin")
+            .header("User-Agent", "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
+            .header("Accept", "text/html,application/xhtml+xml")
+            .build()
+        val pageHtml = okHttpClient.value.newCall(pageRequest).executeAsync().use { response ->
+            if (!response.isSuccessful) return@withContext null
+            response.body.string()
+        }
+        var match = spadePattern.find(pageHtml)
+        if (match == null) {
+            val settingsUrl = settingsPattern.find(pageHtml)?.groupValues?.getOrNull(1)
+                ?: return@withContext null
+            val settingsRequest = Request.Builder()
+                .url(settingsUrl)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
+                .build()
+            val settingsJs = okHttpClient.value.newCall(settingsRequest).executeAsync().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                response.body.string()
+            }
+            match = spadePattern.find(settingsJs)
+        }
+        match?.groupValues?.getOrNull(1)?.also { spadeUrlCache[channelLogin] = it }
+    }
 
     suspend fun loadStreamPlaylistUrl(context: Context, networkLibrary: String?, gqlHeaders: Map<String, String>, channelLogin: String, platform: String?, playerType: String?, supportedCodecs: String?, proxyPlaybackAccessToken: Boolean, proxyHost: String?, proxyPort: Int?, proxyUser: String?, proxyPassword: String?, proxyTimeout: Int?, enableIntegrity: Boolean): String = withContext(Dispatchers.IO) {
         val platform = platform?.takeIf { it.isNotBlank() } ?: "web"
@@ -704,11 +738,13 @@ class PlayerRepository(
         gameId: String? = null,
         gameName: String? = null,
         gqlHeaders: Map<String, String> = emptyMap()
-    ) = withContext(Dispatchers.IO) {
-        if (userId.isNullOrBlank() || streamId.isNullOrBlank() || channelId.isNullOrBlank() || channelLogin.isNullOrBlank() || gqlHeaders.isEmpty()) {
-            return@withContext
+    ): Boolean = withContext(Dispatchers.IO) {
+        if (userId.isNullOrBlank() || streamId.isNullOrBlank()
+            || channelId.isNullOrBlank() || channelLogin.isNullOrBlank()) {
+            return@withContext false
         }
 
+        val spadeUrl = getSpadeUrl(channelLogin) ?: return@withContext false
         val watchEvents = buildJsonArray {
             add(buildJsonObject {
                 put("event", "minute-watched")
@@ -729,33 +765,13 @@ class PlayerRepository(
                 }
             })
         }.toString().toByteArray(Charsets.UTF_8)
-
-        val compressed = java.io.ByteArrayOutputStream().use { output ->
-            java.util.zip.GZIPOutputStream(output).use { it.write(watchEvents) }
-            output.toByteArray()
-        }
-        val encoded = Base64.encodeToString(compressed, Base64.NO_WRAP)
-        val gqlBody = JSONObject()
-            .put("query", "mutation SendEvents(\$input: SendSpadeEventsInput!) { sendSpadeEvents(input: \$input) { statusCode } }")
-            .put("variables", JSONObject().put("input", JSONObject()
-                .put("data", encoded)
-                .put("repository", "twilight")
-                .put("encoding", "GZIP_B64")))
-            .toString()
-
-        okHttpClient.value.newCall(Request.Builder().url("https://gql.twitch.tv/gql").apply {
-            gqlHeaders.forEach { (key, value) -> header(key, value) }
-            header("Content-Type", "application/json")
-            post(gqlBody.toRequestBody())
-        }.build()).executeAsync().use { response ->
-            if (!response.isSuccessful) return@withContext
-            val result = JSONObject(response.body.string())
-                .optJSONObject("data")
-                ?.optJSONObject("sendSpadeEvents")
-                ?.optInt("statusCode", 0)
-            if (result != 204) {
-                // Twitch did not confirm acceptance; keep this best-effort and retry next minute.
-            }
+        val encoded = Base64.encodeToString(watchEvents, Base64.NO_WRAP)
+        val request = Request.Builder()
+            .url(spadeUrl)
+            .post(FormBody.Builder().add("data", encoded).build())
+            .build()
+        okHttpClient.value.newCall(request).executeAsync().use { response ->
+            response.code == 204
         }
     }
 
