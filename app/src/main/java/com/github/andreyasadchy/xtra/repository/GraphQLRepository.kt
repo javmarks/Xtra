@@ -791,7 +791,7 @@ class GraphQLRepository(
             lastResponse = sendPersistedQuery(networkLibrary, headers, body)
             val root = runCatching { json.parseToJsonElement(lastResponse) }.getOrNull()
             val hasInventory = root?.let {
-                it.toString().contains("\\"inventory\\"") &&
+                it.toString().contains("\"inventory\"") &&
                     !it.toString().contains("PersistedQueryNotFound")
             } == true
             if (hasInventory) return@withContext lastResponse
