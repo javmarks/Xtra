@@ -100,7 +100,7 @@ class PlayerRepository(
     private suspend fun getSpadeUrl(channelLogin: String): String? = withContext(Dispatchers.IO) {
         spadeUrlCache[channelLogin]?.let { return@withContext it }
         val settingsPattern = Regex("""src="(https://[\w.]+/config/settings\.[0-9a-f]{32}\.js)"""", RegexOption.IGNORE_CASE)
-        val spadePattern = Regex(""""spade_?url"\s*:\s*"(https://[.\w/-]+)"""", RegexOption.IGNORE_CASE)
+        val spadePattern = Regex(""""(?:beacon|spade)_?url"\s*:\s*"(https://[^"]+)"""", RegexOption.IGNORE_CASE)
         val pageRequest = Request.Builder()
             .url("https://www.twitch.tv/$channelLogin")
             .header("User-Agent", "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
