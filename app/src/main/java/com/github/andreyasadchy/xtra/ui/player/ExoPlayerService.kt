@@ -123,6 +123,7 @@ class ExoPlayerService : BasePlaybackService() {
     private var sleepTimerEndTime = 0L
     private var lastSavedPosition: Long? = null
     private var savePositionTimer: Timer? = null
+    private var positionSaveJob: Job? = null
     private var stopServiceTimer: Timer? = null
 
     private var customProxyList: List<CustomProxy>? = null
@@ -2724,34 +2725,38 @@ class ExoPlayerService : BasePlaybackService() {
     }
 
     private fun updateSavedPosition() {
-        player?.let { player ->
-            if (!player.currentTracks.isEmpty) {
-                val currentPosition = player.currentPosition
-                val savedPosition = lastSavedPosition
-                if (savedPosition == null || currentPosition - savedPosition !in 0..2000) {
-                    lastSavedPosition = currentPosition
-                    if (prefs().getBoolean(C.PLAYER_USE_VIDEO_POSITIONS, true)) {
-                        when (type) {
-                            VIDEO -> {
-                                videoId?.toLongOrNull()?.let {
-                                    runBlocking {
-                                        xtraModule.playerRepository.saveVideoPosition(VideoPosition(it, currentPosition))
-                                    }
-                                }
-                            }
-                            OFFLINE_VIDEO -> {
-                                offlineVideoId?.let {
-                                    runBlocking {
-                                        xtraModule.offlineVideosRepository.updatePosition(it, currentPosition)
-                                    }
-                                }
-                            }
+        val currentPlayer = player ?: return
+        if (currentPlayer.currentTracks.isEmpty) return
+
+        // Read ExoPlayer state on its application thread, then persist it off the UI thread.
+        val currentPosition = currentPlayer.currentPosition
+        val paused = !currentPlayer.playWhenReady
+        val savedPosition = lastSavedPosition
+        if (savedPosition != null && currentPosition - savedPosition in 0..2000) return
+
+        lastSavedPosition = currentPosition
+        val saveVideoPosition = prefs().getBoolean(C.PLAYER_USE_VIDEO_POSITIONS, true)
+        val currentType = type
+        val currentVideoId = videoId?.toLongOrNull()
+        val currentOfflineVideoId = offlineVideoId
+
+        positionSaveJob = lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                if (saveVideoPosition) {
+                    when (currentType) {
+                        VIDEO -> currentVideoId?.let {
+                            xtraModule.playerRepository.saveVideoPosition(VideoPosition(it, currentPosition))
+                        }
+                        OFFLINE_VIDEO -> currentOfflineVideoId?.let {
+                            xtraModule.offlineVideosRepository.updatePosition(it, currentPosition)
                         }
                     }
-                    runBlocking {
-                        savePlaybackState(currentPosition, !player.playWhenReady)
-                    }
                 }
+                savePlaybackState(currentPosition, paused)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // A failed background save must not block or crash playback.
             }
         }
     }
