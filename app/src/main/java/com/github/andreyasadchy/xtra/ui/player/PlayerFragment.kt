@@ -112,6 +112,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
     private var mergedChatAdapter: MergedChatAdapter? = null
     private var mergedChatPausedForPip = false
     private var mergedChatScrollButton: Button? = null
+    private var allChatsPinnedSourceViews = mutableMapOf<ChatFragment, View>()
     private var isFollowingMergedChat = true
     private var mergedChatScrollScheduled = false
     private val mergedChatScrollRunnable = Runnable {
@@ -1472,6 +1473,44 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         mergedChatAdapter?.refreshSource(source)
     }
 
+    private fun updateAllChatsPinnedMessages() {
+        val container = _binding?.allChatsPinnedContainer ?: return
+        val scroll = _binding?.allChatsPinnedScroll ?: return
+        val activePins = getChatFragments().mapNotNull { fragment ->
+            val pinned = fragment.mergedChatViewModel.pinnedChatMessage.value ?: return@mapNotNull null
+            val channel = fragment.arguments?.getString("channel_name")
+                ?: fragment.arguments?.getString("channel_login")
+                ?: "channel"
+            Triple(fragment, channel, pinned)
+        }
+        container.removeAllViews()
+        activePins.forEach { (fragment, channel, pinned) ->
+            val message = pinned.message?.text?.takeIf { it.isNotBlank() } ?: "Pinned message"
+            val label = android.widget.TextView(requireContext()).apply {
+                text = "📌 #$channel  $message"
+                textSize = 13f
+                maxLines = 3
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setPadding(
+                    (10 * resources.displayMetrics.density).toInt(),
+                    (7 * resources.displayMetrics.density).toInt(),
+                    (10 * resources.displayMetrics.density).toInt(),
+                    (7 * resources.displayMetrics.density).toInt()
+                )
+                setBackgroundResource(android.R.drawable.list_selector_background)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { fragment.showPinnedMessageDetailsFromAllChats() }
+            }
+            val width = (240 * resources.displayMetrics.density).toInt()
+            val margin = (4 * resources.displayMetrics.density).toInt()
+            container.addView(label, LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = margin
+            })
+        }
+        scroll.isVisible = isAllChatsSelected && activePins.isNotEmpty()
+    }
+
     private fun ensureMergedChatView() {
         if (mergedChatRecyclerView != null) return
         val adapter = MergedChatAdapter()
@@ -1585,6 +1624,11 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                     val sourceViewModel = fragment.mergedChatViewModel
                     ensureMergedChatView()
                     val merged = mergedChatAdapter ?: return@repeatOnLifecycle
+                    launch {
+                        sourceViewModel.pinnedChatMessage.collect {
+                            updateAllChatsPinnedMessages()
+                        }
+                    }
                     launch {
                         sourceViewModel.sharedChatParticipantUsers.collect { users ->
                             ensureSharedChatRenderers(users.map { user ->
@@ -1769,6 +1813,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         isFollowingMergedChat = true
         mergedChatScrollButton?.visibility = View.GONE
         isAllChatsSelected = true
+        updateAllChatsPinnedMessages()
         refreshChatTabs()
         mergedChatRecyclerView?.post {
             val count = mergedChatAdapter?.itemCount ?: 0
@@ -1805,6 +1850,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
 
         mergedChatRecyclerView?.visibility = View.GONE
         isAllChatsSelected = false
+        updateAllChatsPinnedMessages()
         chatFragment = fragment
         refreshChatTabs(fragment)
     }
