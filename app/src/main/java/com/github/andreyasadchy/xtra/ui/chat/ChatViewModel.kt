@@ -473,10 +473,14 @@ class ChatViewModel(
         }
     }
 
+    private var pinnedChatRefreshGeneration = 0
+
     fun refreshPinnedChatMessage(channelId: String?) {
         if (channelId.isNullOrBlank()) return
+        val generation = ++pinnedChatRefreshGeneration
         viewModelScope.launch {
             val networkLibrary = applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP)
+            var fetchSucceeded = false
             val pinned = try {
                 // Twitch's viewer-facing web client exposes pinned chat through this public GQL query.
                 val response = graphQLRepository.loadPinnedChatMessage(
@@ -487,19 +491,32 @@ class ChatViewModel(
                     },
                     channelId,
                 )
-                response.data?.channel?.pinnedChatMessages?.edges?.firstOrNull()?.node?.let { node ->
-                    node.pinnedMessage?.let { message ->
-                        PinnedChatMessageResponse.PinnedMessage(
-                            messageId = message.id,
-                            broadcasterId = channelId,
-                            senderName = message.sender?.displayName,
-                            pinnedByName = node.pinnedBy?.displayName,
-                            message = PinnedChatMessageResponse.Message(message.content?.text),
-                            pinnedAt = node.startsAt,
-                            expiresAt = node.endsAt,
-                        )
-                    }
+                // A successful response with an empty edge list means there is no active pin.
+                // Missing channel/pin data is different: treat it as an incomplete response and
+                // try Helix instead of silently clearing a banner that may still be valid.
+                val pinnedMessages = response.data?.channel?.pinnedChatMessages
+                    ?: throw IllegalStateException("Pinned chat response was incomplete")
+                val firstEdge = pinnedMessages.edges.firstOrNull()
+                val node = firstEdge?.node
+                if (firstEdge != null && node == null) {
+                    throw IllegalStateException("Pinned chat edge was incomplete")
                 }
+                val message = node?.pinnedMessage
+                if (node != null && message == null) {
+                    throw IllegalStateException("Pinned chat message was incomplete")
+                }
+                fetchSucceeded = true
+                if (node != null && message != null) {
+                    PinnedChatMessageResponse.PinnedMessage(
+                        messageId = message.id,
+                        broadcasterId = channelId,
+                        senderName = message.sender?.displayName,
+                        pinnedByName = node.pinnedBy?.displayName,
+                        message = PinnedChatMessageResponse.Message(message.content?.text),
+                        pinnedAt = node.startsAt,
+                        expiresAt = node.endsAt,
+                    )
+                } else null
             } catch (_: Exception) {
                 // Fall back to Helix for accounts that can moderate this channel.
                 val helixHeaders = TwitchApiHelper.getHelixHeaders(applicationContext)
@@ -507,16 +524,23 @@ class ChatViewModel(
                 if (helixHeaders[C.HEADER_TOKEN].isNullOrBlank() || moderatorId.isNullOrBlank()) {
                     null
                 } else {
-                    runCatching {
-                        helixRepository.getPinnedChatMessage(
+                    try {
+                        val result = helixRepository.getPinnedChatMessage(
                             networkLibrary,
                             helixHeaders,
                             channelId,
                             moderatorId,
                         ).data.firstOrNull()
-                    }.getOrNull()
+                        fetchSucceeded = true
+                        result
+                    } catch (_: Exception) {
+                        null
+                    }
                 }
             }
+            // Ignore older overlapping refreshes. Keep the last known pin if both sources failed;
+            // only a valid empty response is allowed to clear it.
+            if (generation != pinnedChatRefreshGeneration || !fetchSucceeded) return@launch
             pinnedChatExpiryJob?.cancel()
             pinnedChatMessage.value = pinned
             val expiryTime = pinned?.expiresAt?.let {
