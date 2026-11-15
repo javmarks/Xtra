@@ -98,6 +98,25 @@
                         android:contentDescription="Add chat" />
                 </LinearLayout>
 
+                <HorizontalScrollView
+                    android:id="@+id/allChatsPinnedScroll"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fillViewport="false"
+                    android:scrollbars="none"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/allChatsPinnedContainer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:paddingStart="6dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="6dp"
+                        android:paddingBottom="4dp" />
+                </HorizontalScrollView>
+
                 <FrameLayout
                     android:id="@+id/chatFragmentContainer"
                     android:layout_width="match_parent"
