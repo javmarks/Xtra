@@ -2244,6 +2244,13 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         }
     }
 
+    fun updateViewerCountFromChat(viewerCount: Int?, sourceChannelLogin: String?) {
+        val playingChannelLogin = playbackService?.channelLogin
+        if (sourceChannelLogin.isNullOrBlank() || playingChannelLogin.isNullOrBlank()) return
+        if (!sourceChannelLogin.equals(playingChannelLogin, ignoreCase = true)) return
+        updateViewerCount(viewerCount)
+    }
+
     fun updateViewerCount(viewerCount: Int?) {
         with(binding.playerControls) {
             if (viewerCount != null) {
