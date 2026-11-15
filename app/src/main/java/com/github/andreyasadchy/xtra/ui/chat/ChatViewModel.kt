@@ -2225,8 +2225,9 @@ class ChatViewModel(
             if (event.optString("notice_type") == "watch_streak") {
                 val streak = event.optJSONObject("watch_streak")
                 val count = streak?.optInt("streak_count", 0)?.takeIf { it > 0 }
-                val points = streak?.optInt("channel_points_awarded",
-                    streak.optInt("points_awarded", 0))?.takeIf { it > 0 }
+                val points = streak?.let {
+                    it.optInt("channel_points_awarded", it.optInt("points_awarded", 0))
+                }?.takeIf { it > 0 }
                 if (count != null) {
                     val current = watchStreak.value
                     watchStreak.value = if (current != null) {
@@ -2248,8 +2249,9 @@ class ChatViewModel(
                 ) {
                     val streak = event.optJSONObject("watch_streak")
                     val count = streak?.optInt("streak_count", 0)?.takeIf { it > 0 }
-                    val points = streak?.optInt("channel_points_awarded",
-                        streak.optInt("points_awarded", 0))?.takeIf { it > 0 }
+                    val points = streak?.let {
+                        it.optInt("channel_points_awarded", it.optInt("points_awarded", 0))
+                    }?.takeIf { it > 0 }
                     if (count != null) {
                         val message = buildString {
                             append("Watch streak · ")
