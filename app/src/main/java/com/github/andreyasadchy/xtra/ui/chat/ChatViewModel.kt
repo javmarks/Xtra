@@ -237,11 +237,14 @@ class ChatViewModel(
             // additional chat sockets or EventSub subscriptions.
             channelPointsRetryJob?.cancel()
             channelPointsRetryJob = viewModelScope.launch {
-                for (waitMs in listOf(20_000L, 60_000L, 120_000L)) {
+                // Twitch may initially return a zero streak while the current broadcast
+                // is still being qualified. Recheck zero as well as missing data, including
+                // after the minimum broadcast window; never increment the count locally.
+                for (waitMs in listOf(20_000L, 60_000L, 120_000L, 600_000L)) {
                     delay(waitMs)
                     if (!started) break
                     if (channelPointsBalance.value == null) refreshChannelPointsBalance(channelLogin)
-                    if (watchStreak.value == null) refreshWatchStreak(channelId)
+                    if ((watchStreak.value?.count ?: 0) == 0) refreshWatchStreak(channelId)
                 }
             }
             refreshPinnedChatMessage(channelId)
@@ -2219,13 +2222,34 @@ class ChatViewModel(
         }
 
         override suspend fun onUserNotice(event: JSONObject, timestamp: String?) {
+            if (event.optString("notice_type") == "watch_streak") {
+                val streak = event.optJSONObject("watch_streak")
+                val count = streak?.optInt("streak_count", 0)?.takeIf { it > 0 }
+                val points = streak?.optInt("channel_points_awarded",
+                    streak.optInt("points_awarded", 0))?.takeIf { it > 0 }
+                if (count != null) {
+                    val current = watchStreak.value
+                    watchStreak.value = if (current != null) {
+                        current.copy(count = count, bonusPoints = points ?: current.bonusPoints)
+                    } else {
+                        WatchStreakInfo(
+                            count = count,
+                            threshold = 0,
+                            bonusPoints = points ?: 0,
+                            state = "ACTIVE",
+                        )
+                    }
+                    watchStreakStatus.value = "Updated from Twitch watch-streak notification"
+                }
+            }
             if (moderationOnly) {
                 if (event.optString("notice_type") == "watch_streak" &&
                     applicationContext.prefs().getBoolean(C.CHAT_WATCH_STREAKS, true)
                 ) {
                     val streak = event.optJSONObject("watch_streak")
                     val count = streak?.optInt("streak_count", 0)?.takeIf { it > 0 }
-                    val points = streak?.optInt("points_awarded", 0)?.takeIf { it > 0 }
+                    val points = streak?.optInt("channel_points_awarded",
+                        streak.optInt("points_awarded", 0))?.takeIf { it > 0 }
                     if (count != null) {
                         val message = buildString {
                             append("Watch streak · ")
