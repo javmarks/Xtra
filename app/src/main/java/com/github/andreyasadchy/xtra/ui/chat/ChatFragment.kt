@@ -94,6 +94,11 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
     val isMergedRendererOnly: Boolean
         get() = arguments?.getBoolean(KEY_RENDERER_ONLY) == true
 
+    fun showPinnedMessageDetailsFromAllChats() {
+        if (!isAdded || _binding == null) return
+        binding.pinnedChatBar.performClick()
+    }
+
     // All Chats opens channel-specific controls through the owning source fragment,
     // so reward redemptions and streak shares always use the correct broadcaster.
     fun showChannelPointsFromAllChats() {
