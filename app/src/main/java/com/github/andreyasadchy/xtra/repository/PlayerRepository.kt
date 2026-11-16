@@ -97,7 +97,13 @@ class PlayerRepository(
 
     private val spadeUrlCache = ConcurrentHashMap<String, String>()
 
-    private suspend fun getSpadeUrl(channelLogin: String): String? = withContext(Dispatchers.IO) {
+    private fun isTrustedSpadeUrl(url: String): Boolean = runCatching {
+        val uri = url.toUri()
+        val host = uri.host
+        uri.scheme == "https" && (host == "twitch.tv" || host?.endsWith(".twitch.tv") == true)
+    }.getOrDefault(false)
+
+    private suspend fun getSpadeUrl(channelLogin: String, gqlHeaders: Map<String, String>): String? = withContext(Dispatchers.IO) {
         spadeUrlCache[channelLogin]?.let { return@withContext it }
         val settingsPattern = Regex("""src="(https://[\w.]+/config/settings\.[0-9a-f]{32}\.js)"""", RegexOption.IGNORE_CASE)
         val spadePattern = Regex(""""(?:beacon|spade)_?url"\s*:\s*"(https://[^"]+)"""", RegexOption.IGNORE_CASE)
@@ -105,6 +111,7 @@ class PlayerRepository(
             .url("https://www.twitch.tv/$channelLogin")
             .header("User-Agent", "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
             .header("Accept", "text/html,application/xhtml+xml")
+            .apply { gqlHeaders.forEach { (name, value) -> if (value.isNotBlank()) header(name, value) } }
             .build()
         val pageHtml = okHttpClient.value.newCall(pageRequest).executeAsync().use { response ->
             if (!response.isSuccessful) return@withContext null
@@ -113,10 +120,11 @@ class PlayerRepository(
         var match = spadePattern.find(pageHtml)
         if (match == null) {
             val settingsUrl = settingsPattern.find(pageHtml)?.groupValues?.getOrNull(1)
-                ?: return@withContext null
+                ?.takeIf(::isTrustedSpadeUrl) ?: return@withContext null
             val settingsRequest = Request.Builder()
                 .url(settingsUrl)
                 .header("User-Agent", "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
+                .apply { gqlHeaders.forEach { (name, value) -> if (value.isNotBlank()) header(name, value) } }
                 .build()
             val settingsJs = okHttpClient.value.newCall(settingsRequest).executeAsync().use { response ->
                 if (!response.isSuccessful) return@withContext null
@@ -124,7 +132,9 @@ class PlayerRepository(
             }
             match = spadePattern.find(settingsJs)
         }
-        match?.groupValues?.getOrNull(1)?.also { spadeUrlCache[channelLogin] = it }
+        match?.groupValues?.getOrNull(1)
+            ?.takeIf(::isTrustedSpadeUrl)
+            ?.also { spadeUrlCache[channelLogin] = it }
     }
 
     suspend fun loadStreamPlaylistUrl(context: Context, networkLibrary: String?, gqlHeaders: Map<String, String>, channelLogin: String, platform: String?, playerType: String?, supportedCodecs: String?, proxyPlaybackAccessToken: Boolean, proxyHost: String?, proxyPort: Int?, proxyUser: String?, proxyPassword: String?, proxyTimeout: Int?, enableIntegrity: Boolean): String = withContext(Dispatchers.IO) {
@@ -747,7 +757,7 @@ class PlayerRepository(
         // and the player identifier used by its site player.
         val numericUserId = userId.toLongOrNull() ?: return@withContext false
 
-        val spadeUrl = getSpadeUrl(channelLogin) ?: return@withContext false
+        val spadeUrl = getSpadeUrl(channelLogin, gqlHeaders) ?: return@withContext false
         val watchEvents = buildJsonArray {
             add(buildJsonObject {
                 put("event", "minute-watched")
@@ -777,7 +787,9 @@ class PlayerRepository(
                 .header("User-Agent", "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
                 .post(FormBody.Builder().add("data", encoded).build())
                 .build()
-            return okHttpClient.value.newCall(request).executeAsync().use { response ->
+            return okHttpClient.value.newCall(request.newBuilder().apply {
+                gqlHeaders.forEach { (name, value) -> if (value.isNotBlank()) header(name, value) }
+            }.build()).executeAsync().use { response ->
                 android.util.Log.d("XtraSpade", "Minute-watched beacon HTTP ${response.code}")
                 response.code
             }
