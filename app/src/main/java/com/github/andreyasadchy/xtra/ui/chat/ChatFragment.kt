@@ -226,14 +226,14 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             val currentBadges = if (badgeLines.isEmpty()) {
                 "Twitch has not reported your selected chat badges yet."
             } else {
-                badgeLines.joinToString("\\n")
+                badgeLines.joinToString("\n")
             }
             val channelLogin = requireArguments().getString(KEY_CHANNEL_LOGIN)
                 ?: requireArguments().getString(KEY_CHANNEL_NAME)
             requireContext().getAlertDialogBuilder()
                 .setTitle("Chat Identity")
                 .setMessage(
-                    "$currentBadges\\n\\nTo change the badges on your Twitch account, open this channel in Twitch, open Chat Identity beside the chat box, and choose your badges. Xtra will show the updated selection when Twitch reports it."
+                    "$currentBadges\n\nTo change the badges on your Twitch account, open this channel in Twitch, open Chat Identity beside the chat box, and choose your badges. Xtra will show the updated selection when Twitch reports it."
                 )
                 .setNegativeButton(android.R.string.cancel, null)
                 .setPositiveButton("Open Twitch") { _, _ ->
