@@ -743,6 +743,9 @@ class PlayerRepository(
             || channelId.isNullOrBlank() || channelLogin.isNullOrBlank()) {
             return@withContext false
         }
+        // Twitch's historical minute-watched event expects the numeric account ID
+        // and the player identifier used by its site player.
+        val numericUserId = userId.toLongOrNull() ?: return@withContext false
 
         val spadeUrl = getSpadeUrl(channelLogin) ?: return@withContext false
         val watchEvents = buildJsonArray {
@@ -761,7 +764,8 @@ class PlayerRepository(
                     put("logged_in", true)
                     put("minutes_logged", 1)
                     put("muted", false)
-                    put("user_id", userId)
+                    put("player", "site")
+                    put("user_id", numericUserId)
                 }
             })
         }.toString().toByteArray(Charsets.UTF_8)
