@@ -774,9 +774,13 @@ class PlayerRepository(
         suspend fun postBeacon(url: String): Int {
             val request = Request.Builder()
                 .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36")
                 .post(FormBody.Builder().add("data", encoded).build())
                 .build()
-            return okHttpClient.value.newCall(request).executeAsync().use { it.code }
+            return okHttpClient.value.newCall(request).executeAsync().use { response ->
+                android.util.Log.d("XtraSpade", "Minute-watched beacon HTTP ${response.code}")
+                response.code
+            }
         }
 
         val firstStatus = postBeacon(spadeUrl)
