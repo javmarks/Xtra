@@ -594,7 +594,7 @@ class ChatViewModel(
 
     private fun loadSharedChatSourceBadges(sourceChannelId: String?) {
         if (sourceChannelId.isNullOrBlank() ||
-            sourceChannelId in sourceChannelBadges ||
+            sourceChannelBadges.containsKey(sourceChannelId) ||
             !requestedSourceBadgeChannelIds.add(sourceChannelId)
         ) return
         viewModelScope.launch {
