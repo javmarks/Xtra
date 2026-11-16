@@ -411,23 +411,39 @@ class ChatViewModel(
                         return@launch
                     }
                 }
-                val milestone = response.data?.channel?.self?.watchStreakMilestone
-                watchStreak.value = milestone?.let { value ->
-                    value.watchStreakMilestone?.value?.toIntOrNull()?.let { count ->
-                        WatchStreakInfo(
-                            count = count,
-                            threshold = value.watchStreakThreshold,
-                            bonusPoints = value.watchStreakCopoBonus,
-                            state = value.state,
-                            expiresAt = value.expiresAt,
-                            milestoneId = value.watchStreakMilestone?.id,
-                            shareStatus = value.watchStreakMilestone?.shareStatus.orEmpty(),
-                        )
-                    }
+                response.errors?.firstOrNull()?.let {
+                    watchStreakStatus.value = "Twitch GraphQL error: ${it.message}"
+                    return@launch
                 }
-                watchStreakStatus.value = if (watchStreak.value == null) {
-                    response.errors?.firstOrNull()?.message?.let { "Twitch GraphQL error: $it" }
-                        ?: "No active watch streak returned by Twitch"
+                val channel = response.data?.channel
+                val self = channel?.self
+                if (channel == null || self == null) {
+                    watchStreakStatus.value = "Twitch returned incomplete Watch Streak data"
+                    return@launch
+                }
+                val milestone = self.watchStreakMilestone
+                val parsedStreak = if (milestone == null) {
+                    null
+                } else {
+                    val viewerMilestone = milestone.watchStreakMilestone
+                    val count = viewerMilestone?.value?.toIntOrNull()
+                    if (viewerMilestone == null || count == null) {
+                        watchStreakStatus.value = "Twitch returned incomplete Watch Streak data"
+                        return@launch
+                    }
+                    WatchStreakInfo(
+                        count = count,
+                        threshold = milestone.watchStreakThreshold,
+                        bonusPoints = milestone.watchStreakCopoBonus,
+                        state = milestone.state,
+                        expiresAt = milestone.expiresAt,
+                        milestoneId = viewerMilestone.id,
+                        shareStatus = viewerMilestone.shareStatus.orEmpty(),
+                    )
+                }
+                watchStreak.value = parsedStreak
+                watchStreakStatus.value = if (parsedStreak == null) {
+                    "No active watch streak returned by Twitch"
                 } else {
                     "Watch streak loaded"
                 }
@@ -2492,7 +2508,7 @@ class ChatViewModel(
                             }
                         }
                         val pointsContext = contextResponse.data?.community?.channel?.self?.communityPoints
-                        channelPointsBalance.value = pointsContext?.balance
+                        pointsContext?.balance?.let { channelPointsBalance.value = it }
                         pointsContext?.availableClaim?.id?.let { claimId ->
                             val claimResponse = graphQLRepository.loadClaimPoints(networkLibrary, gqlHeaders, channelId, claimId)
                             if (enableIntegrity) {
