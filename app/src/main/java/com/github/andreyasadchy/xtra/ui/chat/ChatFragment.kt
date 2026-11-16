@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.text.format.DateUtils
@@ -148,6 +149,36 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        if (isLandscape) {
+            val density = resources.displayMetrics.density
+            listOf(binding.dropsButton, binding.chatIdentityButton, binding.moderationLogsButton).forEach { button ->
+                button.minHeight = (28 * density).roundToInt()
+                button.minimumHeight = (28 * density).roundToInt()
+                button.minWidth = 0
+                button.setPadding((5 * density).roundToInt(), 0, (5 * density).roundToInt(), 0)
+                button.textSize = 10f
+                button.layoutParams = button.layoutParams.apply {
+                    height = (30 * density).roundToInt()
+                }
+            }
+            binding.chatIdentityButton.text = "Identity"
+            binding.moderationLogsButton.text = "Logs"
+            binding.moderationLogsBar.setPadding(
+                (3 * density).roundToInt(), 0, (3 * density).roundToInt(), 0
+            )
+            // Keep the pinned-message shortcut available, but don't let its metadata
+            // consume the limited landscape chat height. Tapping still opens full details.
+            binding.pinnedChatBar.setPadding(
+                (8 * density).roundToInt(), (3 * density).roundToInt(),
+                (8 * density).roundToInt(), (3 * density).roundToInt()
+            )
+            binding.pinnedChatText.maxLines = 1
+            binding.pinnedChatText.textSize = 12f
+            binding.pinnedChatText.setPadding(0, 0, 0, 0)
+            binding.pinnedChatBy.isGone = true
+            binding.pinnedChatExpiry.isGone = true
+        }
         val isLiveChannel = requireArguments().getBoolean(KEY_IS_LIVE)
         binding.moderationLogsBar.isVisible = isLiveChannel && !isMergedRendererOnly
         binding.topGiftersBar.isVisible = isLiveChannel && !isMergedRendererOnly && viewModel.topGifters.value.isNotEmpty()
@@ -348,7 +379,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.moderationLogs.collectLatest { entries ->
-                    binding.moderationLogsButton.text = if (entries.isEmpty()) {
+                    binding.moderationLogsButton.text = if (isLandscape) {
+                        if (entries.isEmpty()) "Logs" else "Logs (${entries.size})"
+                    } else if (entries.isEmpty()) {
                         "Mod Logs"
                     } else {
                         "Mod Logs (${entries.size})"
