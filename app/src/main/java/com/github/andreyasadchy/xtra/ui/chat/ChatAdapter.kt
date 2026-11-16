@@ -35,7 +35,6 @@ class ChatAdapter(
     private val thirdPartyEmotes: List<Emote>,
     private val globalBadges: List<TwitchBadge>,
     private val channelBadges: List<TwitchBadge>,
-    private val sourceChannelBadges: Map<String, List<TwitchBadge>> = emptyMap(),
     private val cheerEmotes: List<CheerEmote>,
     private val namePaints: List<NamePaint>,
     private val stvBadges: List<STVBadge>,
@@ -79,6 +78,7 @@ class ChatAdapter(
     private val messageClickListener: ((String?) -> Unit)?,
     private val replyClickListener: (() -> Unit)?,
     private val imageClickListener: ((String?, String?, String?, Boolean?, Int?, Boolean?, String?) -> Unit)?,
+    private val sourceChannelBadges: Map<String, List<TwitchBadge>> = emptyMap(),
 ) : RecyclerView.Adapter<ChatAdapter.ViewHolder>() {
 
     var translateAllMessages = false
