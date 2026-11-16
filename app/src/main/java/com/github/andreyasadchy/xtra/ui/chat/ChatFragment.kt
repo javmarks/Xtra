@@ -214,27 +214,86 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             requireArguments().getBoolean(KEY_IS_LIVE) && !isMergedRendererOnly && identityIsLoggedIn
         binding.chatIdentityButton.setOnClickListener {
             val selectedBadges = viewModel.userChatBadges.value.orEmpty()
-            val catalogs = viewModel.channelBadges.toList() + viewModel.globalBadges.toList()
-            val badgeLines = selectedBadges.map { selected ->
-                val catalog = catalogs.firstOrNull {
-                    it.setId == selected.setId && it.version == selected.version
-                }
-                val label = catalog?.title?.takeIf { it.isNotBlank() } ?: selected.setId
-                val detail = selected.info.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
-                "• $label$detail"
+            val globalCatalog = viewModel.globalBadges.toList()
+            val channelCatalog = viewModel.channelBadges.toList()
+            val content = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(
+                    (20 * resources.displayMetrics.density).roundToInt(),
+                    (8 * resources.displayMetrics.density).roundToInt(),
+                    (20 * resources.displayMetrics.density).roundToInt(),
+                    (8 * resources.displayMetrics.density).roundToInt()
+                )
             }
-            val currentBadges = if (badgeLines.isEmpty()) {
-                "Twitch has not reported your selected chat badges yet."
-            } else {
-                badgeLines.joinToString("\n")
+            fun addBadgeSection(title: String, catalog: List<com.github.andreyasadchy.xtra.model.chat.TwitchBadge>) {
+                val sectionBadges = selectedBadges.mapNotNull { selected ->
+                    catalog.firstOrNull { it.setId == selected.setId && it.version == selected.version }
+                        ?.let { selected to it }
+                }
+                if (sectionBadges.isEmpty()) return
+                content.addView(TextView(requireContext()).apply {
+                    text = title
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    setPadding(0, (10 * resources.displayMetrics.density).roundToInt(), 0, (4 * resources.displayMetrics.density).roundToInt())
+                })
+                sectionBadges.forEach { (selected, badge) ->
+                    val row = LinearLayout(requireContext()).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = android.view.Gravity.CENTER_VERTICAL
+                        setPadding(0, (5 * resources.displayMetrics.density).roundToInt(), 0, (5 * resources.displayMetrics.density).roundToInt())
+                    }
+                    val badgeImage = android.widget.ImageView(requireContext()).apply {
+                        layoutParams = LinearLayout.LayoutParams(
+                            (36 * resources.displayMetrics.density).roundToInt(),
+                            (36 * resources.displayMetrics.density).roundToInt()
+                        )
+                        contentDescription = badge.title ?: badge.setId
+                        scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                    }
+                    val badgeImageUrl = badge.url2x ?: badge.url1x ?: badge.url3x ?: badge.url4x
+                    if (!badgeImageUrl.isNullOrBlank()) {
+                        requireContext().imageLoader.enqueue(
+                            ImageRequest.Builder(requireContext()).apply {
+                                data(badgeImageUrl)
+                                crossfade(true)
+                                target(badgeImage)
+                            }.build()
+                        )
+                    }
+                    row.addView(badgeImage)
+                    val label = TextView(requireContext()).apply {
+                        text = (badge.title?.takeIf { it.isNotBlank() } ?: badge.setId) +
+                            selected.info.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                        setPadding((12 * resources.displayMetrics.density).roundToInt(), 0, 0, 0)
+                    }
+                    row.addView(label, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    content.addView(row)
+                }
+            }
+            addBadgeSection("Global badges", globalCatalog)
+            addBadgeSection("Channel badges", channelCatalog)
+            if (content.childCount == 0) {
+                content.addView(TextView(requireContext()).apply {
+                    text = "Twitch has not reported your selected chat badges yet."
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                    setPadding(0, (8 * resources.displayMetrics.density).roundToInt(), 0, (8 * resources.displayMetrics.density).roundToInt())
+                })
+            }
+            content.addView(TextView(requireContext()).apply {
+                text = "To change badges on your Twitch account, open this channel in Twitch, open Chat Identity beside the chat box, and choose your badges. Xtra will show the updated selection when Twitch reports it."
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setPadding(0, (12 * resources.displayMetrics.density).roundToInt(), 0, 0)
+            })
+            val scrollView = android.widget.ScrollView(requireContext()).apply {
+                addView(content)
             }
             val channelLogin = requireArguments().getString(KEY_CHANNEL_LOGIN)
                 ?: requireArguments().getString(KEY_CHANNEL_NAME)
             requireContext().getAlertDialogBuilder()
                 .setTitle("Chat Identity")
-                .setMessage(
-                    "$currentBadges\n\nTo change the badges on your Twitch account, open this channel in Twitch, open Chat Identity beside the chat box, and choose your badges. Xtra will show the updated selection when Twitch reports it."
-                )
+                .setView(scrollView)
                 .setNegativeButton(android.R.string.cancel, null)
                 .setPositiveButton("Open Twitch") { _, _ ->
                     val target = channelLogin?.takeIf { it.isNotBlank() } ?: "twitch"
