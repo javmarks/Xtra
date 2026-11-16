@@ -153,6 +153,8 @@ class ChatViewModel(
     var predictionTimer: Timer? = null
     private val _streamInfo = MutableStateFlow<PubSubUtils.StreamInfo?>(null)
     val sharedChatParticipants = MutableStateFlow<List<String>>(emptyList())
+    // Twitch-authoritative badge selection reported by the authenticated USERSTATE message.
+    val userChatBadges = MutableStateFlow<List<Badge>?>(null)
     val channelPointsBalance = MutableStateFlow<Int?>(null)
     val channelPointRewards = MutableStateFlow<List<ChannelPointReward>>(emptyList())
     val channelPointRewardsStatus = MutableStateFlow("Not loaded")
@@ -2101,6 +2103,30 @@ class ChatViewModel(
         }
 
         override suspend fun onUserState(message: ChatUtils.IRCMessage) {
+            // USERSTATE is sent by Twitch on the existing authenticated write connection.
+            // Treat its badge tags as authoritative; never infer a selection from cached catalogs.
+            message.tags["badges"]?.let { badgeTag ->
+                val badgeInfo = message.tags["badge-info"]
+                    ?.split(',')
+                    ?.mapNotNull { entry ->
+                        val parts = entry.split('/', limit = 2)
+                        val setId = parts.getOrNull(0)
+                        val info = parts.getOrNull(1)
+                        if (!setId.isNullOrBlank() && info != null) setId to info else null
+                    }
+                    ?.toMap()
+                    .orEmpty()
+                val selectedBadges = badgeTag.split(',')
+                    .mapNotNull { entry ->
+                        val parts = entry.split('/', limit = 2)
+                        val setId = parts.getOrNull(0)
+                        val version = parts.getOrNull(1)
+                        if (!setId.isNullOrBlank() && !version.isNullOrBlank()) {
+                            Badge(setId, version, badgeInfo[setId].orEmpty())
+                        } else null
+                    }
+                userChatBadges.value = selectedBadges
+            }
             val emoteSets = message.tags["emote-sets"]?.split(",")
             if (emoteSets != null && savedEmoteSets != emoteSets) {
                 savedEmoteSets = emoteSets
