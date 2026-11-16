@@ -800,7 +800,7 @@ class PlayerRepository(
 
         // Twitch can rotate the Spade endpoint. Discard the cached URL and resolve it once.
         spadeUrlCache.remove(channelLogin, spadeUrl)
-        val refreshedUrl = getSpadeUrl(channelLogin) ?: return@withContext false
+        val refreshedUrl = getSpadeUrl(channelLogin, gqlHeaders) ?: return@withContext false
         if (refreshedUrl == spadeUrl) return@withContext false
         postBeacon(refreshedUrl) == 204
     }
