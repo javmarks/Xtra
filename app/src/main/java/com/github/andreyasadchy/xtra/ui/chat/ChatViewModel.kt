@@ -2528,7 +2528,7 @@ class ChatViewModel(
         override suspend fun onMinuteWatched() {
             if (!streamId.isNullOrBlank()) {
                 try {
-                    playerRepository.sendMinuteWatched(networkLibrary, accountId, streamId, channelId, channelLogin)
+                    playerRepository.sendMinuteWatched(networkLibrary, accountId, streamId, channelId, channelLogin, gqlHeaders = gqlHeaders)
                 } catch (e: Exception) {
 
                 }
