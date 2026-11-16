@@ -23,5 +23,11 @@ class BadgesResponse(
         val url2x: String? = null,
         @SerialName("image_url_4x")
         val url4x: String? = null,
+        val title: String? = null,
+        val description: String? = null,
+        @SerialName("click_action")
+        val clickAction: String? = null,
+        @SerialName("click_url")
+        val clickUrl: String? = null,
     )
 }
