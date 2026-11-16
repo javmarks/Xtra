@@ -1568,7 +1568,11 @@ class PlayerRepository(
                                     url1x = it.url1x,
                                     url2x = it.url2x,
                                     url3x = it.url4x,
-                                    url4x = it.url4x
+                                    url4x = it.url4x,
+                                    title = it.title,
+                                    description = it.description,
+                                    clickAction = it.clickAction,
+                                    clickUrl = it.clickUrl
                                 )
                             }
                         }
