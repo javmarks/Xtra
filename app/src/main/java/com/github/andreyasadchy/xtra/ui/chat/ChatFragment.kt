@@ -206,6 +206,46 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 Toast.makeText(requireContext(), "No browser is available to open Twitch Drops.", Toast.LENGTH_LONG).show()
             }
         }
+        val identityAccountLogin = requireContext().tokenPrefs().getString(C.USERNAME, null)
+        val identityIsLoggedIn = !identityAccountLogin.isNullOrBlank() &&
+            (!TwitchApiHelper.getGQLHeaders(requireContext(), true)[C.HEADER_TOKEN].isNullOrBlank() ||
+                !TwitchApiHelper.getHelixHeaders(requireContext())[C.HEADER_TOKEN].isNullOrBlank())
+        binding.chatIdentityButton.isVisible =
+            requireArguments().getBoolean(KEY_IS_LIVE) && !isMergedRendererOnly && identityIsLoggedIn
+        binding.chatIdentityButton.setOnClickListener {
+            val selectedBadges = viewModel.userChatBadges.value.orEmpty()
+            val catalogs = viewModel.channelBadges.toList() + viewModel.globalBadges.toList()
+            val badgeLines = selectedBadges.map { selected ->
+                val catalog = catalogs.firstOrNull {
+                    it.setId == selected.setId && it.version == selected.version
+                }
+                val label = catalog?.title?.takeIf { it.isNotBlank() } ?: selected.setId
+                val detail = selected.info.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+                "• $label$detail"
+            }
+            val currentBadges = if (badgeLines.isEmpty()) {
+                "Twitch has not reported your selected chat badges yet."
+            } else {
+                badgeLines.joinToString("\\n")
+            }
+            val channelLogin = requireArguments().getString(KEY_CHANNEL_LOGIN)
+                ?: requireArguments().getString(KEY_CHANNEL_NAME)
+            requireContext().getAlertDialogBuilder()
+                .setTitle("Chat Identity")
+                .setMessage(
+                    "$currentBadges\\n\\nTo change the badges on your Twitch account, open this channel in Twitch, open Chat Identity beside the chat box, and choose your badges. Xtra will show the updated selection when Twitch reports it."
+                )
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton("Open Twitch") { _, _ ->
+                    val target = channelLogin?.takeIf { it.isNotBlank() } ?: "twitch"
+                    runCatching {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.twitch.tv/$target")))
+                    }.onFailure {
+                        Toast.makeText(requireContext(), "Unable to open Twitch.", Toast.LENGTH_LONG).show()
+                    }
+                }
+                .show()
+        }
         binding.moderationLogsButton.setOnClickListener {
             val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
                 ?: requireArguments().getString(KEY_CHANNEL_LOGIN)
