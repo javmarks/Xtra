@@ -169,6 +169,9 @@ class ChatViewModel(
     private val requestedTopGifterProfileIds = ConcurrentHashMap.newKeySet<String>()
     // Source-channel IDs observed in actual Shared Chat messages; dedupe profile lookups.
     private val resolvedSharedChatSourceIds = ConcurrentHashMap.newKeySet<String>()
+    // Badge catalogs for confirmed Shared Chat broadcasters; requests are deduplicated by channel ID.
+    val sourceChannelBadges = ConcurrentHashMap<String, List<TwitchBadge>>()
+    private val requestedSourceBadgeChannelIds = ConcurrentHashMap.newKeySet<String>()
     val streamInfo: StateFlow<PubSubUtils.StreamInfo?> = _streamInfo
     private val _playbackMessage = MutableStateFlow<PubSubUtils.PlaybackMessage?>(null)
     val playbackMessage: StateFlow<PubSubUtils.PlaybackMessage?> = _playbackMessage
@@ -587,6 +590,38 @@ class ChatViewModel(
         }
     }
 
+    private fun loadSharedChatSourceBadges(sourceChannelId: String?) {
+        if (sourceChannelId.isNullOrBlank() ||
+            sourceChannelId in sourceChannelBadges ||
+            !requestedSourceBadgeChannelIds.add(sourceChannelId)
+        ) return
+        viewModelScope.launch {
+            try {
+                val networkLibrary = applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP)
+                val helixHeaders = TwitchApiHelper.getHelixHeaders(applicationContext)
+                val gqlHeaders = TwitchApiHelper.getGQLHeaders(applicationContext, true)
+                val emoteQuality = applicationContext.prefs().getString(C.CHAT_IMAGE_QUALITY, "4") ?: "4"
+                val enableIntegrity = applicationContext.prefs().getBoolean(C.ENABLE_INTEGRITY, false)
+                val badges = playerRepository.loadChannelBadges(
+                    networkLibrary, helixHeaders, gqlHeaders, sourceChannelId, null,
+                    emoteQuality, enableIntegrity
+                )
+                if (badges.isNotEmpty()) {
+                    sourceChannelBadges[sourceChannelId] = badges
+                    // Keep only the active Shared Chat participants to bound memory use.
+                    val activeIds = sharedChatParticipants.value.toSet()
+                    sourceChannelBadges.keys.removeAll { it !in activeIds }
+                    reloadMessages.value = reloadMessages.value + 1
+                } else {
+                    requestedSourceBadgeChannelIds.remove(sourceChannelId)
+                }
+            } catch (e: Exception) {
+                requestedSourceBadgeChannelIds.remove(sourceChannelId)
+                if (e.message == C.FAILED_INTEGRITY_CHECK) integrity.emit("refresh")
+            }
+        }
+    }
+
     private fun loadSharedChatSourceProfile(sourceChannelId: String?) {
         if (sourceChannelId.isNullOrBlank() || !resolvedSharedChatSourceIds.add(sourceChannelId)) return
         viewModelScope.launch {
@@ -604,6 +639,7 @@ class ChatViewModel(
                 }
                 sharedChatParticipants.value =
                     (sharedChatParticipants.value + sourceChannelId).distinct()
+                loadSharedChatSourceBadges(sourceChannelId)
                 sharedChatParticipantUsers.value =
                     (sharedChatParticipantUsers.value.filterNot { it.id == sourceChannelId } + user)
                 // Attach the resolved broadcaster identity to messages already received
@@ -648,6 +684,7 @@ class ChatViewModel(
                         }
                         .distinct()
                     sharedChatParticipants.value = participantIds
+                    participantIds.forEach(::loadSharedChatSourceBadges)
                     val users = if (participantIds.isNotEmpty()) {
                         helixRepository.getUsers(
                             applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
