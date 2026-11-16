@@ -516,6 +516,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         thirdPartyEmotes = viewModel.thirdPartyEmotes,
                         globalBadges = viewModel.globalBadges,
                         channelBadges = viewModel.channelBadges,
+                        sourceChannelBadges = viewModel.sourceChannelBadges,
                         cheerEmotes = viewModel.cheerEmotes,
                         namePaints = viewModel.namePaints,
                         stvBadges = viewModel.stvBadges,
