@@ -149,35 +149,39 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        if (isLandscape) {
-            val density = resources.displayMetrics.density
-            listOf(binding.dropsButton, binding.chatIdentityButton, binding.moderationLogsButton).forEach { button ->
-                button.minHeight = (28 * density).roundToInt()
-                button.minimumHeight = (28 * density).roundToInt()
-                button.minWidth = 0
-                button.setPadding((5 * density).roundToInt(), 0, (5 * density).roundToInt(), 0)
-                button.textSize = 10f
-                button.layoutParams = button.layoutParams.apply {
-                    height = (30 * density).roundToInt()
+        // Wait until the chat pane has been measured before deciding its orientation.
+        // In the player split layout, Configuration.orientation can still report portrait
+        // even though this fragment is displayed in a wide landscape pane.
+        view.post {
+            val isLandscapePane = view.width > view.height ||
+                resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+            if (isLandscapePane && _binding != null) {
+                val density = resources.displayMetrics.density
+                listOf(binding.dropsButton, binding.chatIdentityButton, binding.moderationLogsButton).forEach { button ->
+                    button.minHeight = (24 * density).roundToInt()
+                    button.minimumHeight = (24 * density).roundToInt()
+                    button.minWidth = 0
+                    button.setPadding((4 * density).roundToInt(), 0, (4 * density).roundToInt(), 0)
+                    button.textSize = 9f
+                    button.layoutParams = button.layoutParams.apply {
+                        height = (26 * density).roundToInt()
+                    }
                 }
+                binding.dropsButton.text = "Drops"
+                binding.chatIdentityButton.text = "ID"
+                binding.moderationLogsButton.text = "Logs"
+                binding.moderationLogsBar.setPadding(
+                    (2 * density).roundToInt(), 0, (2 * density).roundToInt(), 0
+                )
+                binding.pinnedChatBar.setPadding(
+                    (6 * density).roundToInt(), 0, (6 * density).roundToInt(), 0
+                )
+                binding.pinnedChatText.maxLines = 1
+                binding.pinnedChatText.textSize = 11f
+                binding.pinnedChatText.setPadding(0, 0, 0, 0)
+                binding.pinnedChatBy.isGone = true
+                binding.pinnedChatExpiry.isGone = true
             }
-            binding.chatIdentityButton.text = "Identity"
-            binding.moderationLogsButton.text = "Logs"
-            binding.moderationLogsBar.setPadding(
-                (3 * density).roundToInt(), 0, (3 * density).roundToInt(), 0
-            )
-            // Keep the pinned-message shortcut available, but don't let its metadata
-            // consume the limited landscape chat height. Tapping still opens full details.
-            binding.pinnedChatBar.setPadding(
-                (8 * density).roundToInt(), (3 * density).roundToInt(),
-                (8 * density).roundToInt(), (3 * density).roundToInt()
-            )
-            binding.pinnedChatText.maxLines = 1
-            binding.pinnedChatText.textSize = 12f
-            binding.pinnedChatText.setPadding(0, 0, 0, 0)
-            binding.pinnedChatBy.isGone = true
-            binding.pinnedChatExpiry.isGone = true
         }
         val isLiveChannel = requireArguments().getBoolean(KEY_IS_LIVE)
         binding.moderationLogsBar.isVisible = isLiveChannel && !isMergedRendererOnly
