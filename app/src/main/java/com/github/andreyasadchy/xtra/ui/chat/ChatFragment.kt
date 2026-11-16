@@ -226,18 +226,15 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 )
             }
             fun addBadgeSection(title: String, catalog: List<com.github.andreyasadchy.xtra.model.chat.TwitchBadge>) {
-                val sectionBadges = selectedBadges.mapNotNull { selected ->
-                    catalog.firstOrNull { it.setId == selected.setId && it.version == selected.version }
-                        ?.let { selected to it }
-                }
-                if (sectionBadges.isEmpty()) return
+                if (catalog.isEmpty()) return
                 content.addView(TextView(requireContext()).apply {
                     text = title
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                     setTypeface(typeface, android.graphics.Typeface.BOLD)
                     setPadding(0, (10 * resources.displayMetrics.density).roundToInt(), 0, (4 * resources.displayMetrics.density).roundToInt())
                 })
-                sectionBadges.forEach { (selected, badge) ->
+                catalog.distinctBy { it.setId to it.version }.forEach { badge ->
+                    val selected = selectedBadges.any { it.setId == badge.setId && it.version == badge.version }
                     val row = LinearLayout(requireContext()).apply {
                         orientation = LinearLayout.HORIZONTAL
                         gravity = android.view.Gravity.CENTER_VERTICAL
@@ -264,16 +261,23 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     row.addView(badgeImage)
                     val label = TextView(requireContext()).apply {
                         text = (badge.title?.takeIf { it.isNotBlank() } ?: badge.setId) +
-                            selected.info.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+                            if (selected) " · Selected" else ""
                         setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                         setPadding((12 * resources.displayMetrics.density).roundToInt(), 0, 0, 0)
                     }
                     row.addView(label, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                     content.addView(row)
+                    badge.description?.takeIf { it.isNotBlank() }?.let { description ->
+                        content.addView(TextView(requireContext()).apply {
+                            text = description
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                            setPadding((48 * resources.displayMetrics.density).roundToInt(), 0, 0, (4 * resources.displayMetrics.density).roundToInt())
+                        })
+                    }
                 }
             }
-            addBadgeSection("Global badges", globalCatalog)
-            addBadgeSection("Channel badges", channelCatalog)
+            addBadgeSection("Global badge catalog", globalCatalog)
+            addBadgeSection("Channel badge catalog", channelCatalog)
             if (content.childCount == 0) {
                 content.addView(TextView(requireContext()).apply {
                     text = "Twitch has not reported your selected chat badges yet."
