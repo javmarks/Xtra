@@ -684,7 +684,7 @@ class ChatViewModel(
                         }
                         .distinct()
                     sharedChatParticipants.value = participantIds
-                    participantIds.forEach(::loadSharedChatSourceBadges)
+                    participantIds.filter { it != channelId }.forEach(::loadSharedChatSourceBadges)
                     val users = if (participantIds.isNotEmpty()) {
                         helixRepository.getUsers(
                             applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
