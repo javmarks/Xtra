@@ -686,9 +686,13 @@ class ChatViewModel(
                         }
                         .distinct()
                     sharedChatParticipants.value = participantIds
-                    sourceChannelBadges.keys.removeAll { it !in participantIds }
-                    requestedSourceBadgeChannelIds.removeAll { it !in participantIds }
-                    participantIds.filter { it != channelId }.forEach(::loadSharedChatSourceBadges)
+                    // An empty session response can be a transient/incomplete Twitch snapshot.
+                    // Preserve last-known-good source badge catalogs until we have participants.
+                    if (participantIds.isNotEmpty()) {
+                        sourceChannelBadges.keys.removeAll { it !in participantIds }
+                        requestedSourceBadgeChannelIds.removeAll { it !in participantIds }
+                        participantIds.filter { it != channelId }.forEach(::loadSharedChatSourceBadges)
+                    }
                     val users = if (participantIds.isNotEmpty()) {
                         helixRepository.getUsers(
                             applicationContext.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
