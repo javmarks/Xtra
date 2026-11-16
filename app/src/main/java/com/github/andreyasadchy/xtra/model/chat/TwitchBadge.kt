@@ -9,4 +9,7 @@ class TwitchBadge(
     val url3x: String? = null,
     val url4x: String? = null,
     val title: String? = null,
+    val description: String? = null,
+    val clickAction: String? = null,
+    val clickUrl: String? = null,
 )
