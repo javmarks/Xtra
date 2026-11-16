@@ -383,7 +383,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.moderationLogs.collectLatest { entries ->
-                    binding.moderationLogsButton.text = if (isLandscape) {
+                    binding.moderationLogsButton.text = if (
+                        binding.root.width > binding.root.height ||
+                        resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                    ) {
                         if (entries.isEmpty()) "Logs" else "Logs (${entries.size})"
                     } else if (entries.isEmpty()) {
                         "Mod Logs"
