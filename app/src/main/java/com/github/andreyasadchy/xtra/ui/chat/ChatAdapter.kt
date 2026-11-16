@@ -35,6 +35,7 @@ class ChatAdapter(
     private val thirdPartyEmotes: List<Emote>,
     private val globalBadges: List<TwitchBadge>,
     private val channelBadges: List<TwitchBadge>,
+    private val sourceChannelBadges: Map<String, List<TwitchBadge>> = emptyMap(),
     private val cheerEmotes: List<CheerEmote>,
     private val namePaints: List<NamePaint>,
     private val stvBadges: List<STVBadge>,
@@ -136,7 +137,7 @@ class ChatAdapter(
             nameDisplay, useBoldNames, showNamePaints, namePaints, showSTVBadges, stvBadges, showGifMessages, showPersonalEmotes, personalEmoteSets,
             stvUsers, enableOverlayEmotes, showSystemMessageEmotes, loggedInUser, chatUrl, getEmoteBytes, userColors, savedColors, translateAllMessages,
             translateMessage, showLanguageDownloadDialog, true, localTwitchEmotes, thirdPartyEmotes, globalBadges, channelBadges, cheerEmotes,
-            savedLocalTwitchEmotes, savedLocalBadges, savedLocalCheerEmotes, savedLocalEmotes, showSourceChannel
+            savedLocalTwitchEmotes, savedLocalBadges, savedLocalCheerEmotes, savedLocalEmotes, showSourceChannel, sourceChannelBadges
         )
         holder.bind(chatMessage, result.builder)
         ChatAdapterUtils.loadImages(
