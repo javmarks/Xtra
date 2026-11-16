@@ -267,6 +267,25 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     }
                     row.addView(label, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                     content.addView(row)
+                    val badgeInfoUri = badge.clickUrl?.let { rawUrl ->
+                        runCatching {
+                            Uri.parse(rawUrl).takeIf {
+                                badge.clickAction == "visit_url" &&
+                                    it.scheme.equals("https", ignoreCase = true) &&
+                                    !it.host.isNullOrBlank()
+                            }
+                        }.getOrNull()
+                    }
+                    if (badgeInfoUri != null) {
+                        row.isClickable = true
+                        row.setOnClickListener {
+                            runCatching {
+                                startActivity(Intent(Intent.ACTION_VIEW, badgeInfoUri))
+                            }.onFailure {
+                                Toast.makeText(requireContext(), "Unable to open badge information.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
                     badge.description?.takeIf { it.isNotBlank() }?.let { description ->
                         content.addView(TextView(requireContext()).apply {
                             text = description
