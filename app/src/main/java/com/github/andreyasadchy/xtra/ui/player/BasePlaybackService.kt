@@ -14,6 +14,7 @@ import com.github.andreyasadchy.xtra.XtraModule
 import com.github.andreyasadchy.xtra.model.PlaybackState
 import com.github.andreyasadchy.xtra.model.VideoQuality
 import com.github.andreyasadchy.xtra.util.C
+import com.github.andreyasadchy.xtra.util.TwitchApiHelper
 import com.github.andreyasadchy.xtra.util.prefs
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.serialization.json.JsonArray
@@ -103,7 +104,8 @@ abstract class BasePlaybackService : LifecycleService() {
                         channelId = currentChannelId,
                         channelLogin = currentChannelLogin,
                         gameId = gameId,
-                        gameName = gameName
+                        gameName = gameName,
+                        gqlHeaders = TwitchApiHelper.getGQLHeaders(this@BasePlaybackService, true)
                     )
                 } catch (e: CancellationException) {
                     throw e
