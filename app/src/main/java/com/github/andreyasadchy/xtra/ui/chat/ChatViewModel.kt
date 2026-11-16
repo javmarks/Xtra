@@ -223,11 +223,20 @@ class ChatViewModel(
             // cost-bearing EventSub subscriptions for every open channel.
             sharedChatRefreshJob?.cancel()
             sharedChatRefreshJob = viewModelScope.launch {
+                var accountRefreshMinutes = 0
                 while (started) {
                     delay(60_000L)
                     if (started) {
                         loadSharedChatParticipants(channelId)
                         refreshPinnedChatMessage(channelId)
+                        accountRefreshMinutes++
+                        // Refresh the viewer's balance while live viewing continues.
+                        // Watch Streak stays Twitch-authoritative; never increment locally.
+                        if (accountRefreshMinutes >= 5) {
+                            accountRefreshMinutes = 0
+                            refreshChannelPointsBalance(channelLogin)
+                            refreshWatchStreak(channelId)
+                        }
                     }
                 }
             }
