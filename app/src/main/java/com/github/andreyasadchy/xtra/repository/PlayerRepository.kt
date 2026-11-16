@@ -766,13 +766,23 @@ class PlayerRepository(
             })
         }.toString().toByteArray(Charsets.UTF_8)
         val encoded = Base64.encodeToString(watchEvents, Base64.NO_WRAP)
-        val request = Request.Builder()
-            .url(spadeUrl)
-            .post(FormBody.Builder().add("data", encoded).build())
-            .build()
-        okHttpClient.value.newCall(request).executeAsync().use { response ->
-            response.code == 204
+
+        suspend fun postBeacon(url: String): Int {
+            val request = Request.Builder()
+                .url(url)
+                .post(FormBody.Builder().add("data", encoded).build())
+                .build()
+            return okHttpClient.value.newCall(request).executeAsync().use { it.code }
         }
+
+        val firstStatus = postBeacon(spadeUrl)
+        if (firstStatus == 204) return@withContext true
+
+        // Twitch can rotate the Spade endpoint. Discard the cached URL and resolve it once.
+        spadeUrlCache.remove(channelLogin, spadeUrl)
+        val refreshedUrl = getSpadeUrl(channelLogin) ?: return@withContext false
+        if (refreshedUrl == spadeUrl) return@withContext false
+        postBeacon(refreshedUrl) == 204
     }
 
     suspend fun loadRecentMessages(networkLibrary: String?, recentMessagesUrl: String, channelLogin: String, limit: String): RecentMessagesResponse = withContext(Dispatchers.IO) {
