@@ -95,6 +95,30 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
     val isMergedRendererOnly: Boolean
         get() = arguments?.getBoolean(KEY_RENDERER_ONLY) == true
 
+    // The player owns the real layout orientation. The chat pane itself is narrow in
+    // landscape, so its dimensions/configuration cannot reliably identify player mode.
+    fun applyPlayerLandscapeMode(isLandscape: Boolean) {
+        if (!isAdded || _binding == null || !isLandscape) return
+        val density = resources.displayMetrics.density
+        listOf(binding.dropsButton, binding.chatIdentityButton, binding.moderationLogsButton).forEach { button ->
+            button.minHeight = (24 * density).roundToInt()
+            button.minimumHeight = (24 * density).roundToInt()
+            button.minWidth = 0
+            button.setPadding((4 * density).roundToInt(), 0, (4 * density).roundToInt(), 0)
+            button.textSize = 9f
+            button.layoutParams = button.layoutParams.apply { height = (26 * density).roundToInt() }
+        }
+        binding.dropsButton.text = "Drops"
+        binding.chatIdentityButton.text = "ID"
+        binding.moderationLogsButton.text = "Logs"
+        binding.moderationLogsBar.setPadding((2 * density).roundToInt(), 0, (2 * density).roundToInt(), 0)
+        binding.pinnedChatBar.setPadding((6 * density).roundToInt(), 0, (6 * density).roundToInt(), 0)
+        binding.pinnedChatText.maxLines = 1
+        binding.pinnedChatText.textSize = 11f
+        binding.pinnedChatBy.isGone = true
+        binding.pinnedChatExpiry.isGone = true
+    }
+
     fun showPinnedMessageDetailsFromAllChats() {
         if (!isAdded || _binding == null) return
         binding.pinnedChatBar.performClick()
@@ -149,41 +173,6 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        // Detect the device/player window orientation, not the chat pane's aspect ratio.
-        // In landscape the chat pane can remain tall and narrow beside the video, so
-        // view.width > view.height incorrectly classifies it as portrait.
-        val windowRoot = requireActivity().window.decorView
-        windowRoot.post {
-            val isLandscapeWindow = windowRoot.width > windowRoot.height ||
-                resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-            if (isLandscapeWindow && _binding != null) {
-                val density = resources.displayMetrics.density
-                listOf(binding.dropsButton, binding.chatIdentityButton, binding.moderationLogsButton).forEach { button ->
-                    button.minHeight = (24 * density).roundToInt()
-                    button.minimumHeight = (24 * density).roundToInt()
-                    button.minWidth = 0
-                    button.setPadding((4 * density).roundToInt(), 0, (4 * density).roundToInt(), 0)
-                    button.textSize = 9f
-                    button.layoutParams = button.layoutParams.apply {
-                        height = (26 * density).roundToInt()
-                    }
-                }
-                binding.dropsButton.text = "Drops"
-                binding.chatIdentityButton.text = "ID"
-                binding.moderationLogsButton.text = "Logs"
-                binding.moderationLogsBar.setPadding(
-                    (2 * density).roundToInt(), 0, (2 * density).roundToInt(), 0
-                )
-                binding.pinnedChatBar.setPadding(
-                    (6 * density).roundToInt(), 0, (6 * density).roundToInt(), 0
-                )
-                binding.pinnedChatText.maxLines = 1
-                binding.pinnedChatText.textSize = 11f
-                binding.pinnedChatText.setPadding(0, 0, 0, 0)
-                binding.pinnedChatBy.isGone = true
-                binding.pinnedChatExpiry.isGone = true
-            }
-        }
         val isLiveChannel = requireArguments().getBoolean(KEY_IS_LIVE)
         binding.moderationLogsBar.isVisible = isLiveChannel && !isMergedRendererOnly
         binding.topGiftersBar.isVisible = isLiveChannel && !isMergedRendererOnly && viewModel.topGifters.value.isNotEmpty()
