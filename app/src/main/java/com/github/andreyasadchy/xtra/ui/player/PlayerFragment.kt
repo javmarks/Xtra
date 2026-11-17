@@ -1876,6 +1876,8 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         saveOpenChatChannels(fragment)
     }
 
+    fun isLandscapePlayerMode(): Boolean = !isPortrait
+
     private fun initLayout() {
         with(binding) {
             if (isPortrait) {
