@@ -1156,6 +1156,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
             if (currentChatFragment != null) {
                 chatFragment = currentChatFragment
                 if (primaryChatFragment == null) primaryChatFragment = currentChatFragment
+                currentChatFragment.applyPlayerLandscapeMode(!isPortrait)
             } else {
                 val fragment = when (playbackService?.type) {
                     BasePlaybackService.STREAM -> ChatFragment.newInstance(
@@ -2728,6 +2729,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 (requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(chatLayout.windowToken, 0)
                 chatLayout.clearFocus()
                 initLayout()
+                chatFragment?.applyPlayerLandscapeMode(!isPortrait)
             }
             (childFragmentManager.findFragmentByTag("closeOnPip") as? PlayerSettingsDialog?)?.dismiss()
         }
