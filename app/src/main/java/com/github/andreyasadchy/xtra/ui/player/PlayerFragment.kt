@@ -2789,7 +2789,29 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
         }
     }
 
+    // Preserve live chat while the stream continues as background audio.
+    private var keepChatAliveForBackgroundAudio = false
+
+    fun markAudioOnlyBackgroundMode() {
+        keepChatAliveForBackgroundAudio = true
+    }
+
+    fun shouldKeepChatAliveInBackground(): Boolean = keepChatAliveForBackgroundAudio
+
     override fun onStop() {
+        val exoService = playbackService as? ExoPlayerService
+        val isInPIPMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            requireActivity().isInPictureInPictureMode
+        } else false
+        val isInteractive = (requireContext().getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isInteractive
+        val backgroundAudioAllowed =
+            (!isInPIPMode && isInteractive && requireContext().prefs().getBoolean(C.PLAYER_BACKGROUND_AUDIO, true)) ||
+            (!isInPIPMode && !isInteractive && requireContext().prefs().getBoolean(C.PLAYER_BACKGROUND_AUDIO_LOCKED, true)) ||
+            (isInPIPMode && isInteractive && requireContext().prefs().getBoolean(C.PLAYER_BACKGROUND_AUDIO_PIP_CLOSED, false)) ||
+            (isInPIPMode && !isInteractive && requireContext().prefs().getBoolean(C.PLAYER_BACKGROUND_AUDIO_PIP_LOCKED, true))
+        if (exoService?.type == BasePlaybackService.STREAM && exoService.player?.playWhenReady == true && backgroundAudioAllowed) {
+            keepChatAliveForBackgroundAudio = true
+        }
         super.onStop()
         binding.playerControls.root.removeCallbacks(controllerHideAction)
     }
