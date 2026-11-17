@@ -1904,7 +1904,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
 
     override fun onStop() {
         super.onStop()
-        if (!isMergedRendererOnly && (!requireArguments().getBoolean(KEY_IS_LIVE) || !requireContext().prefs().getBoolean(C.PLAYER_KEEP_CHAT_OPEN, false))) {
+        val keepForBackgroundAudio = (parentFragment as? PlayerFragment)?.shouldKeepChatAliveInBackground() == true
+        if (!isMergedRendererOnly && (!requireArguments().getBoolean(KEY_IS_LIVE) || (!keepForBackgroundAudio && !requireContext().prefs().getBoolean(C.PLAYER_KEEP_CHAT_OPEN, false)))) {
             viewModel.stopLiveChat()
             viewModel.stopReplayChat()
         }
