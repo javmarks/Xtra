@@ -1192,6 +1192,7 @@ abstract class PlayerFragment : BaseNetworkFragment(), RadioButtonDialogFragment
                 }
                 chatFragment = fragment
                 if (primaryChatFragment == null) primaryChatFragment = fragment
+                fragment?.applyPlayerLandscapeMode(!isPortrait)
             }
             refreshChatTabs()
             restoreSavedExtraChats()
