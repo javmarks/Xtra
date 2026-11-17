@@ -149,13 +149,14 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        // Wait until the chat pane has been measured before deciding its orientation.
-        // In the player split layout, Configuration.orientation can still report portrait
-        // even though this fragment is displayed in a wide landscape pane.
-        view.post {
-            val isLandscapePane = view.width > view.height ||
+        // Detect the device/player window orientation, not the chat pane's aspect ratio.
+        // In landscape the chat pane can remain tall and narrow beside the video, so
+        // view.width > view.height incorrectly classifies it as portrait.
+        val windowRoot = requireActivity().window.decorView
+        windowRoot.post {
+            val isLandscapeWindow = windowRoot.width > windowRoot.height ||
                 resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-            if (isLandscapePane && _binding != null) {
+            if (isLandscapeWindow && _binding != null) {
                 val density = resources.displayMetrics.density
                 listOf(binding.dropsButton, binding.chatIdentityButton, binding.moderationLogsButton).forEach { button ->
                     button.minHeight = (24 * density).roundToInt()
