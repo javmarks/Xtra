@@ -98,25 +98,78 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
     // The player owns the real layout orientation. The chat pane itself is narrow in
     // landscape, so its dimensions/configuration cannot reliably identify player mode.
     fun applyPlayerLandscapeMode(isLandscape: Boolean) {
-        if (!isAdded || _binding == null || !isLandscape) return
+        if (!isAdded || _binding == null) return
         val density = resources.displayMetrics.density
-        listOf(binding.dropsButton, binding.chatIdentityButton, binding.moderationLogsButton).forEach { button ->
-            button.minHeight = (24 * density).roundToInt()
-            button.minimumHeight = (24 * density).roundToInt()
-            button.minWidth = 0
-            button.setPadding((4 * density).roundToInt(), 0, (4 * density).roundToInt(), 0)
-            button.textSize = 9f
-            button.layoutParams = button.layoutParams.apply { height = (26 * density).roundToInt() }
+        fun dp(value: Int) = (value * density).roundToInt()
+        val buttons = listOf(binding.dropsButton, binding.chatIdentityButton, binding.moderationLogsButton)
+        if (isLandscape) {
+            buttons.forEach { button ->
+                button.minHeight = dp(24)
+                button.minimumHeight = dp(24)
+                button.minWidth = 0
+                button.setPadding(dp(4), 0, dp(4), 0)
+                button.textSize = 9f
+                button.layoutParams = button.layoutParams.apply { height = dp(26) }
+            }
+            binding.dropsButton.text = "Drops"
+            binding.chatIdentityButton.text = "ID"
+            binding.moderationLogsButton.text = "Logs"
+            binding.moderationLogsBar.setPadding(dp(2), 0, dp(2), 0)
+            binding.pinnedChatBar.orientation = android.widget.LinearLayout.HORIZONTAL
+            binding.pinnedChatBar.setPadding(dp(6), dp(3), dp(6), dp(3))
+            (binding.pinnedChatBar.getChildAt(0).layoutParams as? android.widget.LinearLayout.LayoutParams)?.let {
+                it.width = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                it.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                binding.pinnedChatBar.getChildAt(0).layoutParams = it
+            }
+            binding.pinnedChatText.layoutParams = binding.pinnedChatText.layoutParams.apply {
+                width = 0
+                height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                if (this is android.widget.LinearLayout.LayoutParams) {
+                    weight = 1f
+                    topMargin = 0
+                    marginStart = dp(6)
+                }
+            }
+            binding.pinnedChatText.maxLines = 1
+            binding.pinnedChatText.textSize = 11f
+            binding.pinnedChatBy.isGone = true
+            binding.pinnedChatExpiry.isGone = true
+        } else {
+            buttons.forEach { button ->
+                button.minHeight = dp(36)
+                button.minimumHeight = dp(36)
+                button.minWidth = 0
+                button.textSize = 14f
+                button.layoutParams = button.layoutParams.apply {
+                    height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                }
+            }
+            binding.dropsButton.text = "Drops"
+            binding.chatIdentityButton.text = "Chat Identity"
+            binding.moderationLogsButton.text = "Mod Logs"
+            binding.moderationLogsBar.setPadding(dp(6), dp(2), dp(6), dp(2))
+            binding.pinnedChatBar.orientation = android.widget.LinearLayout.VERTICAL
+            binding.pinnedChatBar.setPadding(dp(12), dp(8), dp(12), dp(8))
+            val header = binding.pinnedChatBar.getChildAt(0)
+            (header.layoutParams as? android.widget.LinearLayout.LayoutParams)?.let {
+                it.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                header.layoutParams = it
+            }
+            binding.pinnedChatText.layoutParams = binding.pinnedChatText.layoutParams.apply {
+                width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                if (this is android.widget.LinearLayout.LayoutParams) {
+                    weight = 0f
+                    topMargin = dp(3)
+                    marginStart = 0
+                }
+            }
+            binding.pinnedChatText.maxLines = 3
+            binding.pinnedChatText.textSize = 14f
+            binding.pinnedChatBy.isVisible = true
+            binding.pinnedChatExpiry.isVisible = true
         }
-        binding.dropsButton.text = "Drops"
-        binding.chatIdentityButton.text = "ID"
-        binding.moderationLogsButton.text = "Logs"
-        binding.moderationLogsBar.setPadding((2 * density).roundToInt(), 0, (2 * density).roundToInt(), 0)
-        binding.pinnedChatBar.setPadding((6 * density).roundToInt(), 0, (6 * density).roundToInt(), 0)
-        binding.pinnedChatText.maxLines = 1
-        binding.pinnedChatText.textSize = 11f
-        binding.pinnedChatBy.isGone = true
-        binding.pinnedChatExpiry.isGone = true
     }
 
     fun showPinnedMessageDetailsFromAllChats() {
