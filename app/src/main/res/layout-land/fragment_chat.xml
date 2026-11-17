@@ -51,7 +51,7 @@
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:textSize="10sp"
-                android:text="Chat Identity"
+                android:text="ID"
                 android:visibility="gone" />
 
             <Button
@@ -65,7 +65,7 @@
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:textSize="10sp"
-                android:text="Mod Logs" />
+                android:text="Logs" />
         </LinearLayout>
 
         <LinearLayout
@@ -247,6 +247,7 @@
 
                 <TextView
                     android:id="@+id/pinnedChatExpiry"
+                    android:visibility="gone"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textAppearance="?attr/textAppearanceBodySmall"
@@ -268,6 +269,7 @@
 
             <TextView
                 android:id="@+id/pinnedChatBy"
+                android:visibility="gone"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
