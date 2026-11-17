@@ -173,6 +173,13 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        // The player controls orientation; the chat pane itself remains narrow in landscape.
+        view.post {
+            if (isAdded && _binding != null) {
+                (parentFragment as? com.github.andreyasadchy.xtra.ui.player.PlayerFragment)
+                    ?.let { applyPlayerLandscapeMode(it.isLandscapePlayerMode()) }
+            }
+        }
         val isLiveChannel = requireArguments().getBoolean(KEY_IS_LIVE)
         binding.moderationLogsBar.isVisible = isLiveChannel && !isMergedRendererOnly
         binding.topGiftersBar.isVisible = isLiveChannel && !isMergedRendererOnly && viewModel.topGifters.value.isNotEmpty()
