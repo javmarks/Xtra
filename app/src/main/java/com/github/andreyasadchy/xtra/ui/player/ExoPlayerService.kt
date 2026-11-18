@@ -125,7 +125,7 @@ class ExoPlayerService : BasePlaybackService() {
     // Twitch Drops watch traffic: HEAD each newly published HLS media segment.
     private val dropsSegmentRequests = LinkedHashSet<String>()
     private var dropsSegmentStreamKey: String? = null
-    @Volatile private var dropsSegmentPlaylistUrl: String? = null
+    @Volatile private var dropsSegmentMasterUrl: String? = null
     @Volatile private var dropsSegmentPlaybackActive = false
     private var dropsSegmentJob: Job? = null
 
@@ -1660,142 +1660,174 @@ class ExoPlayerService : BasePlaybackService() {
             updateDropsDiagnostic("Playback active; waiting for an HLS media playlist.")
             return
         }
-        val currentKey = "${channelLogin.orEmpty()}:${streamId.orEmpty()}"
-        if (currentKey == ":" || currentKey.endsWith(":")) return
-        val playlistUri = runCatching { URI(playlist.baseUri) }.getOrNull() ?: return
-        if (playlistUri.scheme != "https" || playlistUri.host.isNullOrBlank()) {
-            updateDropsDiagnostic("Playlist URL is not a valid HTTPS address.")
-            return
-        }
-        // ExoPlayer refreshes this signed URL as playback continues. Keep the polling
-        // loop alive across same-broadcast playlist refreshes and use the newest URL.
-        dropsSegmentPlaylistUrl = playlist.baseUri
+        val currentChannelLogin = channelLogin.orEmpty()
+        val currentKey = "$\{currentChannelLogin}:$\{streamId.orEmpty()}"
+        if (currentChannelLogin.isBlank() || currentKey.endsWith(":")) return
         if (dropsSegmentStreamKey != currentKey) {
             dropsSegmentJob?.cancel()
-            synchronized(dropsSegmentRequests) {
-                dropsSegmentRequests.clear()
-            }
+            synchronized(dropsSegmentRequests) { dropsSegmentRequests.clear() }
             dropsSegmentStreamKey = currentKey
+            dropsSegmentMasterUrl = null
             dropsSegmentJob = null
         }
-        // Do not overwrite the active request's diagnostic on every ExoPlayer
-        // timeline callback; only report "preparing" when starting a new job.
         if (dropsSegmentJob?.isActive == true) return
-        updateDropsDiagnostic("Playback active; playlist host: ${playlistUri.host}; preparing request.")
+        updateDropsDiagnostic("Playback active; resolving Twitch playback playlist.")
 
         dropsSegmentJob = lifecycleScope.launch(Dispatchers.IO) {
+            var mediaPlaylistUrl: String? = null
             while (isActive && dropsSegmentStreamKey == currentKey && dropsSegmentPlaybackActive) {
-                val currentPlaylistUrl = dropsSegmentPlaylistUrl
-                if (!currentPlaylistUrl.isNullOrBlank()) {
-                    try {
-                        val playlistRequest = Request.Builder()
-                            .url(currentPlaylistUrl)
-                            .header("Connection", "close")
-                            .get()
-                            .build()
-                        val playlistResult = withTimeout(8_000) {
-                            xtraModule.okHttpClient.value.newCall(playlistRequest).executeAsync().use { response ->
-                                if (response.isSuccessful) {
-                                    response.body?.string().orEmpty() to response.request.url.toString()
-                                } else {
-                                    Log.w("XtraDropsWatch", "HLS playlist poll not accepted (HTTP ${response.code})")
-                                    updateDropsDiagnostic("Playlist request failed: HTTP ${response.code}; host: ${runCatching { URI(currentPlaylistUrl).host }.getOrNull() ?: "unknown"}.")
-                                    "" to currentPlaylistUrl
+                try {
+                    if (mediaPlaylistUrl.isNullOrBlank()) {
+                        var masterUrl = dropsSegmentMasterUrl
+                        if (masterUrl.isNullOrBlank()) {
+                            masterUrl = getStreamPlaylistUrl(currentChannelLogin)
+                            if (!masterUrl.isNullOrBlank() && dropsSegmentStreamKey == currentKey) {
+                                dropsSegmentMasterUrl = masterUrl
+                            }
+                        }
+                        if (masterUrl.isNullOrBlank()) {
+                            updateDropsDiagnostic("Twitch playback token request failed; will retry.")
+                            delay(10_000)
+                            continue
+                        }
+                        val masterResult = withTimeout(8_000) {
+                            val request = Request.Builder().url(masterUrl).header("Connection", "close").get().build()
+                            xtraModule.okHttpClient.value.newCall(request).executeAsync().use { response ->
+                                Triple(response.code, response.body?.string().orEmpty(), response.request.url.toString())
+                            }
+                        }
+                        if (masterResult.first !in 200..299) {
+                            updateDropsDiagnostic("Twitch master playlist failed: HTTP $\{masterResult.first}.")
+                            if (masterResult.first in listOf(401, 403, 404)) dropsSegmentMasterUrl = null
+                            delay(10_000)
+                            continue
+                        }
+                        val masterUri = runCatching { URI(masterResult.third) }.getOrNull()
+                        if (masterUri == null || !masterUri.scheme.equals("https", true)) {
+                            updateDropsDiagnostic("Twitch master playlist returned an invalid HTTPS URL.")
+                            dropsSegmentMasterUrl = null
+                            delay(10_000)
+                            continue
+                        }
+                        val masterLines = masterResult.second.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+                        val variants = mutableListOf<Pair<Long, String>>()
+                        masterLines.forEachIndexed { index, line ->
+                            if (line.startsWith("#EXT-X-STREAM-INF:")) {
+                                val bandwidth = Regex("""(?:^|,)BANDWIDTH=(\d+)""")
+                                    .find(line.substringAfter(':'))?.groupValues?.getOrNull(1)?.toLongOrNull() ?: Long.MAX_VALUE
+                                val relativeUrl = masterLines.drop(index + 1).firstOrNull { !it.startsWith("#") }
+                                if (relativeUrl != null) {
+                                    val variantUri = runCatching { masterUri.resolve(relativeUrl) }.getOrNull()
+                                    if (variantUri != null && variantUri.scheme.equals("https", true) &&
+                                        !variantUri.host.isNullOrBlank() && variantUri.userInfo == null) {
+                                        variants.add(bandwidth to variantUri.toString())
+                                    }
                                 }
                             }
                         }
-                        val playlistText = playlistResult.first
-                        if (playlistText.isNotBlank() && dropsSegmentStreamKey == currentKey) {
-                            val finalPlaylistUri = runCatching {
-                                URI(playlistResult.second)
-                            }.getOrNull() ?: playlistUri
-                            val playlistLines = playlistText.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
-                            val extInfCount = playlistLines.count { it.startsWith("#EXTINF:") }
-                            val partLines = playlistLines.filter { it.startsWith("#EXT-X-PART:") }
-                            val uriAttributeCount = playlistLines.count { it.contains("URI=") }
-                            val candidateUrls = playlistLines.mapNotNull { line ->
-                                when {
-                                    !line.startsWith("#") -> line
-                                    line.startsWith("#EXT-X-PART:") -> Regex("""URI="([^"]+)"""")
-                                        .find(line)?.groupValues?.getOrNull(1)
-                                    else -> null
-                                }
-                            }
-                            val resolvedCandidates = candidateUrls.mapNotNull { relativeUrl ->
-                                runCatching { finalPlaylistUri.resolve(relativeUrl).toString() }.getOrNull()
-                            }
-                            val parsedCandidateUris = resolvedCandidates.mapNotNull { url ->
-                                runCatching { URI(url) }.getOrNull()
-                            }
-                            val httpsCandidates = parsedCandidateUris.filter { it.scheme.equals("https", ignoreCase = true) }
-                            val allowedHostCandidates = httpsCandidates.filter { uri ->
-                                uri.host.equals(finalPlaylistUri.host, ignoreCase = true) ||
-                                    Regex(MEDIA_PLAYLIST_REGEX).matches(uri.host.orEmpty())
-                            }
-                            val segmentUrls = allowedHostCandidates.map { it.toString() }.distinct().takeLast(30)
-                            val rejectedSchemeCount = resolvedCandidates.size - httpsCandidates.size
-                            val rejectedHostCount = httpsCandidates.size - allowedHostCandidates.size
-                            val rejectedHostSample = httpsCandidates.firstOrNull { uri ->
-                                !uri.host.equals(finalPlaylistUri.host, ignoreCase = true) &&
-                                    !Regex(MEDIA_PLAYLIST_REGEX).matches(uri.host.orEmpty())
-                            }?.host.orEmpty()
-                            var acceptedSegments = 0
-                            var failedSegments = 0
-                            if (segmentUrls.isEmpty()) {
-                                val tags = playlistLines.filter { it.startsWith("#EXT-X-") }
-                                    .map { it.substringBefore(':').take(32) }.distinct().take(6).joinToString(",")
-                                updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${playlistText.length} chars; EXTINF: ${extInfCount}; PART: ${partLines.size}; URI attrs: ${uriAttributeCount}; URL candidates: ${candidateUrls.size}; rejected scheme: ${rejectedSchemeCount}; rejected host: ${rejectedHostCount}; sample host: ${rejectedHostSample.ifBlank { "none" }}; tags: ${tags.ifBlank { "none" }}.")
-                            } else {
-                                updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${segmentUrls.size} segment URLs found.")
-                            }
-
-                            for (segmentUrl in segmentUrls) {
-                                if (!isActive || dropsSegmentStreamKey != currentKey) break
-                                val alreadyRequested = synchronized(dropsSegmentRequests) {
-                                    segmentUrl in dropsSegmentRequests
-                                }
-                                if (alreadyRequested) continue
-                                try {
-                                    val segmentRequest = Request.Builder()
-                                        .url(segmentUrl)
-                                        .head()
-                                        .build()
-                                    val status = withTimeout(5_000) {
-                                        xtraModule.okHttpClient.value.newCall(segmentRequest).executeAsync().use { it.code }
-                                    }
-                                    if (status in 200..399) {
-                                        synchronized(dropsSegmentRequests) {
-                                            if (dropsSegmentStreamKey == currentKey) {
-                                                dropsSegmentRequests.add(segmentUrl)
-                                                while (dropsSegmentRequests.size > 256) {
-                                                    dropsSegmentRequests.remove(dropsSegmentRequests.first())
-                                                }
-                                            }
-                                        }
-                                        acceptedSegments++
-                                        Log.d("XtraDropsWatch", "HLS segment HEAD accepted (HTTP $status)")
-                                    } else {
-                                        failedSegments++
-                                        Log.w("XtraDropsWatch", "HLS segment HEAD not accepted (HTTP $status)")
-                                    }
-                                } catch (e: CancellationException) {
-                                    throw e
-                                } catch (e: Exception) {
-                                    failedSegments++
-                                    Log.w("XtraDropsWatch", "HLS segment HEAD failed: ${e.javaClass.simpleName}")
-                                }
-                            }
-                            updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; chars: ${playlistText.length}; EXTINF: ${extInfCount}; PART: ${partLines.size}; URI attrs: ${uriAttributeCount}; URL candidates: ${candidateUrls.size}; rejected scheme: ${rejectedSchemeCount}; rejected host: ${rejectedHostCount}; sample host: ${rejectedHostSample.ifBlank { "none" }}; selected: ${segmentUrls.size}; HEAD accepted: ${acceptedSegments}; failed: ${failedSegments}.")
+                        if (variants.isNotEmpty()) {
+                            val selectedVariant = variants.minByOrNull { it.first }!!
+                            mediaPlaylistUrl = selectedVariant.second
+                            updateDropsDiagnostic("Twitch master OK; variants: $\{variants.size}; lowest bandwidth selected; host: $\{runCatching { URI(selectedVariant.second).host }.getOrNull() ?: "unknown"}.")
+                        } else if (masterLines.any { it.startsWith("#EXTINF:") }) {
+                            mediaPlaylistUrl = masterUri.toString()
+                        } else {
+                            updateDropsDiagnostic("Twitch master playlist contained no usable media variants.")
+                            dropsSegmentMasterUrl = null
+                            delay(10_000)
+                            continue
                         }
-                    } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                        updateDropsDiagnostic("Drops network request timed out; check the playlist or proxy connection.")
-                        Log.w("XtraDropsWatch", "HLS Drops request timed out")
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        updateDropsDiagnostic("Playlist request error: ${e.javaClass.simpleName}.")
-                        Log.w("XtraDropsWatch", "HLS playlist poll failed: ${e.javaClass.simpleName}")
                     }
+
+                    val currentMediaUrl = mediaPlaylistUrl
+                    if (currentMediaUrl.isNullOrBlank()) {
+                        delay(10_000)
+                        continue
+                    }
+                    val mediaResult = withTimeout(8_000) {
+                        val request = Request.Builder().url(currentMediaUrl).header("Connection", "close").get().build()
+                        xtraModule.okHttpClient.value.newCall(request).executeAsync().use { response ->
+                            Triple(response.code, response.body?.string().orEmpty(), response.request.url.toString())
+                        }
+                    }
+                    if (mediaResult.first !in 200..299) {
+                        updateDropsDiagnostic("Twitch media playlist failed: HTTP $\{mediaResult.first}.")
+                        if (mediaResult.first in listOf(401, 403, 404)) {
+                            mediaPlaylistUrl = null
+                            dropsSegmentMasterUrl = null
+                        }
+                        delay(10_000)
+                        continue
+                    }
+                    val mediaUri = runCatching { URI(mediaResult.third) }.getOrNull()
+                    if (mediaUri == null || !mediaUri.scheme.equals("https", true)) {
+                        updateDropsDiagnostic("Twitch media playlist returned an invalid HTTPS URL.")
+                        mediaPlaylistUrl = null
+                        dropsSegmentMasterUrl = null
+                        delay(10_000)
+                        continue
+                    }
+                    val playlistLines = mediaResult.second.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+                    val extInfCount = playlistLines.count { it.startsWith("#EXTINF:") }
+                    val partLines = playlistLines.filter { it.startsWith("#EXT-X-PART:") }
+                    val candidateUrls = playlistLines.mapNotNull { line ->
+                        when {
+                            !line.startsWith("#") -> line
+                            line.startsWith("#EXT-X-PART:") -> Regex("""URI="([^"]+)"""").find(line)?.groupValues?.getOrNull(1)
+                            else -> null
+                        }
+                    }
+                    val segmentUrls = candidateUrls.mapNotNull { relativeUrl ->
+                        runCatching { mediaUri.resolve(relativeUrl) }.getOrNull()
+                    }.filter { uri ->
+                        uri.scheme.equals("https", true) && !uri.host.isNullOrBlank() && uri.userInfo == null
+                    }.map { it.toString() }.distinct().takeLast(30)
+
+                    var acceptedSegments = 0
+                    var failedSegments = 0
+                    for (segmentUrl in segmentUrls) {
+                        if (!isActive || dropsSegmentStreamKey != currentKey) break
+                        val alreadyRequested = synchronized(dropsSegmentRequests) { segmentUrl in dropsSegmentRequests }
+                        if (alreadyRequested) continue
+                        try {
+                            val request = Request.Builder().url(segmentUrl).head().build()
+                            val status = withTimeout(5_000) {
+                                xtraModule.okHttpClient.value.newCall(request).executeAsync().use { it.code }
+                            }
+                            if (status == 200) {
+                                synchronized(dropsSegmentRequests) {
+                                    if (dropsSegmentStreamKey == currentKey) {
+                                        dropsSegmentRequests.add(segmentUrl)
+                                        while (dropsSegmentRequests.size > 256) dropsSegmentRequests.remove(dropsSegmentRequests.first())
+                                    }
+                                }
+                                acceptedSegments++
+                                Log.d("XtraDropsWatch", "Twitch HLS segment HEAD accepted (HTTP 200)")
+                            } else {
+                                failedSegments++
+                                Log.w("XtraDropsWatch", "Twitch HLS segment HEAD not accepted (HTTP $\{status})")
+                                if (status in listOf(401, 403, 404)) {
+                                    mediaPlaylistUrl = null
+                                    dropsSegmentMasterUrl = null
+                                    break
+                                }
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            failedSegments++
+                            Log.w("XtraDropsWatch", "Twitch HLS segment HEAD failed: $\{e.javaClass.simpleName}")
+                        }
+                    }
+                    updateDropsDiagnostic("Twitch playlist OK; master variants: $\{variants.size}; media host: $\{mediaUri.host}; chars: $\{mediaResult.second.length}; EXTINF: $extInfCount; PART: $\{partLines.size}; selected: $\{segmentUrls.size}; HEAD HTTP 200: $acceptedSegments; failed: $failedSegments.")
+                } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                    updateDropsDiagnostic("Twitch Drops playlist or segment request timed out.")
+                    Log.w("XtraDropsWatch", "Twitch HLS Drops request timed out")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    updateDropsDiagnostic("Twitch Drops playlist error: $\{e.javaClass.simpleName}.")
+                    Log.w("XtraDropsWatch", "Twitch HLS Drops request failed: $\{e.javaClass.simpleName}")
                 }
                 delay(10_000)
             }
