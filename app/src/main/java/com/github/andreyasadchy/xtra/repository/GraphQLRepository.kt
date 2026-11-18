@@ -774,7 +774,7 @@ class GraphQLRepository(
             }.toString()
             lastResponse = sendPersistedQuery(networkLibrary, headers, body)
             val root = runCatching { json.parseToJsonElement(lastResponse) }.getOrNull()
-            val hasCampaigns = root?.toString()?.contains("\\"dropCampaigns\\"") == true
+            val hasCampaigns = root?.toString()?.contains("\"dropCampaigns\"") == true
             if (hasCampaigns && !lastResponse.contains("PersistedQueryNotFound")) return@withContext lastResponse
         }
         lastResponse
@@ -811,9 +811,9 @@ class GraphQLRepository(
             lastResponse = sendPersistedQuery(networkLibrary, headers, body)
             val response = runCatching { json.parseToJsonElement(lastResponse) }.getOrNull()
             val responseText = response?.toString().orEmpty()
-            if (responseText.contains("\\"currentUser\\") &&
+            if (responseText.contains("\"currentUser\"") &&
                 !responseText.contains("PersistedQueryNotFound") &&
-                !responseText.contains("\\"errors\\"")) {
+                !responseText.contains("\"errors\"")) {
                 return@withContext lastResponse
             }
         }
@@ -842,7 +842,7 @@ class GraphQLRepository(
             }.toString()
             lastResponse = sendPersistedQuery(networkLibrary, headers, body)
             val root = runCatching { json.parseToJsonElement(lastResponse) }.getOrNull()
-            val inventory = root?.toString()?.contains("\\"inventory\\"") == true
+            val inventory = root?.toString()?.contains("\"inventory\"") == true
             if (inventory && !lastResponse.contains("PersistedQueryNotFound")) return@withContext lastResponse
         }
         lastResponse
