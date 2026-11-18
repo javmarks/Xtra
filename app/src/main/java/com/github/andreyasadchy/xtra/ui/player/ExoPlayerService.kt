@@ -1724,17 +1724,27 @@ class ExoPlayerService : BasePlaybackService() {
                             val resolvedCandidates = candidateUrls.mapNotNull { relativeUrl ->
                                 runCatching { finalPlaylistUri.resolve(relativeUrl).toString() }.getOrNull()
                             }
-                            val segmentUrls = resolvedCandidates.filter { url ->
-                                val uri = runCatching { URI(url) }.getOrNull()
-                                uri?.scheme == "https" && (uri.host.equals(finalPlaylistUri.host, ignoreCase = true) || Regex(MEDIA_PLAYLIST_REGEX).matches(uri.host.orEmpty()))
-                            }.distinct().takeLast(30)
-                            val rejectedCandidates = (resolvedCandidates.size - segmentUrls.size).coerceAtLeast(0)
+                            val parsedCandidateUris = resolvedCandidates.mapNotNull { url ->
+                                runCatching { URI(url) }.getOrNull()
+                            }
+                            val httpsCandidates = parsedCandidateUris.filter { it.scheme.equals("https", ignoreCase = true) }
+                            val allowedHostCandidates = httpsCandidates.filter { uri ->
+                                uri.host.equals(finalPlaylistUri.host, ignoreCase = true) ||
+                                    Regex(MEDIA_PLAYLIST_REGEX).matches(uri.host.orEmpty())
+                            }
+                            val segmentUrls = allowedHostCandidates.map { it.toString() }.distinct().takeLast(30)
+                            val rejectedSchemeCount = resolvedCandidates.size - httpsCandidates.size
+                            val rejectedHostCount = httpsCandidates.size - allowedHostCandidates.size
+                            val rejectedHostSample = httpsCandidates.firstOrNull { uri ->
+                                !uri.host.equals(finalPlaylistUri.host, ignoreCase = true) &&
+                                    !Regex(MEDIA_PLAYLIST_REGEX).matches(uri.host.orEmpty())
+                            }?.host.orEmpty()
                             var acceptedSegments = 0
                             var failedSegments = 0
                             if (segmentUrls.isEmpty()) {
                                 val tags = playlistLines.filter { it.startsWith("#EXT-X-") }
                                     .map { it.substringBefore(':').take(32) }.distinct().take(6).joinToString(",")
-                                updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${playlistText.length} chars; EXTINF: ${extInfCount}; PART: ${partLines.size}; URI attrs: ${uriAttributeCount}; URL candidates: ${candidateUrls.size}; rejected: ${rejectedCandidates}; tags: ${tags.ifBlank { "none" }}.")
+                                updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${playlistText.length} chars; EXTINF: ${extInfCount}; PART: ${partLines.size}; URI attrs: ${uriAttributeCount}; URL candidates: ${candidateUrls.size}; rejected scheme: ${rejectedSchemeCount}; rejected host: ${rejectedHostCount}; sample host: ${rejectedHostSample.ifBlank { "none" }}; tags: ${tags.ifBlank { "none" }}.")
                             } else {
                                 updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${segmentUrls.size} segment URLs found.")
                             }
@@ -1775,7 +1785,7 @@ class ExoPlayerService : BasePlaybackService() {
                                     Log.w("XtraDropsWatch", "HLS segment HEAD failed: ${e.javaClass.simpleName}")
                                 }
                             }
-                            updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; chars: ${playlistText.length}; EXTINF: ${extInfCount}; PART: ${partLines.size}; URI attrs: ${uriAttributeCount}; URL candidates: ${candidateUrls.size}; rejected: ${rejectedCandidates}; selected: ${segmentUrls.size}; HEAD accepted: ${acceptedSegments}; failed: ${failedSegments}.")
+                            updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; chars: ${playlistText.length}; EXTINF: ${extInfCount}; PART: ${partLines.size}; URI attrs: ${uriAttributeCount}; URL candidates: ${candidateUrls.size}; rejected scheme: ${rejectedSchemeCount}; rejected host: ${rejectedHostCount}; sample host: ${rejectedHostSample.ifBlank { "none" }}; selected: ${segmentUrls.size}; HEAD accepted: ${acceptedSegments}; failed: ${failedSegments}.")
                         }
                     } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
                         updateDropsDiagnostic("Drops network request timed out; check the playlist or proxy connection.")
