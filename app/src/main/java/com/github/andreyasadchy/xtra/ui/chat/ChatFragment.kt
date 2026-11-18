@@ -1619,6 +1619,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         val status = TextView(context).apply {
             text = "Checking Twitch Drops progress…"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextIsSelectable(true)
             setPadding(
                 (20 * resources.displayMetrics.density).roundToInt(),
                 (12 * resources.displayMetrics.density).roundToInt(),
@@ -1637,7 +1638,14 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 }
             }
             .setNegativeButton(android.R.string.ok, null)
+            .setNeutralButton("Copy status", null)
             .show()
+
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Twitch Drops status", status.text))
+            Toast.makeText(context, "Drops status copied.", Toast.LENGTH_SHORT).show()
+        }
 
         if (channelId.isNullOrBlank() && channelLogin.isNullOrBlank()) {
             status.text = "Open a channel that is live and participating in a Drops campaign, then refresh this panel."
