@@ -27,6 +27,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Base64
+import android.util.Log
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.annotation.OptIn
@@ -80,9 +81,11 @@ import com.github.andreyasadchy.xtra.util.NetworkUtils
 import com.github.andreyasadchy.xtra.util.NetworkUtils.executeAsync
 import com.github.andreyasadchy.xtra.util.TwitchApiHelper
 import com.github.andreyasadchy.xtra.util.prefs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
