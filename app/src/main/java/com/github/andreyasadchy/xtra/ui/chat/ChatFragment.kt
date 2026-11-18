@@ -1614,22 +1614,45 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
     private fun showDropsProgress() {
         if (!isAdded) return
         val context = requireContext()
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).roundToInt()
         val channelId = arguments?.getString(KEY_CHANNEL_ID)
         val channelLogin = arguments?.getString(KEY_CHANNEL_LOGIN)
+
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(12))
+        }
         val status = TextView(context).apply {
-            text = "Checking Twitch Drops progress…"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            text = "Loading your Twitch Drops…"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             setTextIsSelectable(true)
-            setPadding(
-                (20 * resources.displayMetrics.density).roundToInt(),
-                (12 * resources.displayMetrics.density).roundToInt(),
-                (20 * resources.displayMetrics.density).roundToInt(),
-                (12 * resources.displayMetrics.density).roundToInt()
-            )
+            setPadding(0, dp(4), 0, dp(10))
+        }
+        val refreshButton = android.widget.Button(context).apply {
+            text = "Refresh progress"
+            isAllCaps = false
+        }
+        val campaignsHeader = TextView(context).apply {
+            text = "YOUR CAMPAIGNS"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(0, dp(12), 0, dp(8))
+        }
+        val campaignList = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        content.addView(status)
+        content.addView(refreshButton)
+        content.addView(campaignsHeader)
+        content.addView(campaignList)
+        val scroll = android.widget.ScrollView(context).apply {
+            isFillViewport = true
+            addView(content)
         }
         val dialog = context.getAlertDialogBuilder()
-            .setTitle("Twitch Drops")
-            .setView(status)
+            .setTitle("Drops & Rewards")
+            .setView(scroll)
             .setPositiveButton("Open Inventory") { _, _ ->
                 runCatching {
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.twitch.tv/drops/inventory")))
@@ -1647,47 +1670,288 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             Toast.makeText(context, "Drops status copied.", Toast.LENGTH_SHORT).show()
         }
 
-        if (channelId.isNullOrBlank() && channelLogin.isNullOrBlank()) {
-            status.text = "Open a channel that is live and participating in a Drops campaign, then refresh this panel."
-            return
-        }
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            val result = runCatching {
+        fun refreshDrops() {
+            if (!isAdded || !dialog.isShowing) return
+            refreshButton.isEnabled = false
+            refreshButton.text = "Refreshing…"
+            status.text = "Checking Twitch progress and campaign rewards…"
+            campaignList.removeAllViews()
+            viewLifecycleOwner.lifecycleScope.launch {
                 val app = context.applicationContext as XtraApp
-                app.xtraModule.graphQLRepository.loadCurrentDropSession(
-                    networkLibrary = context.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
-                    headers = TwitchApiHelper.getGQLHeaders(context, true),
-                    channelId = channelId,
-                    channelLogin = channelLogin
-                )
-            }
-            if (!isAdded || _binding == null || !dialog.isShowing) return@launch
-            result.onSuccess { response ->
-                val session = runCatching {
-                    JSONObject(response)
-                        .optJSONObject("data")
-                        ?.optJSONObject("currentUser")
-                        ?.optJSONObject("dropCurrentSession")
-                }.getOrNull()
+                val networkLibrary = context.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP)
+                val headers = TwitchApiHelper.getGQLHeaders(context, true)
+                val sessionResult = if (!channelId.isNullOrBlank() || !channelLogin.isNullOrBlank()) {
+                    runCatching {
+                        app.xtraModule.graphQLRepository.loadCurrentDropSession(
+                            networkLibrary = networkLibrary,
+                            headers = headers,
+                            channelId = channelId,
+                            channelLogin = channelLogin
+                        )
+                    }
+                } else null
+                val inventoryResult = runCatching {
+                    app.xtraModule.graphQLRepository.loadDropsInventory(networkLibrary, headers)
+                }
+                if (!isAdded || _binding == null || !dialog.isShowing) return@launch
+                refreshButton.isEnabled = true
+                refreshButton.text = "Refresh progress"
+
+                val session = sessionResult?.getOrNull()?.let { response ->
+                    runCatching {
+                        JSONObject(response).optJSONObject("data")
+                            ?.optJSONObject("currentUser")?.optJSONObject("dropCurrentSession")
+                    }.getOrNull()
+                }
                 val minutes = session?.optInt("currentMinutesWatched", -1) ?: -1
                 val dropId = session?.optString("dropID")?.takeIf { it.isNotBlank() && it != "null" }
-                val dropsStatus = when {
-                    minutes >= 0 && dropId != null ->
-                        "Twitch reports $minutes minutes watched for the active Drop session.\\n\\nProgress is reported by Twitch; Xtra does not estimate or add minutes locally. Use Open Inventory to see campaign requirements and claim available rewards."
-                    response.contains("PersistedQueryNotFound", true) ->
-                        "Twitch did not accept the current Drops progress query. Your existing watch tracking remains unchanged. Open Inventory to check progress directly on Twitch."
-                    response.contains("\"errors\"", true) ->
-                        "Twitch returned an error while checking Drops progress. Open Inventory to verify your account and campaign status."
-                    else ->
-                        "Twitch is not reporting an active Drops watch session for this channel right now. Make sure the channel is live, the campaign is active, and your Twitch account is eligible. Open Inventory to see available campaigns."
+                val trackerStatus = context.prefs().getString(
+                    "drops_watch_diagnostic",
+                    "No tracker activity recorded yet."
+                )
+                status.text = buildString {
+                    if (minutes >= 0 && dropId != null) {
+                        append("LIVE SESSION  ·  ")
+                        append(minutes)
+                        append(" minutes watched")
+                    } else {
+                        append("No active Drops watch session reported for this channel.")
+                    }
+                    append("\nProgress is confirmed by Twitch, not estimated by Xtra.")
+                    append("\n\nXTRA TRACKER\n")
+                    append(trackerStatus)
                 }
-                val trackerStatus = context.prefs().getString("drops_watch_diagnostic", "No tracker activity recorded yet.")
-                status.text = "$dropsStatus\\n\\nXtra tracker: $trackerStatus"
-            }.onFailure {
-                status.text = "Could not check Drops progress right now. Your existing watch tracking is unchanged. Open Inventory to verify progress on Twitch."
+
+                val inventoryText = inventoryResult.getOrNull()
+                val inventory = inventoryText?.let { response ->
+                    runCatching {
+                        JSONObject(response).optJSONObject("data")
+                            ?.optJSONObject("currentUser")?.optJSONObject("inventory")
+                    }.getOrNull()
+                }
+                val campaigns = inventory?.optJSONArray("dropCampaignsInProgress")
+                if (inventoryResult.isFailure || inventory == null) {
+                    val message = if (inventoryText?.contains("PersistedQueryNotFound", true) == true) {
+                        "Twitch did not accept the Drops inventory query. Open Inventory on Twitch to view your campaigns."
+                    } else {
+                        "Couldn't load campaign details right now. Your watch tracking is still running."
+                    }
+                    campaignList.addView(TextView(context).apply {
+                        text = message
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                        setPadding(0, dp(4), 0, dp(12))
+                    })
+                    return@launch
+                }
+
+                if (campaigns == null || campaigns.length() == 0) {
+                    campaignList.addView(TextView(context).apply {
+                        text = "No active campaign progress was returned by Twitch. Check All Campaigns in your Drops Inventory for campaigns you can join."
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                        setPadding(0, dp(4), 0, dp(12))
+                    })
+                    return@launch
+                }
+
+                for (campaignIndex in 0 until campaigns.length()) {
+                    val campaign = campaigns.optJSONObject(campaignIndex) ?: continue
+                    val game = campaign.optJSONObject("game")
+                    val gameName = game?.optString("displayName")?.takeIf { it.isNotBlank() }
+                        ?: campaign.optString("name", "Drops campaign")
+                    val campaignName = campaign.optString("name").takeIf { it.isNotBlank() }
+                        ?: gameName
+                    val card = LinearLayout(context).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(dp(12), dp(12), dp(12), dp(12))
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            setColor(com.google.android.material.color.MaterialColors.getColor(
+                                context, com.google.android.material.R.attr.colorSurface, 0xFF252525.toInt()
+                            ))
+                            cornerRadius = dp(12).toFloat()
+                            setStroke(dp(1), 0x557F7F7F)
+                        }
+                    }
+                    val heading = LinearLayout(context).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = android.view.Gravity.CENTER_VERTICAL
+                    }
+                    val artUrl = game?.optString("boxArtURL")?.takeIf {
+                        it.startsWith("https://", true)
+                    }
+                    if (!artUrl.isNullOrBlank()) {
+                        val art = android.widget.ImageView(context).apply {
+                            layoutParams = LinearLayout.LayoutParams(dp(48), dp(64))
+                            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                            contentDescription = "$gameName artwork"
+                        }
+                        context.imageLoader.enqueue(
+                            ImageRequest.Builder(context).apply {
+                                data(artUrl)
+                                crossfade(true)
+                                target(art)
+                            }.build()
+                        )
+                        heading.addView(art)
+                    }
+                    val titleColumn = LinearLayout(context).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(if (artUrl.isNullOrBlank()) 0 else dp(10), 0, 0, 0)
+                    }
+                    titleColumn.addView(TextView(context).apply {
+                        text = gameName
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                    })
+                    titleColumn.addView(TextView(context).apply {
+                        text = campaignName
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                        setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    })
+                    heading.addView(titleColumn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    card.addView(heading)
+
+                    val self = campaign.optJSONObject("self")
+                    val linked = self?.optBoolean("isAccountConnected", false) == true
+                    val drops = campaign.optJSONArray("timeBasedDrops")
+                    if (drops == null || drops.length() == 0) {
+                        card.addView(TextView(context).apply {
+                            text = "No watchtime rewards listed in the active inventory."
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                            setPadding(0, dp(8), 0, 0)
+                        })
+                    } else {
+                        for (dropIndex in 0 until drops.length()) {
+                            val drop = drops.optJSONObject(dropIndex) ?: continue
+                            val dropSelf = drop.optJSONObject("self")
+                            val required = drop.optInt("requiredMinutesWatched", 0).coerceAtLeast(0)
+                            val watched = dropSelf?.optInt("currentMinutesWatched", 0)?.coerceAtLeast(0) ?: 0
+                            val claimed = dropSelf?.optBoolean("isClaimed", false) == true
+                            val claimId = dropSelf?.optString("dropInstanceID")
+                                ?.takeIf { !it.isNullOrBlank() && it != "null" }
+                            val benefits = drop.optJSONArray("benefitEdges")
+                            val rewardNames = mutableListOf<String>()
+                            if (benefits != null) {
+                                for (benefitIndex in 0 until benefits.length()) {
+                                    val benefit = benefits.optJSONObject(benefitIndex)
+                                        ?.optJSONObject("benefit")
+                                    benefit?.optString("name")?.takeIf { it.isNotBlank() }?.let(rewardNames::add)
+                                }
+                            }
+                            val rewardName = rewardNames.distinct().joinToString(" · ")
+                                .ifBlank { drop.optString("name", "Drop reward") }
+                            card.addView(View(context).apply {
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.MATCH_PARENT, dp(1)
+                                ).apply { topMargin = dp(10); bottomMargin = dp(8) }
+                                setBackgroundColor(0x337F7F7F)
+                            })
+                            card.addView(TextView(context).apply {
+                                text = rewardName
+                                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                            })
+                            val progress = if (required > 0) {
+                                ((watched.toFloat() / required.toFloat()) * 100f).toInt().coerceIn(0, 100)
+                            } else 0
+                            val progressText = when {
+                                claimed -> "Claimed"
+                                required > 0 && watched >= required -> "Ready to claim"
+                                required > 0 -> "$watched / $required minutes · " + (required - watched) + " min left"
+                                else -> "Reward available through this campaign"
+                            }
+                            card.addView(TextView(context).apply {
+                                text = progressText
+                                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                                setPadding(0, dp(5), 0, dp(5))
+                            })
+                            if (required > 0) {
+                                card.addView(android.widget.ProgressBar(
+                                    context, null, android.R.attr.progressBarStyleHorizontal
+                                ).apply {
+                                    max = 100
+                                    this.progress = if (claimed) 100 else progress
+                                    layoutParams = LinearLayout.LayoutParams(
+                                        LinearLayout.LayoutParams.MATCH_PARENT, dp(6)
+                                    )
+                                })
+                            }
+                            if (!claimed && required > 0 && watched >= required && !claimId.isNullOrBlank()) {
+                                card.addView(android.widget.Button(context).apply {
+                                    text = "Claim reward"
+                                    isAllCaps = false
+                                    setOnClickListener {
+                                        isEnabled = false
+                                        text = "Claiming…"
+                                        viewLifecycleOwner.lifecycleScope.launch {
+                                            val claimResult = runCatching {
+                                                app.xtraModule.graphQLRepository.claimDropReward(
+                                                    networkLibrary, headers, claimId
+                                                )
+                                            }
+                                            if (!isAdded || !dialog.isShowing) return@launch
+                                            val claimStatus = claimResult.getOrNull()?.let { response ->
+                                                runCatching {
+                                                    JSONObject(response).optJSONObject("data")
+                                                        ?.optJSONObject("claimDropRewards")?.optString("status")
+                                                }.getOrNull()
+                                            }
+                                            if (claimStatus == "ELIGIBLE_FOR_ALL" ||
+                                                claimStatus == "DROP_INSTANCE_ALREADY_CLAIMED") {
+                                                Toast.makeText(context, "Drop reward claimed.", Toast.LENGTH_LONG).show()
+                                                refreshDrops()
+                                            } else {
+                                                isEnabled = true
+                                                text = "Claim reward"
+                                                Toast.makeText(context, "Twitch could not confirm the claim. Check your Drops Inventory.", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }
+                                })
+                            } else if (claimed) {
+                                card.addView(TextView(context).apply {
+                                    text = "✓ Reward claimed"
+                                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                                    setPadding(0, dp(5), 0, 0)
+                                })
+                            }
+                        }
+                    }
+                    if (!linked) {
+                        val linkUrl = campaign.optString("accountLinkURL")
+                        if (linkUrl.startsWith("https://", true)) {
+                            card.addView(android.widget.Button(context).apply {
+                                text = "Link game account"
+                                isAllCaps = false
+                                setOnClickListener {
+                                    runCatching {
+                                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(linkUrl)))
+                                    }.onFailure {
+                                        Toast.makeText(context, "Unable to open the account-link page.", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            })
+                        } else {
+                            card.addView(TextView(context).apply {
+                                text = "Game account not linked"
+                                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                                setPadding(0, dp(8), 0, 0)
+                            })
+                        }
+                    } else {
+                        card.addView(TextView(context).apply {
+                            text = "✓ Game account linked"
+                            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                            setPadding(0, dp(8), 0, 0)
+                        })
+                    }
+                    campaignList.addView(card, LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { bottomMargin = dp(10) })
+                }
             }
         }
+
+        refreshButton.setOnClickListener { refreshDrops() }
+        refreshDrops()
     }
 
     private fun sendMessage(replyId: String? = null): Boolean {
