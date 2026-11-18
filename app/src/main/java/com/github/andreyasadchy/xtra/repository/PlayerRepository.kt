@@ -751,13 +751,20 @@ class PlayerRepository(
     ): Boolean = withContext(Dispatchers.IO) {
         if (userId.isNullOrBlank() || streamId.isNullOrBlank()
             || channelId.isNullOrBlank() || channelLogin.isNullOrBlank()) {
+            android.util.Log.w("XtraDropsWatch", "minute-watched skipped: missing account or live channel identifiers")
             return@withContext false
         }
         // Twitch's historical minute-watched event expects the numeric account ID
         // and the player identifier used by its site player.
-        val numericUserId = userId.toLongOrNull() ?: return@withContext false
+        val numericUserId = userId.toLongOrNull() ?: run {
+            android.util.Log.w("XtraDropsWatch", "minute-watched skipped: account ID is not numeric")
+            return@withContext false
+        }
 
-        val spadeUrl = getSpadeUrl(channelLogin, gqlHeaders) ?: return@withContext false
+        val spadeUrl = getSpadeUrl(channelLogin, gqlHeaders) ?: run {
+            android.util.Log.w("XtraDropsWatch", "minute-watched skipped: could not resolve Twitch Spade endpoint for $channelLogin")
+            return@withContext false
+        }
         val watchEvents = buildJsonArray {
             add(buildJsonObject {
                 put("event", "minute-watched")
@@ -800,9 +807,19 @@ class PlayerRepository(
 
         // Twitch can rotate the Spade endpoint. Discard the cached URL and resolve it once.
         spadeUrlCache.remove(channelLogin, spadeUrl)
-        val refreshedUrl = getSpadeUrl(channelLogin, gqlHeaders) ?: return@withContext false
-        if (refreshedUrl == spadeUrl) return@withContext false
-        postBeacon(refreshedUrl) == 204
+        val refreshedUrl = getSpadeUrl(channelLogin, gqlHeaders) ?: run {
+            android.util.Log.w("XtraDropsWatch", "minute-watched retry skipped: could not refresh Spade endpoint for $channelLogin")
+            return@withContext false
+        }
+        if (refreshedUrl == spadeUrl) {
+            android.util.Log.w("XtraDropsWatch", "minute-watched rejected: Twitch returned HTTP $firstStatus and endpoint did not rotate")
+            return@withContext false
+        }
+        val retryStatus = postBeacon(refreshedUrl)
+        if (retryStatus != 204) {
+            android.util.Log.w("XtraDropsWatch", "minute-watched retry rejected: Twitch returned HTTP $retryStatus")
+        }
+        retryStatus == 204
     }
 
     suspend fun loadRecentMessages(networkLibrary: String?, recentMessagesUrl: String, channelLogin: String, limit: String): RecentMessagesResponse = withContext(Dispatchers.IO) {
