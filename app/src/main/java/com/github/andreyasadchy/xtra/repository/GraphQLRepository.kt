@@ -780,6 +780,28 @@ class GraphQLRepository(
         lastResponse
     }
 
+    suspend fun loadDropCampaignDetails(
+        networkLibrary: String?,
+        headers: Map<String, String>,
+        campaignId: String,
+        accountLogin: String?,
+    ): String = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            putJsonObject("extensions") {
+                putJsonObject("persistedQuery") {
+                    put("sha256Hash", "039277bf98f3130929262cc7c6efd9c141ca3749cb6dca442fc8ead9a53f77c1")
+                    put("version", 1)
+                }
+            }
+            put("operationName", "DropCampaignDetails")
+            putJsonObject("variables") {
+                put("channelLogin", accountLogin.orEmpty())
+                put("dropID", campaignId)
+            }
+        }.toString()
+        sendPersistedQuery(networkLibrary, headers, body)
+    }
+
     suspend fun loadCurrentDropSession(
         networkLibrary: String?,
         headers: Map<String, String>,
