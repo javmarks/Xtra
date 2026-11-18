@@ -1655,7 +1655,7 @@ class ExoPlayerService : BasePlaybackService() {
         val currentKey = "${channelLogin.orEmpty()}:${streamId.orEmpty()}"
         if (currentKey == ":" || currentKey.endsWith(":")) return
         val playlistUri = runCatching { URI(playlist.baseUri) }.getOrNull() ?: return
-        if (playlistUri.scheme != "https" || !Regex(MEDIA_PLAYLIST_REGEX).matches(playlistUri.host.orEmpty())) return
+        if (playlistUri.scheme != "https" || playlistUri.host.isNullOrBlank()) return
 
         // ExoPlayer refreshes this signed URL as playback continues. Keep the polling
         // loop alive across same-broadcast playlist refreshes and use the newest URL.
@@ -1707,7 +1707,7 @@ class ExoPlayerService : BasePlaybackService() {
                                 relativeUrl?.let { runCatching { finalPlaylistUri.resolve(it).toString() }.getOrNull() }
                                     ?.takeIf { url ->
                                         val uri = runCatching { URI(url) }.getOrNull()
-                                        uri?.scheme == "https" && Regex(MEDIA_PLAYLIST_REGEX).matches(uri.host.orEmpty())
+                                        uri?.scheme == "https" && (uri.host.equals(finalPlaylistUri.host, ignoreCase = true) || Regex(MEDIA_PLAYLIST_REGEX).matches(uri.host.orEmpty()))
                                     }
                             }.distinct().toList().takeLast(30)
 
