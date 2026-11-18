@@ -1667,8 +1667,6 @@ class ExoPlayerService : BasePlaybackService() {
             updateDropsDiagnostic("Playlist URL is not a valid HTTPS address.")
             return
         }
-        updateDropsDiagnostic("Playback active; playlist host: ${playlistUri.host}; preparing request.")
-
         // ExoPlayer refreshes this signed URL as playback continues. Keep the polling
         // loop alive across same-broadcast playlist refreshes and use the newest URL.
         dropsSegmentPlaylistUrl = playlist.baseUri
@@ -1680,7 +1678,10 @@ class ExoPlayerService : BasePlaybackService() {
             dropsSegmentStreamKey = currentKey
             dropsSegmentJob = null
         }
+        // Do not overwrite the active request's diagnostic on every ExoPlayer
+        // timeline callback; only report "preparing" when starting a new job.
         if (dropsSegmentJob?.isActive == true) return
+        updateDropsDiagnostic("Playback active; playlist host: ${playlistUri.host}; preparing request.")
 
         dropsSegmentJob = lifecycleScope.launch(Dispatchers.IO) {
             while (isActive && dropsSegmentStreamKey == currentKey && dropsSegmentPlaybackActive) {
