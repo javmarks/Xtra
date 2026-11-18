@@ -1693,6 +1693,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 val inventoryResult = runCatching {
                     app.xtraModule.graphQLRepository.loadDropsInventory(networkLibrary, headers)
                 }
+                val dashboardResult = runCatching {
+                    app.xtraModule.graphQLRepository.loadDropsDashboard(networkLibrary, headers)
+                }
                 if (!isAdded || _binding == null || !dialog.isShowing) return@launch
                 refreshButton.isEnabled = true
                 refreshButton.text = "Refresh progress"
@@ -1729,10 +1732,56 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             ?.optJSONObject("currentUser")?.optJSONObject("inventory")
                     }.getOrNull()
                 }
-                val campaigns = inventory?.optJSONArray("dropCampaignsInProgress")
-                if (inventoryResult.isFailure || inventory == null) {
-                    val message = if (inventoryText?.contains("PersistedQueryNotFound", true) == true) {
-                        "Twitch did not accept the Drops inventory query. Open Inventory on Twitch to view your campaigns."
+                // Inventory contains campaigns already in progress. The dashboard is a
+                // separate Twitch source and can list the active campaign before it appears
+                // in inventory, so resolve active campaign details as a fallback.
+                val campaigns = org.json.JSONArray()
+                val campaignIds = mutableSetOf<String>()
+                fun addCampaign(campaign: JSONObject?) {
+                    campaign ?: return
+                    val id = campaign.optString("id").takeIf { it.isNotBlank() && it != "null" } ?: return
+                    if (campaignIds.add(id)) campaigns.put(campaign)
+                }
+                val inventoryCampaigns = inventory?.optJSONArray("dropCampaignsInProgress")
+                if (inventoryCampaigns != null) {
+                    for (index in 0 until inventoryCampaigns.length()) {
+                        addCampaign(inventoryCampaigns.optJSONObject(index))
+                    }
+                }
+                val dashboardText = dashboardResult.getOrNull()
+                val dashboardCampaigns = dashboardText?.let { response ->
+                    runCatching {
+                        JSONObject(response).optJSONObject("data")
+                            ?.optJSONObject("currentUser")?.optJSONArray("dropCampaigns")
+                    }.getOrNull()
+                }
+                val accountLogin = context.tokenPrefs().getString(C.USERNAME, null)
+                if (dashboardCampaigns != null) {
+                    var resolved = 0
+                    for (index in 0 until dashboardCampaigns.length()) {
+                        val summary = dashboardCampaigns.optJSONObject(index) ?: continue
+                        if (!summary.optString("status").equals("ACTIVE", true)) continue
+                        val campaignId = summary.optString("id").takeIf { it.isNotBlank() && it != "null" } ?: continue
+                        if (campaignIds.contains(campaignId) || resolved >= 12) continue
+                        val details = runCatching {
+                            app.xtraModule.graphQLRepository.loadDropCampaignDetails(
+                                networkLibrary, headers, campaignId, accountLogin
+                            )
+                        }.getOrNull() ?: continue
+                        val detailCampaign = runCatching {
+                            JSONObject(details).optJSONObject("data")
+                                ?.optJSONObject("user")?.optJSONObject("dropCampaign")
+                        }.getOrNull()
+                        if (detailCampaign != null) {
+                            addCampaign(detailCampaign)
+                            resolved++
+                        }
+                    }
+                }
+                if (campaigns.length() == 0 && inventoryResult.isFailure && dashboardResult.isFailure) {
+                    val message = if (inventoryText?.contains("PersistedQueryNotFound", true) == true ||
+                        dashboardText?.contains("PersistedQueryNotFound", true) == true) {
+                        "Twitch did not accept the Drops campaign queries. Open Inventory on Twitch to view your campaigns."
                     } else {
                         "Couldn't load campaign details right now. Your watch tracking is still running."
                     }
@@ -1744,9 +1793,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     return@launch
                 }
 
-                if (campaigns == null || campaigns.length() == 0) {
+                if (campaigns.length() == 0) {
                     campaignList.addView(TextView(context).apply {
-                        text = "No active campaign progress was returned by Twitch. Check All Campaigns in your Drops Inventory for campaigns you can join."
+                        text = "Twitch did not return any active watchtime campaigns for this account. Check All Campaigns in your Drops Inventory for campaigns you can join."
                         setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
                         setPadding(0, dp(4), 0, dp(12))
                     })
@@ -1823,7 +1872,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             val drop = drops.optJSONObject(dropIndex) ?: continue
                             val dropSelf = drop.optJSONObject("self")
                             val required = drop.optInt("requiredMinutesWatched", 0).coerceAtLeast(0)
-                            val watched = dropSelf?.optInt("currentMinutesWatched", 0)?.coerceAtLeast(0) ?: 0
+                            val inventoryWatched = dropSelf?.optInt("currentMinutesWatched", 0)?.coerceAtLeast(0) ?: 0
+                            val watched = if (drop.optString("id") == dropId && minutes >= 0) {
+                                maxOf(inventoryWatched, minutes)
+                            } else inventoryWatched
                             val claimed = dropSelf?.optBoolean("isClaimed", false) == true
                             val claimId = dropSelf?.optString("dropInstanceID")
                                 ?.takeIf { !it.isNullOrBlank() && it != "null" }
