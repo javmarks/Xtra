@@ -1675,6 +1675,7 @@ class ExoPlayerService : BasePlaybackService() {
 
         dropsSegmentJob = lifecycleScope.launch(Dispatchers.IO) {
             var mediaPlaylistUrl: String? = null
+            var masterVariantCount = 0
             while (isActive && dropsSegmentStreamKey == currentKey && dropsSegmentPlaybackActive) {
                 try {
                     if (mediaPlaylistUrl.isNullOrBlank()) {
@@ -1725,6 +1726,7 @@ class ExoPlayerService : BasePlaybackService() {
                                 }
                             }
                         }
+                        masterVariantCount = variants.size
                         if (variants.isNotEmpty()) {
                             val selectedVariant = variants.minByOrNull { it.first }!!
                             mediaPlaylistUrl = selectedVariant.second
