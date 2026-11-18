@@ -1709,24 +1709,35 @@ class ExoPlayerService : BasePlaybackService() {
                             val finalPlaylistUri = runCatching {
                                 URI(playlistResult.second)
                             }.getOrNull() ?: playlistUri
-                            val segmentUrls = playlistText.lineSequence().mapNotNull { rawLine ->
-                                val line = rawLine.trim()
-                                val relativeUrl = when {
-                                    line.isEmpty() -> null
+                            val playlistLines = playlistText.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+                            val extInfCount = playlistLines.count { it.startsWith("#EXTINF:") }
+                            val partLines = playlistLines.filter { it.startsWith("#EXT-X-PART:") }
+                            val uriAttributeCount = playlistLines.count { it.contains("URI=") }
+                            val candidateUrls = playlistLines.mapNotNull { line ->
+                                when {
                                     !line.startsWith("#") -> line
                                     line.startsWith("#EXT-X-PART:") -> Regex("""URI="([^"]+)"""")
                                         .find(line)?.groupValues?.getOrNull(1)
                                     else -> null
                                 }
-                                relativeUrl?.let { runCatching { finalPlaylistUri.resolve(it).toString() }.getOrNull() }
-                                    ?.takeIf { url ->
-                                        val uri = runCatching { URI(url) }.getOrNull()
-                                        uri?.scheme == "https" && (uri.host.equals(finalPlaylistUri.host, ignoreCase = true) || Regex(MEDIA_PLAYLIST_REGEX).matches(uri.host.orEmpty()))
-                                    }
-                            }.distinct().toList().takeLast(30)
+                            }
+                            val resolvedCandidates = candidateUrls.mapNotNull { relativeUrl ->
+                                runCatching { finalPlaylistUri.resolve(relativeUrl).toString() }.getOrNull()
+                            }
+                            val segmentUrls = resolvedCandidates.filter { url ->
+                                val uri = runCatching { URI(url) }.getOrNull()
+                                uri?.scheme == "https" && (uri.host.equals(finalPlaylistUri.host, ignoreCase = true) || Regex(MEDIA_PLAYLIST_REGEX).matches(uri.host.orEmpty()))
+                            }.distinct().takeLast(30)
+                            val rejectedCandidates = (resolvedCandidates.size - segmentUrls.size).coerceAtLeast(0)
                             var acceptedSegments = 0
                             var failedSegments = 0
-                            updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${segmentUrls.size} new segment URLs found.")
+                            if (segmentUrls.isEmpty()) {
+                                val tags = playlistLines.filter { it.startsWith("#EXT-X-") }
+                                    .map { it.substringBefore(':').take(32) }.distinct().take(6).joinToString(",")
+                                updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${playlistText.length} chars; EXTINF: ${extInfCount}; PART: ${partLines.size}; URI attrs: ${uriAttributeCount}; URL candidates: ${candidateUrls.size}; rejected: ${rejectedCandidates}; tags: ${tags.ifBlank { "none" }}.")
+                            } else {
+                                updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${segmentUrls.size} segment URLs found.")
+                            }
 
                             for (segmentUrl in segmentUrls) {
                                 if (!isActive || dropsSegmentStreamKey != currentKey) break
