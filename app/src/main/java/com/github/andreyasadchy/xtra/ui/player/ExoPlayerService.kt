@@ -1765,6 +1765,9 @@ class ExoPlayerService : BasePlaybackService() {
                             }
                             updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${segmentUrls.size} segment URLs; ${acceptedSegments} HEAD accepted, ${failedSegments} failed.")
                         }
+                    } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                        updateDropsDiagnostic("Drops network request timed out; check the playlist or proxy connection.")
+                        Log.w("XtraDropsWatch", "HLS Drops request timed out")
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
