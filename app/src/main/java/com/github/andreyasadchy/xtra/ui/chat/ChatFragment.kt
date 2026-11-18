@@ -1669,7 +1669,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         "Twitch reports $minutes minutes watched for the active Drop session.\\n\\nProgress is reported by Twitch; Xtra does not estimate or add minutes locally. Use Open Inventory to see campaign requirements and claim available rewards."
                     response.contains("PersistedQueryNotFound", true) ->
                         "Twitch did not accept the current Drops progress query. Your existing watch tracking remains unchanged. Open Inventory to check progress directly on Twitch."
-                    response.contains("\\"errors\\"", true) ->
+                    response.contains("\"errors\"", true) ->
                         "Twitch returned an error while checking Drops progress. Open Inventory to verify your account and campaign status."
                     else ->
                         "Twitch is not reporting an active Drops watch session for this channel right now. Make sure the channel is live, the campaign is active, and your Twitch account is eligible. Open Inventory to see available campaigns."
