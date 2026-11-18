@@ -769,6 +769,48 @@ class GraphQLRepository(
         sendPersistedQuery(networkLibrary, headers, body)
     }
 
+    suspend fun loadCurrentDropSession(
+        networkLibrary: String?,
+        headers: Map<String, String>,
+        channelId: String?,
+        channelLogin: String?,
+    ): String = withContext(Dispatchers.IO) {
+        val hash = "4d06b702d25d652afb9ef835d2a550031f1cf762b193523a92166f40ea3d142b"
+        val variableVariants = listOf(
+            buildJsonObject {
+                put("channelID", channelId)
+                put("channelLogin", "")
+            },
+            buildJsonObject {
+                put("channelLogin", channelLogin)
+            }
+        )
+        var lastResponse = ""
+        for (variables in variableVariants) {
+            val body = buildJsonObject {
+                putJsonObject("extensions") {
+                    putJsonObject("persistedQuery") {
+                        put("sha256Hash", hash)
+                        put("version", 1)
+                    }
+                }
+                put("operationName", "DropCurrentSessionContext")
+                put("variables", variables)
+            }.toString()
+            lastResponse = sendPersistedQuery(networkLibrary, headers, body)
+            val response = runCatching { json.parseToJsonElement(lastResponse) }.getOrNull()
+            val responseText = response?.toString().orEmpty()
+            // A valid response with currentUser is authoritative, including a null
+            // dropCurrentSession when Twitch reports that no Drop is active.
+            if (responseText.contains("\\"currentUser\\"") &&
+                !responseText.contains("PersistedQueryNotFound") &&
+                !responseText.contains("\\"errors\\"")) {
+                return@withContext lastResponse
+            }
+        }
+        lastResponse
+    }
+
     suspend fun loadDropsInventory(networkLibrary: String?, headers: Map<String, String>): String = withContext(Dispatchers.IO) {
         val hashes = listOf(
             "e7197a7e03be13e423118005966d097a2f44045b3642bfdb70820e01c8129fd6",
