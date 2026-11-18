@@ -45,6 +45,7 @@ import coil3.request.target
 import coil3.request.transformations
 import coil3.transform.CircleCropTransformation
 import com.github.andreyasadchy.xtra.R
+import com.github.andreyasadchy.xtra.XtraApp
 import com.github.andreyasadchy.xtra.databinding.FragmentChatBinding
 import com.github.andreyasadchy.xtra.model.chat.ChatMessage
 import com.github.andreyasadchy.xtra.model.chat.Emote
@@ -71,6 +72,7 @@ import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.max
@@ -284,12 +286,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             }
         }
         binding.dropsButton.setOnClickListener {
-            val dropsInventory = Uri.parse("https://www.twitch.tv/drops/inventory")
-            runCatching {
-                startActivity(Intent(Intent.ACTION_VIEW, dropsInventory))
-            }.onFailure {
-                Toast.makeText(requireContext(), "No browser is available to open Twitch Drops.", Toast.LENGTH_LONG).show()
-            }
+            showDropsProgress()
         }
         val identityAccountLogin = requireContext().tokenPrefs().getString(C.USERNAME, null)
         val identityIsLoggedIn = !identityAccountLogin.isNullOrBlank() &&
@@ -1612,6 +1609,75 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
 
     fun appendEmote(emote: Emote) {
         binding.editText.text.append(emote.name).append(' ')
+    }
+
+    private fun showDropsProgress() {
+        if (!isAdded) return
+        val context = requireContext()
+        val channelId = arguments?.getString(KEY_CHANNEL_ID)
+        val channelLogin = arguments?.getString(KEY_CHANNEL_LOGIN)
+        val status = TextView(context).apply {
+            text = "Checking Twitch Drops progress…"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setPadding(
+                (20 * resources.displayMetrics.density).roundToInt(),
+                (12 * resources.displayMetrics.density).roundToInt(),
+                (20 * resources.displayMetrics.density).roundToInt(),
+                (12 * resources.displayMetrics.density).roundToInt()
+            )
+        }
+        val dialog = context.getAlertDialogBuilder()
+            .setTitle("Twitch Drops")
+            .setView(status)
+            .setPositiveButton("Open Inventory") { _, _ ->
+                runCatching {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.twitch.tv/drops/inventory")))
+                }.onFailure {
+                    Toast.makeText(context, "No browser is available to open Twitch Drops.", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton(android.R.string.ok, null)
+            .show()
+
+        if (channelId.isNullOrBlank() && channelLogin.isNullOrBlank()) {
+            status.text = "Open a channel that is live and participating in a Drops campaign, then refresh this panel."
+            return
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            val result = runCatching {
+                val app = context.applicationContext as XtraApp
+                app.xtraModule.graphQLRepository.loadCurrentDropSession(
+                    networkLibrary = context.prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                    headers = TwitchApiHelper.getGQLHeaders(context, true),
+                    channelId = channelId,
+                    channelLogin = channelLogin
+                )
+            }
+            if (!isAdded || _binding == null || !dialog.isShowing) return@launch
+            result.onSuccess { response ->
+                val session = runCatching {
+                    JSONObject(response)
+                        .optJSONObject("data")
+                        ?.optJSONObject("currentUser")
+                        ?.optJSONObject("dropCurrentSession")
+                }.getOrNull()
+                val minutes = session?.optInt("currentMinutesWatched", -1) ?: -1
+                val dropId = session?.optString("dropID")?.takeIf { it.isNotBlank() && it != "null" }
+                status.text = when {
+                    minutes >= 0 && dropId != null ->
+                        "Twitch reports $minutes minutes watched for the active Drop session.\n\nProgress is reported by Twitch; Xtra does not estimate or add minutes locally. Use Open Inventory to see campaign requirements and claim available rewards."
+                    response.contains("PersistedQueryNotFound", true) ->
+                        "Twitch did not accept the current Drops progress query. Your existing watch tracking remains unchanged. Open Inventory to check progress directly on Twitch."
+                    response.contains("\"errors\"", true) ->
+                        "Twitch returned an error while checking Drops progress. Open Inventory to verify your account and campaign status."
+                    else ->
+                        "Twitch is not reporting an active Drops watch session for this channel right now. Make sure the channel is live, the campaign is active, and your Twitch account is eligible. Open Inventory to see available campaigns."
+                }
+            }.onFailure {
+                status.text = "Could not check Drops progress right now. Your existing watch tracking is unchanged. Open Inventory to verify progress on Twitch."
+            }
+        }
     }
 
     private fun sendMessage(replyId: String? = null): Boolean {
