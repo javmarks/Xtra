@@ -125,6 +125,7 @@ class ExoPlayerService : BasePlaybackService() {
     // Twitch Drops watch traffic: HEAD each newly published HLS media segment.
     private val dropsSegmentRequests = LinkedHashSet<String>()
     private var dropsSegmentStreamKey: String? = null
+    @Volatile private var dropsSegmentPlaylistUrl: String? = null
     private var dropsSegmentJob: Job? = null
 
     private var dynamicsProcessing: DynamicsProcessing? = null
@@ -1648,55 +1649,101 @@ class ExoPlayerService : BasePlaybackService() {
         if (player?.isPlaying != true || playlist == null || playlist.segments.isEmpty()) return
         val currentKey = "${channelLogin.orEmpty()}:${streamId.orEmpty()}"
         if (currentKey == ":" || currentKey.endsWith(":")) return
+        val playlistUri = runCatching { URI(playlist.baseUri) }.getOrNull() ?: return
+        if (playlistUri.scheme != "https" || !Regex(MEDIA_PLAYLIST_REGEX).matches(playlistUri.host.orEmpty())) return
+
+        // ExoPlayer refreshes this signed URL as playback continues. Keep the polling
+        // loop alive across same-broadcast playlist refreshes and use the newest URL.
+        dropsSegmentPlaylistUrl = playlist.baseUri
         if (dropsSegmentStreamKey != currentKey) {
             dropsSegmentJob?.cancel()
-            dropsSegmentJob = null
             synchronized(dropsSegmentRequests) {
                 dropsSegmentRequests.clear()
             }
             dropsSegmentStreamKey = currentKey
+            dropsSegmentJob = null
         }
-        val baseUri = runCatching { URI(playlist.baseUri) }.getOrNull() ?: return
-        val host = baseUri.host ?: return
-        // Avoid sending HEAD requests to third-party stream proxies.
-        if (!Regex(MEDIA_PLAYLIST_REGEX).matches(host)) return
-        val pending = synchronized(dropsSegmentRequests) {
-            playlist.segments.mapNotNull { segment ->
-                runCatching { baseUri.resolve(segment.url).toString() }.getOrNull()
-                    ?.takeIf { it.startsWith("https://") && it !in dropsSegmentRequests }
-            }.distinct()
-        }
-        if (pending.isEmpty() || dropsSegmentJob?.isActive == true) return
+        if (dropsSegmentJob?.isActive == true) return
 
         dropsSegmentJob = lifecycleScope.launch(Dispatchers.IO) {
-            for (segmentUrl in pending) {
-                if (!isActive || dropsSegmentStreamKey != currentKey) break
-                try {
-                    val request = Request.Builder()
-                        .url(segmentUrl)
-                        .head()
-                        .build()
-                    val status = withTimeout(8_000) {
-                        xtraModule.okHttpClient.value.newCall(request).executeAsync().use { it.code }
-                    }
-                    if (status in 200..399) {
-                        synchronized(dropsSegmentRequests) {
-                            if (dropsSegmentStreamKey == currentKey) {
-                                dropsSegmentRequests.add(segmentUrl)
-                                while (dropsSegmentRequests.size > 256) {
-                                    dropsSegmentRequests.remove(dropsSegmentRequests.first())
+            while (isActive && dropsSegmentStreamKey == currentKey && player?.isPlaying == true) {
+                val currentPlaylistUrl = dropsSegmentPlaylistUrl
+                if (!currentPlaylistUrl.isNullOrBlank()) {
+                    try {
+                        val playlistRequest = Request.Builder()
+                            .url(currentPlaylistUrl)
+                            .header("Connection", "close")
+                            .get()
+                            .build()
+                        val playlistText = withTimeout(8_000) {
+                            xtraModule.okHttpClient.value.newCall(playlistRequest).executeAsync().use { response ->
+                                if (response.isSuccessful) response.body?.string().orEmpty() else {
+                                    Log.w("XtraDropsWatch", "HLS playlist poll not accepted (HTTP ${response.code})")
+                                    ""
                                 }
                             }
                         }
-                        Log.d("XtraDropsWatch", "HLS segment HEAD accepted (HTTP $status)")
-                    } else {
-                        Log.w("XtraDropsWatch", "HLS segment HEAD not accepted (HTTP $status)")
+                        if (playlistText.isNotBlank() && dropsSegmentStreamKey == currentKey) {
+                            val finalPlaylistUri = runCatching {
+                                URI(playlistRequest.url.toString())
+                            }.getOrNull() ?: playlistUri
+                            val segmentUrls = playlistText.lineSequence().mapNotNull { rawLine ->
+                                val line = rawLine.trim()
+                                val relativeUrl = when {
+                                    line.isEmpty() -> null
+                                    !line.startsWith("#") -> line
+                                    line.startsWith("#EXT-X-PART:") -> Regex("""URI="([^"]+)"""")
+                                        .find(line)?.groupValues?.getOrNull(1)
+                                    else -> null
+                                }
+                                relativeUrl?.let { runCatching { finalPlaylistUri.resolve(it).toString() }.getOrNull() }
+                                    ?.takeIf { url ->
+                                        val uri = runCatching { URI(url) }.getOrNull()
+                                        uri?.scheme == "https" && Regex(MEDIA_PLAYLIST_REGEX).matches(uri.host.orEmpty())
+                                    }
+                            }.distinct().toList().takeLast(30)
+
+                            for (segmentUrl in segmentUrls) {
+                                if (!isActive || dropsSegmentStreamKey != currentKey) break
+                                val alreadyRequested = synchronized(dropsSegmentRequests) {
+                                    segmentUrl in dropsSegmentRequests
+                                }
+                                if (alreadyRequested) continue
+                                try {
+                                    val segmentRequest = Request.Builder()
+                                        .url(segmentUrl)
+                                        .head()
+                                        .build()
+                                    val status = withTimeout(5_000) {
+                                        xtraModule.okHttpClient.value.newCall(segmentRequest).executeAsync().use { it.code }
+                                    }
+                                    if (status in 200..399) {
+                                        synchronized(dropsSegmentRequests) {
+                                            if (dropsSegmentStreamKey == currentKey) {
+                                                dropsSegmentRequests.add(segmentUrl)
+                                                while (dropsSegmentRequests.size > 256) {
+                                                    dropsSegmentRequests.remove(dropsSegmentRequests.first())
+                                                }
+                                            }
+                                        }
+                                        Log.d("XtraDropsWatch", "HLS segment HEAD accepted (HTTP $status)")
+                                    } else {
+                                        Log.w("XtraDropsWatch", "HLS segment HEAD not accepted (HTTP $status)")
+                                    }
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Log.w("XtraDropsWatch", "HLS segment HEAD failed: ${e.javaClass.simpleName}")
+                                }
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w("XtraDropsWatch", "HLS playlist poll failed: ${e.javaClass.simpleName}")
                     }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w("XtraDropsWatch", "HLS segment HEAD failed: ${e.javaClass.simpleName}")
                 }
+                delay(10_000)
             }
         }
     }
