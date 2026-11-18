@@ -754,19 +754,30 @@ class GraphQLRepository(
     }
 
     suspend fun loadDropsDashboard(networkLibrary: String?, headers: Map<String, String>): String = withContext(Dispatchers.IO) {
-        val body = buildJsonObject {
-            putJsonObject("extensions") {
-                putJsonObject("persistedQuery") {
-                    put("sha256Hash", "69750554e0a81492f2d343558f84bdf3e324767650a2dbb6e79a3c629b4548cf")
-                    put("version", 1)
+        val hashes = listOf(
+            "c16bb890cc8ce7647a96ee69cd313d423a378a3dedadf630a1017cde18975feb",
+            "69750554e0a81492f2d343558f84bdf3e324767650a2dbb6e79a3c629b4548cf"
+        )
+        var lastResponse = ""
+        for (hash in hashes) {
+            val body = buildJsonObject {
+                putJsonObject("extensions") {
+                    putJsonObject("persistedQuery") {
+                        put("sha256Hash", hash)
+                        put("version", 1)
+                    }
                 }
-            }
-            put("operationName", "ViewerDropsDashboard")
-            putJsonObject("variables") {
-                put("fetchRewardCampaigns", true)
-            }
-        }.toString()
-        sendPersistedQuery(networkLibrary, headers, body)
+                put("operationName", "ViewerDropsDashboard")
+                putJsonObject("variables") {
+                    put("fetchRewardCampaigns", false)
+                }
+            }.toString()
+            lastResponse = sendPersistedQuery(networkLibrary, headers, body)
+            val root = runCatching { json.parseToJsonElement(lastResponse) }.getOrNull()
+            val hasCampaigns = root?.toString()?.contains("\\"dropCampaigns\\"") == true
+            if (hasCampaigns && !lastResponse.contains("PersistedQueryNotFound")) return@withContext lastResponse
+        }
+        lastResponse
     }
 
     suspend fun loadCurrentDropSession(
@@ -800,11 +811,9 @@ class GraphQLRepository(
             lastResponse = sendPersistedQuery(networkLibrary, headers, body)
             val response = runCatching { json.parseToJsonElement(lastResponse) }.getOrNull()
             val responseText = response?.toString().orEmpty()
-            // A valid response with currentUser is authoritative, including a null
-            // dropCurrentSession when Twitch reports that no Drop is active.
-            if (responseText.contains("\"currentUser\"") &&
+            if (responseText.contains("\\"currentUser\\") &&
                 !responseText.contains("PersistedQueryNotFound") &&
-                !responseText.contains("\"errors\"")) {
+                !responseText.contains("\\"errors\\"")) {
                 return@withContext lastResponse
             }
         }
@@ -813,6 +822,7 @@ class GraphQLRepository(
 
     suspend fun loadDropsInventory(networkLibrary: String?, headers: Map<String, String>): String = withContext(Dispatchers.IO) {
         val hashes = listOf(
+            "8337eb8541b314040b0edde0c09c5c7a2783ba1960aa9edfbf3bac16d0fec404",
             "e7197a7e03be13e423118005966d097a2f44045b3642bfdb70820e01c8129fd6",
             "d86775d0ef16a63a33ad52e80eaff963b2d5b72fada7c991504a57496e1d8e4b"
         )
@@ -827,18 +837,37 @@ class GraphQLRepository(
                 }
                 put("operationName", "Inventory")
                 putJsonObject("variables") {
-                    put("fetchRewardCampaigns", true)
+                    put("fetchRewardCampaigns", false)
                 }
             }.toString()
             lastResponse = sendPersistedQuery(networkLibrary, headers, body)
             val root = runCatching { json.parseToJsonElement(lastResponse) }.getOrNull()
-            val hasInventory = root?.let {
-                it.toString().contains("\"inventory\"") &&
-                    !it.toString().contains("PersistedQueryNotFound")
-            } == true
-            if (hasInventory) return@withContext lastResponse
+            val inventory = root?.toString()?.contains("\\"inventory\\"") == true
+            if (inventory && !lastResponse.contains("PersistedQueryNotFound")) return@withContext lastResponse
         }
         lastResponse
+    }
+
+    suspend fun claimDropReward(
+        networkLibrary: String?,
+        headers: Map<String, String>,
+        dropInstanceId: String,
+    ): String = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            putJsonObject("extensions") {
+                putJsonObject("persistedQuery") {
+                    put("sha256Hash", "a455deea71bdc9015b78eb49f4acfbce8baa7ccbedd28e549bb025bd0f751930")
+                    put("version", 1)
+                }
+            }
+            put("operationName", "DropsPage_ClaimDropRewards")
+            putJsonObject("variables") {
+                putJsonObject("input") {
+                    put("dropInstanceID", dropInstanceId)
+                }
+            }
+        }.toString()
+        sendPersistedQuery(networkLibrary, headers, body)
     }
 
     suspend fun loadClipUrls(networkLibrary: String?, headers: Map<String, String>, slug: String?, supportedCodecs: List<String>): ClipUrlsResponse = withContext(Dispatchers.IO) {
