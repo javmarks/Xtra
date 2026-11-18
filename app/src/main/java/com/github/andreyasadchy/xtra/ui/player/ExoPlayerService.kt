@@ -1661,7 +1661,7 @@ class ExoPlayerService : BasePlaybackService() {
             return
         }
         val currentChannelLogin = channelLogin.orEmpty()
-        val currentKey = "$\{currentChannelLogin}:$\{streamId.orEmpty()}"
+        val currentKey = "${currentChannelLogin}:${streamId.orEmpty()}"
         if (currentChannelLogin.isBlank() || currentKey.endsWith(":")) return
         if (dropsSegmentStreamKey != currentKey) {
             dropsSegmentJob?.cancel()
@@ -1698,7 +1698,7 @@ class ExoPlayerService : BasePlaybackService() {
                             }
                         }
                         if (masterResult.first !in 200..299) {
-                            updateDropsDiagnostic("Twitch master playlist failed: HTTP $\{masterResult.first}.")
+                            updateDropsDiagnostic("Twitch master playlist failed: HTTP ${masterResult.first}.")
                             if (masterResult.first in listOf(401, 403, 404)) dropsSegmentMasterUrl = null
                             delay(10_000)
                             continue
@@ -1730,7 +1730,7 @@ class ExoPlayerService : BasePlaybackService() {
                         if (variants.isNotEmpty()) {
                             val selectedVariant = variants.minByOrNull { it.first }!!
                             mediaPlaylistUrl = selectedVariant.second
-                            updateDropsDiagnostic("Twitch master OK; variants: $\{variants.size}; lowest bandwidth selected; host: $\{runCatching { URI(selectedVariant.second).host }.getOrNull() ?: "unknown"}.")
+                            updateDropsDiagnostic("Twitch master OK; variants: ${variants.size}; lowest bandwidth selected; host: ${runCatching { URI(selectedVariant.second).host }.getOrNull() ?: "unknown"}.")
                         } else if (masterLines.any { it.startsWith("#EXTINF:") }) {
                             mediaPlaylistUrl = masterUri.toString()
                         } else {
@@ -1753,7 +1753,7 @@ class ExoPlayerService : BasePlaybackService() {
                         }
                     }
                     if (mediaResult.first !in 200..299) {
-                        updateDropsDiagnostic("Twitch media playlist failed: HTTP $\{mediaResult.first}.")
+                        updateDropsDiagnostic("Twitch media playlist failed: HTTP ${mediaResult.first}.")
                         if (mediaResult.first in listOf(401, 403, 404)) {
                             mediaPlaylistUrl = null
                             dropsSegmentMasterUrl = null
@@ -1807,7 +1807,7 @@ class ExoPlayerService : BasePlaybackService() {
                                 Log.d("XtraDropsWatch", "Twitch HLS segment HEAD accepted (HTTP 200)")
                             } else {
                                 failedSegments++
-                                Log.w("XtraDropsWatch", "Twitch HLS segment HEAD not accepted (HTTP $\{status})")
+                                Log.w("XtraDropsWatch", "Twitch HLS segment HEAD not accepted (HTTP ${status})")
                                 if (status in listOf(401, 403, 404)) {
                                     mediaPlaylistUrl = null
                                     dropsSegmentMasterUrl = null
@@ -1818,18 +1818,18 @@ class ExoPlayerService : BasePlaybackService() {
                             throw e
                         } catch (e: Exception) {
                             failedSegments++
-                            Log.w("XtraDropsWatch", "Twitch HLS segment HEAD failed: $\{e.javaClass.simpleName}")
+                            Log.w("XtraDropsWatch", "Twitch HLS segment HEAD failed: ${e.javaClass.simpleName}")
                         }
                     }
-                    updateDropsDiagnostic("Twitch playlist OK; master variants: $\{variants.size}; media host: $\{mediaUri.host}; chars: $\{mediaResult.second.length}; EXTINF: $extInfCount; PART: $\{partLines.size}; selected: $\{segmentUrls.size}; HEAD HTTP 200: $acceptedSegments; failed: $failedSegments.")
+                    updateDropsDiagnostic("Twitch playlist OK; master variants: ${masterVariantCount}; media host: ${mediaUri.host}; chars: ${mediaResult.second.length}; EXTINF: $extInfCount; PART: ${partLines.size}; selected: ${segmentUrls.size}; HEAD HTTP 200: $acceptedSegments; failed: $failedSegments.")
                 } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
                     updateDropsDiagnostic("Twitch Drops playlist or segment request timed out.")
                     Log.w("XtraDropsWatch", "Twitch HLS Drops request timed out")
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    updateDropsDiagnostic("Twitch Drops playlist error: $\{e.javaClass.simpleName}.")
-                    Log.w("XtraDropsWatch", "Twitch HLS Drops request failed: $\{e.javaClass.simpleName}")
+                    updateDropsDiagnostic("Twitch Drops playlist error: ${e.javaClass.simpleName}.")
+                    Log.w("XtraDropsWatch", "Twitch HLS Drops request failed: ${e.javaClass.simpleName}")
                 }
                 delay(10_000)
             }
