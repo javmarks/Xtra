@@ -126,6 +126,7 @@ class ExoPlayerService : BasePlaybackService() {
     private val dropsSegmentRequests = LinkedHashSet<String>()
     private var dropsSegmentStreamKey: String? = null
     @Volatile private var dropsSegmentPlaylistUrl: String? = null
+    @Volatile private var dropsSegmentPlaybackActive = false
     private var dropsSegmentJob: Job? = null
 
     private var dynamicsProcessing: DynamicsProcessing? = null
@@ -585,6 +586,10 @@ class ExoPlayerService : BasePlaybackService() {
                 }
 
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    dropsSegmentPlaybackActive = isPlaying && type == STREAM
+                    if (dropsSegmentPlaybackActive) {
+                        trackDropsSegments((player?.currentManifest as? HlsManifest)?.mediaPlaylist)
+                    }
                     updateDropsWatchTracking(isPlaying)
                     updatePlaybackState()
                     if (isPlaying) {
@@ -1646,7 +1651,7 @@ class ExoPlayerService : BasePlaybackService() {
 
 
     private fun trackDropsSegments(playlist: HlsMediaPlaylist?) {
-        if (player?.isPlaying != true || playlist == null || playlist.segments.isEmpty()) return
+        if (!dropsSegmentPlaybackActive || playlist == null || playlist.segments.isEmpty()) return
         val currentKey = "${channelLogin.orEmpty()}:${streamId.orEmpty()}"
         if (currentKey == ":" || currentKey.endsWith(":")) return
         val playlistUri = runCatching { URI(playlist.baseUri) }.getOrNull() ?: return
@@ -1666,7 +1671,7 @@ class ExoPlayerService : BasePlaybackService() {
         if (dropsSegmentJob?.isActive == true) return
 
         dropsSegmentJob = lifecycleScope.launch(Dispatchers.IO) {
-            while (isActive && dropsSegmentStreamKey == currentKey && player?.isPlaying == true) {
+            while (isActive && dropsSegmentStreamKey == currentKey && dropsSegmentPlaybackActive) {
                 val currentPlaylistUrl = dropsSegmentPlaylistUrl
                 if (!currentPlaylistUrl.isNullOrBlank()) {
                     try {
@@ -1675,17 +1680,20 @@ class ExoPlayerService : BasePlaybackService() {
                             .header("Connection", "close")
                             .get()
                             .build()
-                        val playlistText = withTimeout(8_000) {
+                        val playlistResult = withTimeout(8_000) {
                             xtraModule.okHttpClient.value.newCall(playlistRequest).executeAsync().use { response ->
-                                if (response.isSuccessful) response.body?.string().orEmpty() else {
+                                if (response.isSuccessful) {
+                                    response.body?.string().orEmpty() to response.request.url.toString()
+                                } else {
                                     Log.w("XtraDropsWatch", "HLS playlist poll not accepted (HTTP ${response.code})")
-                                    ""
+                                    "" to currentPlaylistUrl
                                 }
                             }
                         }
+                        val playlistText = playlistResult.first
                         if (playlistText.isNotBlank() && dropsSegmentStreamKey == currentKey) {
                             val finalPlaylistUri = runCatching {
-                                URI(playlistRequest.url.toString())
+                                URI(playlistResult.second)
                             }.getOrNull() ?: playlistUri
                             val segmentUrls = playlistText.lineSequence().mapNotNull { rawLine ->
                                 val line = rawLine.trim()
