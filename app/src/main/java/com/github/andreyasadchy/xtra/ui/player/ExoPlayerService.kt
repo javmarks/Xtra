@@ -1775,7 +1775,7 @@ class ExoPlayerService : BasePlaybackService() {
                                     Log.w("XtraDropsWatch", "HLS segment HEAD failed: ${e.javaClass.simpleName}")
                                 }
                             }
-                            updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${segmentUrls.size} segment URLs; ${acceptedSegments} HEAD accepted, ${failedSegments} failed.")
+                            updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; chars: ${playlistText.length}; EXTINF: ${extInfCount}; PART: ${partLines.size}; URI attrs: ${uriAttributeCount}; URL candidates: ${candidateUrls.size}; rejected: ${rejectedCandidates}; selected: ${segmentUrls.size}; HEAD accepted: ${acceptedSegments}; failed: ${failedSegments}.")
                         }
                     } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
                         updateDropsDiagnostic("Drops network request timed out; check the playlist or proxy connection.")
