@@ -802,9 +802,9 @@ class GraphQLRepository(
             val responseText = response?.toString().orEmpty()
             // A valid response with currentUser is authoritative, including a null
             // dropCurrentSession when Twitch reports that no Drop is active.
-            if (responseText.contains("\\"currentUser\\"") &&
+            if (responseText.contains("\"currentUser\"") &&
                 !responseText.contains("PersistedQueryNotFound") &&
-                !responseText.contains("\\"errors\\"")) {
+                !responseText.contains("\"errors\"")) {
                 return@withContext lastResponse
             }
         }
