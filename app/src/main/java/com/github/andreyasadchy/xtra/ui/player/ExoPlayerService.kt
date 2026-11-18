@@ -1650,12 +1650,24 @@ class ExoPlayerService : BasePlaybackService() {
     }
 
 
+    private fun updateDropsDiagnostic(message: String) {
+        prefs().edit { putString("drops_watch_diagnostic", message) }
+    }
+
     private fun trackDropsSegments(playlist: HlsMediaPlaylist?) {
-        if (!dropsSegmentPlaybackActive || playlist == null || playlist.segments.isEmpty()) return
+        if (!dropsSegmentPlaybackActive) return
+        if (playlist == null || playlist.segments.isEmpty()) {
+            updateDropsDiagnostic("Playback active; waiting for an HLS media playlist.")
+            return
+        }
         val currentKey = "${channelLogin.orEmpty()}:${streamId.orEmpty()}"
         if (currentKey == ":" || currentKey.endsWith(":")) return
         val playlistUri = runCatching { URI(playlist.baseUri) }.getOrNull() ?: return
-        if (playlistUri.scheme != "https" || playlistUri.host.isNullOrBlank()) return
+        if (playlistUri.scheme != "https" || playlistUri.host.isNullOrBlank()) {
+            updateDropsDiagnostic("Playlist URL is not a valid HTTPS address.")
+            return
+        }
+        updateDropsDiagnostic("Playback active; playlist host: ${playlistUri.host}; preparing request.")
 
         // ExoPlayer refreshes this signed URL as playback continues. Keep the polling
         // loop alive across same-broadcast playlist refreshes and use the newest URL.
@@ -1686,6 +1698,7 @@ class ExoPlayerService : BasePlaybackService() {
                                     response.body?.string().orEmpty() to response.request.url.toString()
                                 } else {
                                     Log.w("XtraDropsWatch", "HLS playlist poll not accepted (HTTP ${response.code})")
+                                    updateDropsDiagnostic("Playlist request failed: HTTP ${response.code}; host: ${runCatching { URI(currentPlaylistUrl).host }.getOrNull() ?: "unknown"}.")
                                     "" to currentPlaylistUrl
                                 }
                             }
@@ -1710,6 +1723,9 @@ class ExoPlayerService : BasePlaybackService() {
                                         uri?.scheme == "https" && (uri.host.equals(finalPlaylistUri.host, ignoreCase = true) || Regex(MEDIA_PLAYLIST_REGEX).matches(uri.host.orEmpty()))
                                     }
                             }.distinct().toList().takeLast(30)
+                            var acceptedSegments = 0
+                            var failedSegments = 0
+                            updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${segmentUrls.size} new segment URLs found.")
 
                             for (segmentUrl in segmentUrls) {
                                 if (!isActive || dropsSegmentStreamKey != currentKey) break
@@ -1734,20 +1750,25 @@ class ExoPlayerService : BasePlaybackService() {
                                                 }
                                             }
                                         }
+                                        acceptedSegments++
                                         Log.d("XtraDropsWatch", "HLS segment HEAD accepted (HTTP $status)")
                                     } else {
+                                        failedSegments++
                                         Log.w("XtraDropsWatch", "HLS segment HEAD not accepted (HTTP $status)")
                                     }
                                 } catch (e: CancellationException) {
                                     throw e
                                 } catch (e: Exception) {
+                                    failedSegments++
                                     Log.w("XtraDropsWatch", "HLS segment HEAD failed: ${e.javaClass.simpleName}")
                                 }
                             }
+                            updateDropsDiagnostic("Playlist OK; host: ${finalPlaylistUri.host}; ${segmentUrls.size} segment URLs; ${acceptedSegments} HEAD accepted, ${failedSegments} failed.")
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        updateDropsDiagnostic("Playlist request error: ${e.javaClass.simpleName}.")
                         Log.w("XtraDropsWatch", "HLS playlist poll failed: ${e.javaClass.simpleName}")
                     }
                 }
