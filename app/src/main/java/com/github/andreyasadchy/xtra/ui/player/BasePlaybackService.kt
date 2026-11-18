@@ -2,6 +2,7 @@ package com.github.andreyasadchy.xtra.ui.player
 
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.util.Log
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.github.andreyasadchy.xtra.util.tokenPrefs
@@ -97,7 +98,7 @@ abstract class BasePlaybackService : LifecycleService() {
                     break
                 }
                 try {
-                    xtraModule.playerRepository.sendMinuteWatched(
+                    val accepted = xtraModule.playerRepository.sendMinuteWatched(
                         networkLibrary = prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
                         userId = currentUserId,
                         streamId = currentStreamId,
@@ -107,9 +108,11 @@ abstract class BasePlaybackService : LifecycleService() {
                         gameName = gameName,
                         gqlHeaders = TwitchApiHelper.getGQLHeaders(this@BasePlaybackService, true)
                     )
+                    Log.i("XtraDropsWatch", "minute-watched ${if (accepted) "accepted" else "not accepted"} for channel=$currentChannelLogin stream=$currentStreamId")
                 } catch (e: CancellationException) {
                     throw e
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    Log.w("XtraDropsWatch", "minute-watched request failed: ${e.javaClass.simpleName}", e)
                     // Drops tracking is best-effort and must never interrupt playback.
                 }
             }
