@@ -769,7 +769,7 @@ class GraphQLRepository(
                 }
                 put("operationName", "ViewerDropsDashboard")
                 putJsonObject("variables") {
-                    put("fetchRewardCampaigns", false)
+                    put("fetchRewardCampaigns", true)
                 }
             }.toString()
             lastResponse = sendPersistedQuery(networkLibrary, headers, body)
@@ -906,6 +906,48 @@ class GraphQLRepository(
             putJsonObject("variables") {
                 putJsonObject("input") {
                     put("dropInstanceID", dropInstanceId)
+                }
+            }
+        }.toString()
+        sendPersistedQuery(networkLibrary, headers, body)
+    }
+
+    suspend fun selectGlobalChatBadge(
+        networkLibrary: String?,
+        headers: Map<String, String>,
+        badgeSetId: String,
+        badgeVersion: String,
+    ): String = withContext(Dispatchers.IO) {
+        val query = "mutation SelectGlobalBadge(\$input: SelectGlobalBadgeInput!) { selectGlobalBadge(input: \$input) { __typename } }"
+        val body = buildJsonObject {
+            put("query", query)
+            put("operationName", "SelectGlobalBadge")
+            putJsonObject("variables") {
+                putJsonObject("input") {
+                    put("badgeSetID", badgeSetId)
+                    put("badgeSetVersion", badgeVersion)
+                }
+            }
+        }.toString()
+        sendPersistedQuery(networkLibrary, headers, body)
+    }
+
+    suspend fun selectChannelChatBadge(
+        networkLibrary: String?,
+        headers: Map<String, String>,
+        channelId: String,
+        badgeSetId: String,
+        badgeVersion: String,
+    ): String = withContext(Dispatchers.IO) {
+        val query = "mutation SelectChannelBadge(\$input: SelectChannelBadgeInput!) { selectChannelBadge(input: \$input) { __typename } }"
+        val body = buildJsonObject {
+            put("query", query)
+            put("operationName", "SelectChannelBadge")
+            putJsonObject("variables") {
+                putJsonObject("input") {
+                    put("channelID", channelId)
+                    put("badgeSetID", badgeSetId)
+                    put("badgeSetVersion", badgeVersion)
                 }
             }
         }.toString()
