@@ -456,7 +456,7 @@ class ChatViewModel(
                 val previousStreak = if (watchStreakChannelId == channelId) watchStreak.value else null
                 watchStreakChannelId = channelId
                 watchStreak.value = parsedStreak
-                if (previousStreak != null && parsedStreak != null && parsedStreak.count > previousStreak.count) {
+                if (channelId != null && previousStreak != null && parsedStreak != null && parsedStreak.count > previousStreak.count) {
                     notifyWatchStreakIncreased(channelId, parsedStreak.count)
                 }
                 watchStreakStatus.value = if (parsedStreak == null) {
