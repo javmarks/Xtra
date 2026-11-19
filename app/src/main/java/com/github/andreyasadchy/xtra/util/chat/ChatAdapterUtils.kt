@@ -267,15 +267,16 @@ object ChatAdapterUtils {
                 }
                 chatMessage.badges?.forEach { chatBadge ->
                     val sourceRoomId = chatMessage.sourceRoomId
-                    val sourceBadges = sourceRoomId?.let { sourceChannelBadges[it] }
-                    // Shared Chat badges belong to the broadcaster who sent the message.
-                    // Never substitute the host channel's badge when a source room is present.
-                    val channelBadge = if (sourceRoomId == null) {
+                    val isSharedChatMessage = sourceRoomId != null && sourceRoomId != chatMessage.roomId
+                    val sourceBadges = if (isSharedChatMessage) sourceChannelBadges[sourceRoomId] else null
+                    // EventSub can set sourceRoomId to the host broadcaster for ordinary
+                    // messages. Only use the source catalog when the source differs from the host.
+                    val channelBadge = if (isSharedChatMessage) {
+                        sourceBadges?.find { it.setId == chatBadge.setId && it.version == chatBadge.version }
+                    } else {
                         synchronized(channelBadges) {
                             channelBadges.find { it.setId == chatBadge.setId && it.version == chatBadge.version }
                         }
-                    } else {
-                        sourceBadges?.find { it.setId == chatBadge.setId && it.version == chatBadge.version }
                     }
                     val badge = channelBadge ?: synchronized(globalBadges) {
                         globalBadges.find { it.setId == chatBadge.setId && it.version == chatBadge.version }
