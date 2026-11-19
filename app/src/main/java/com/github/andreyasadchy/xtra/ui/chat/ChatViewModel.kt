@@ -165,6 +165,7 @@ class ChatViewModel(
     val channelPointRewards = MutableStateFlow<List<ChannelPointReward>>(emptyList())
     val channelPointRewardsStatus = MutableStateFlow("Not loaded")
     val watchStreak = MutableStateFlow<WatchStreakInfo?>(null)
+    private var watchStreakChannelId: String? = null
     val watchStreakStatus = MutableStateFlow("Not loaded")
     val pinnedChatMessage = MutableStateFlow<PinnedChatMessageResponse.PinnedMessage?>(null)
     val moderationLogs = MutableStateFlow<List<String>>(emptyList())
@@ -452,7 +453,8 @@ class ChatViewModel(
                         shareStatus = viewerMilestone.shareStatus.orEmpty(),
                     )
                 }
-                val previousStreak = watchStreak.value
+                val previousStreak = if (watchStreakChannelId == channelId) watchStreak.value else null
+                watchStreakChannelId = channelId
                 watchStreak.value = parsedStreak
                 if (previousStreak != null && parsedStreak != null && parsedStreak.count > previousStreak.count) {
                     notifyWatchStreakIncreased(channelId, parsedStreak.count)
