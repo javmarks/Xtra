@@ -24,6 +24,13 @@
         android:title="@string/live_notifications"
         app:iconSpaceReserved="false"
         app:singleLineTitle="false" />
+    <SwitchPreferenceCompat
+        android:defaultValue="false"
+        android:key="watch_streak_notifications_enabled"
+        android:title="@string/watch_streak_notifications_enabled"
+        android:summary="@string/watch_streak_notifications_summary"
+        app:iconSpaceReserved="false"
+        app:singleLineTitle="false" />
 
     <Preference
         android:key="drops_inventory"
