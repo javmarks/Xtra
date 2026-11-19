@@ -2004,13 +2004,18 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                         ?.let(rewardNames::add)
                                 }
                             }
+                            val timedDropName = drop.optString("name")
+                                .takeIf { it.isNotBlank() && it != "null" }.orEmpty()
                             val rewardName = rewardNames.distinct().joinToString(" · ")
-                                .ifBlank {
-                                    drop.optString("name").takeIf { it.isNotBlank() && it != "null" }
-                                        ?: "Drop reward"
-                                }
+                                .ifBlank { timedDropName.ifBlank { "Drop reward" } }
+                            // Twitch may put the actual badge name in benefitEdges while
+                            // keeping "GTA DVD Chest" only on the timed-drop object.
                             val isGtaviDvdChest = isGtaviCelebration &&
-                                rewardName.contains("GTA DVD Chest", true)
+                                (timedDropName.contains("GTA DVD Chest", true) ||
+                                    rewardName.contains("GTA DVD Chest", true))
+                            val displayRewardName = if (isGtaviDvdChest && rewardNames.isEmpty()) {
+                                "Daily chain badge"
+                            } else rewardName
                             val accountUserId = context.tokenPrefs().getString(C.USER_ID, null)
                                 ?.takeIf { it.matches(Regex("\\d+")) }
                             val campaignId = campaign.optString("id")
@@ -2061,7 +2066,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 val rewardImage = android.widget.ImageView(context).apply {
                                     layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
                                     scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
-                                    contentDescription = rewardName
+                                    contentDescription = displayRewardName
                                 }
                                 context.imageLoader.enqueue(
                                     ImageRequest.Builder(context).apply {
@@ -2073,7 +2078,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 rewardRow.addView(rewardImage)
                             }
                             rewardRow.addView(TextView(context).apply {
-                                text = rewardName
+                                text = displayRewardName
                                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                                 setTypeface(typeface, android.graphics.Typeface.BOLD)
                                 setPadding(if (rewardImageUrl.isNullOrBlank()) 0 else dp(10), 0, 0, 0)
@@ -2083,7 +2088,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 ((watched.toFloat() / required.toFloat()) * 100f).toInt().coerceIn(0, 100)
                             } else 0
                             val progressText = when {
-                                isGtaviDvdChest && serverClaimed -> "✓ Daily chain badge chest claimed"
+                                isGtaviDvdChest && serverClaimed -> "✓ Daily badge claim confirmed by Twitch"
                                 isGtaviDvdChest && locallyAccepted -> "✓ Claim accepted · verify in Twitch Drops Inventory"
                                 isGtaviDvdChest && required > 0 && watched >= required &&
                                     !claimId.isNullOrBlank() ->
