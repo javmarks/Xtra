@@ -1,10 +1,16 @@
 package com.github.andreyasadchy.xtra.ui.chat
 
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ContentResolver
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Base64
 import android.util.JsonReader
 import android.util.JsonToken
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
@@ -446,7 +452,11 @@ class ChatViewModel(
                         shareStatus = viewerMilestone.shareStatus.orEmpty(),
                     )
                 }
+                val previousStreak = watchStreak.value
                 watchStreak.value = parsedStreak
+                if (previousStreak != null && parsedStreak != null && parsedStreak.count > previousStreak.count) {
+                    notifyWatchStreakIncreased(channelId, parsedStreak.count)
+                }
                 watchStreakStatus.value = if (parsedStreak == null) {
                     "No active watch streak returned by Twitch"
                 } else {
@@ -458,6 +468,35 @@ class ChatViewModel(
                 // Keep the last known streak during transient GraphQL/network failures.
             }
         }
+    }
+
+    private fun notifyWatchStreakIncreased(channelId: String, count: Int) {
+        val prefs = applicationContext.prefs()
+        if (!prefs.getBoolean(C.WATCH_STREAK_NOTIFICATIONS_ENABLED, false)) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+
+        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationChannelId = applicationContext.getString(R.string.notification_watch_streak_channel_id)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            notificationManager.getNotificationChannel(notificationChannelId) == null
+        ) {
+            notificationManager.createNotificationChannel(
+                NotificationChannel(
+                    notificationChannelId,
+                    applicationContext.getString(R.string.notification_watch_streak_channel_title),
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                )
+            )
+        }
+        val notification = NotificationCompat.Builder(applicationContext, notificationChannelId)
+            .setSmallIcon(R.drawable.notification_icon)
+            .setContentTitle(applicationContext.getString(R.string.watch_streak_increased_title))
+            .setContentText(applicationContext.getString(R.string.watch_streak_increased_text, count))
+            .setAutoCancel(true)
+            .build()
+        notificationManager.notify(channelId.hashCode(), notification)
     }
 
     fun shareWatchStreak(channelId: String?, onResult: (Boolean, String?) -> Unit) {
