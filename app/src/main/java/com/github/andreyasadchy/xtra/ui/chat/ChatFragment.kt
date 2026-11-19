@@ -2062,8 +2062,11 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             } else 0
                             val progressText = when {
                                 isGtaviDvdChest && claimed -> "✓ Daily chain badge chest claimed"
+                                isGtaviDvdChest && required > 0 && watched >= required &&
+                                    !hasBadgeBenefit && !claimId.isNullOrBlank() ->
+                                    "Daily chest ready · Use the Claim reward button below"
                                 isGtaviDvdChest && required > 0 && watched >= required ->
-                                    "Daily chest ready · Claim to receive today's chain badge"
+                                    "Today's watchtime requirement met · Check Twitch Drops & Rewards for the badge"
                                 isGtaviDvdChest && required > 0 ->
                                     "$watched / $required minutes today · " + (required - watched) + " min left"
                                 hasBadgeBenefit && claimed -> "✓ Badge awarded by Twitch"
