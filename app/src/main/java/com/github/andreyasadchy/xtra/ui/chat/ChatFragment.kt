@@ -1840,8 +1840,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         orientation = LinearLayout.HORIZONTAL
                         gravity = android.view.Gravity.CENTER_VERTICAL
                     }
-                    val artUrl = (game?.optString("boxArtURL")?.takeIf { it.startsWith("https://", true) }
-                        ?: campaign.optString("imageURL").takeIf { it.startsWith("https://", true) })
+                    val artUrl = (campaign.optString("imageURL").takeIf { it.startsWith("https://", true) }
+                        ?: game?.optString("boxArtURL")?.takeIf { it.startsWith("https://", true) }
+                        ?: campaign.optString("gameBoxArtURL").takeIf { it.startsWith("https://", true) })
                     if (!artUrl.isNullOrBlank()) {
                         val art = android.widget.ImageView(context).apply {
                             layoutParams = LinearLayout.LayoutParams(dp(48), dp(64))
@@ -1895,6 +1896,18 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             val claimed = dropSelf?.optBoolean("isClaimed", false) == true
                             val claimId = dropSelf?.optString("dropInstanceID")
                                 ?.takeIf { !it.isNullOrBlank() && it != "null" }
+                                ?: run {
+                                    val userId = runCatching {
+                                        context.tokenPrefs().getString(C.USER_ID, null)
+                                    }.getOrNull().orEmpty()
+                                    val campaignId = campaign.optString("id")
+                                    val rewardDropId = drop.optString("id")
+                                    if (userId.isNotBlank() && campaignId.isNotBlank() &&
+                                        campaignId != "null" && rewardDropId.isNotBlank() &&
+                                        rewardDropId != "null") {
+                                        "$userId#$campaignId#$rewardDropId"
+                                    } else null
+                                }
                             val benefits = drop.optJSONArray("benefitEdges")
                             val rewardNames = mutableListOf<String>()
                             if (benefits != null) {
@@ -1924,11 +1937,39 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
                                 setPadding(0, dp(2), 0, dp(2))
                             })
-                            card.addView(TextView(context).apply {
+                            val rewardImageUrl = run {
+                                val firstBenefit = benefits?.optJSONObject(0)?.optJSONObject("benefit")
+                                firstBenefit?.optString("imageAssetURL")
+                                    ?.takeIf { it.startsWith("https://", true) }
+                                    ?: firstBenefit?.optString("imageURL")
+                                        ?.takeIf { it.startsWith("https://", true) }
+                            }
+                            val rewardRow = LinearLayout(context).apply {
+                                orientation = LinearLayout.HORIZONTAL
+                                gravity = android.view.Gravity.CENTER_VERTICAL
+                            }
+                            if (!rewardImageUrl.isNullOrBlank()) {
+                                val rewardImage = android.widget.ImageView(context).apply {
+                                    layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+                                    scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+                                    contentDescription = rewardName
+                                }
+                                context.imageLoader.enqueue(
+                                    ImageRequest.Builder(context).apply {
+                                        data(rewardImageUrl)
+                                        crossfade(true)
+                                        target(rewardImage)
+                                    }.build()
+                                )
+                                rewardRow.addView(rewardImage)
+                            }
+                            rewardRow.addView(TextView(context).apply {
                                 text = rewardName
                                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                                 setTypeface(typeface, android.graphics.Typeface.BOLD)
-                            })
+                                setPadding(if (rewardImageUrl.isNullOrBlank()) 0 else dp(10), 0, 0, 0)
+                            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                            card.addView(rewardRow)
                             val progress = if (required > 0) {
                                 ((watched.toFloat() / required.toFloat()) * 100f).toInt().coerceIn(0, 100)
                             } else 0
@@ -1954,7 +1995,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     )
                                 })
                             }
-                            if (!claimed && required > 0 && watched >= required && !claimId.isNullOrBlank()) {
+                            val requirementMet = (required > 0 && watched >= required) || requiredSubs > 0
+                            if (!claimed && requirementMet && !claimId.isNullOrBlank()) {
                                 card.addView(android.widget.Button(context).apply {
                                     text = "Claim reward"
                                     isAllCaps = false
