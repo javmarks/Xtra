@@ -2006,16 +2006,20 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             }
                             val timedDropName = drop.optString("name")
                                 .takeIf { it.isNotBlank() && it != "null" }.orEmpty()
-                            val rewardName = rewardNames.distinct().joinToString(" · ")
+                            val rawRewardName = rewardNames.distinct().joinToString(" · ")
                                 .ifBlank { timedDropName.ifBlank { "Drop reward" } }
-                            // Twitch may put the actual badge name in benefitEdges while
-                            // keeping "GTA DVD Chest" only on the timed-drop object.
+                            // GTA DVD Chest is Twitch's container/group label, not the
+                            // individual daily badge. Keep any real benefit name, but never
+                            // expose the container label as the reward's display name.
                             val isGtaviDvdChest = isGtaviCelebration &&
                                 (timedDropName.contains("GTA DVD Chest", true) ||
-                                    rewardName.contains("GTA DVD Chest", true))
-                            val displayRewardName = if (isGtaviDvdChest && rewardNames.isEmpty()) {
-                                "Daily chain badge"
-                            } else rewardName
+                                    rawRewardName.contains("GTA DVD Chest", true))
+                            val displayRewardName = if (isGtaviDvdChest) {
+                                rewardNames.distinct()
+                                    .filterNot { it.contains("GTA DVD Chest", true) }
+                                    .joinToString(" · ")
+                                    .ifBlank { "Daily chain badge" }
+                            } else rawRewardName
                             val accountUserId = context.tokenPrefs().getString(C.USER_ID, null)
                                 ?.takeIf { it.matches(Regex("\\d+")) }
                             val campaignId = campaign.optString("id")
