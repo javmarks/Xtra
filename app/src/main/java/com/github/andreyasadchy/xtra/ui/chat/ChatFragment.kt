@@ -1965,10 +1965,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 maxOf(inventoryWatched, minutes)
                             } else inventoryWatched
                             val claimed = dropSelf?.optBoolean("isClaimed", false) == true
-                            // Only claim with the real instance ID supplied by Twitch.
-                            // Creator Badge Drops are awarded automatically when eligible;
-                            // synthesizing an ID can create a misleading, non-functional claim action.
-                            val claimId = dropSelf?.optString("dropInstanceID")
+                            // Prefer Twitch's real instance ID. The GTA VI DVD Chest is a
+                            // standard multi-day Drops reward; Twitch Drops clients also support
+                            // its deterministic userID#campaignID#dropID claim ID fallback.
+                            val twitchClaimId = dropSelf?.optString("dropInstanceID")
                                 ?.takeIf { !it.isNullOrBlank() && it != "null" }
                             // Twitch returns benefitEdges as either a direct array or a
                             // connection object containing edges/nodes, depending on the query.
@@ -2003,6 +2003,17 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 }
                             val isGtaviDvdChest = isGtaviCelebration &&
                                 rewardName.contains("GTA DVD Chest", true)
+                            val accountUserId = context.tokenPrefs().getString(C.USER_ID, null)
+                                ?.takeIf { it.matches(Regex("\\d+")) }
+                            val campaignId = campaign.optString("id")
+                                .takeIf { it.isNotBlank() && it != "null" }
+                            val timedDropId = drop.optString("id")
+                                .takeIf { it.isNotBlank() && it != "null" }
+                            val claimId = twitchClaimId ?: if (isGtaviDvdChest &&
+                                !accountUserId.isNullOrBlank() && !campaignId.isNullOrBlank() &&
+                                !timedDropId.isNullOrBlank()) {
+                                "$accountUserId#$campaignId#$timedDropId"
+                            } else null
                             val requirementLabel = when {
                                 isGtaviDvdChest -> "GTA VI daily badge collection · 1 hour on 6 different days"
                                 requiredSubs > 0 -> (if (hasBadgeBenefit) "Creator Badge · " else "Subscription Drop · ") +
@@ -2063,7 +2074,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             val progressText = when {
                                 isGtaviDvdChest && claimed -> "✓ Daily chain badge chest claimed"
                                 isGtaviDvdChest && required > 0 && watched >= required &&
-                                    !hasBadgeBenefit && !claimId.isNullOrBlank() ->
+                                    !claimId.isNullOrBlank() ->
                                     "Daily chest ready · Use the Claim reward button below"
                                 isGtaviDvdChest && required > 0 && watched >= required ->
                                     "Today's watchtime requirement met · Check Twitch Drops & Rewards for the badge"
@@ -2098,7 +2109,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 })
                             }
                             val requirementMet = required > 0 && watched >= required
-                            if (!hasBadgeBenefit && !claimed && requirementMet && !claimId.isNullOrBlank()) {
+                            if ((!hasBadgeBenefit || isGtaviDvdChest) && !claimed && requirementMet && !claimId.isNullOrBlank()) {
                                 card.addView(android.widget.Button(context).apply {
                                     text = "Claim reward"
                                     isAllCaps = false
