@@ -295,9 +295,45 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
         binding.chatIdentityButton.isVisible =
             requireArguments().getBoolean(KEY_IS_LIVE) && !isMergedRendererOnly && identityIsLoggedIn
         binding.chatIdentityButton.setOnClickListener {
-            val selectedBadges = viewModel.userChatBadges.value.orEmpty()
-            val globalCatalog = viewModel.globalBadges.toList()
-            val channelCatalog = viewModel.channelBadges.toList()
+            viewLifecycleOwner.lifecycleScope.launch {
+                val identityChannelLogin = requireArguments().getString(KEY_CHANNEL_LOGIN).orEmpty()
+                val networkLibrary = requireContext().prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP)
+                val headers = TwitchApiHelper.getGQLHeaders(requireContext(), true)
+                val application = requireContext().applicationContext as XtraApp
+                val globalResponse = runCatching {
+                    application.xtraModule.graphQLRepository.loadAvailableChatBadges(
+                        networkLibrary, headers, identityAccountLogin.orEmpty(), false
+                    )
+                }.getOrNull()
+                val channelResponse = if (identityChannelLogin.isNotBlank()) runCatching {
+                    application.xtraModule.graphQLRepository.loadAvailableChatBadges(
+                        networkLibrary, headers, identityChannelLogin, true
+                    )
+                }.getOrNull() else null
+                fun parseAvailableBadges(response: String?, channelSpecific: Boolean): List<com.github.andreyasadchy.xtra.model.chat.TwitchBadge> {
+                    val root = response?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return emptyList()
+                    val user = root.optJSONObject("data")?.optJSONObject("user") ?: return emptyList()
+                    val badges = if (channelSpecific) {
+                        user.optJSONObject("self")?.optJSONArray("availableBadges")
+                    } else user.optJSONArray("availableBadges")
+                    return buildList {
+                        if (badges != null) for (index in 0 until badges.length()) {
+                            val badge = badges.optJSONObject(index) ?: continue
+                            val setId = badge.optString("setID").takeIf { it.isNotBlank() && it != "null" } ?: continue
+                            val version = badge.optString("version").takeIf { it.isNotBlank() && it != "null" } ?: continue
+                            val image = badge.optString("imageURL").takeIf { it.startsWith("https://", true) }
+                            add(com.github.andreyasadchy.xtra.model.chat.TwitchBadge(
+                                setId = setId, version = version,
+                                url1x = image, url2x = image, url3x = image, url4x = image,
+                                title = badge.optString("title").takeIf { it.isNotBlank() && it != "null" }
+                            ))
+                        }
+                    }
+                }
+                if (!isAdded) return@launch
+                val selectedBadges = viewModel.userChatBadges.value.orEmpty()
+                val globalCatalog = parseAvailableBadges(globalResponse, false)
+                val channelCatalog = parseAvailableBadges(channelResponse, true)
             val content = LinearLayout(requireContext()).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(
@@ -307,7 +343,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     (8 * resources.displayMetrics.density).roundToInt()
                 )
             }
-            val identityChannelId = requireArguments().getString(KEY_CHANNEL_ID).orEmpty()
+                val identityChannelId = requireArguments().getString(KEY_CHANNEL_ID).orEmpty()
             fun addBadgeSection(title: String, catalog: List<com.github.andreyasadchy.xtra.model.chat.TwitchBadge>, channelSpecific: Boolean) {
                 if (catalog.isEmpty()) return
                 content.addView(TextView(requireContext()).apply {
@@ -367,9 +403,6 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         }
                         row.isEnabled = false
                         viewLifecycleOwner.lifecycleScope.launch {
-                            val networkLibrary = requireContext().prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP)
-                            val headers = TwitchApiHelper.getGQLHeaders(requireContext(), true)
-                            val application = requireContext().applicationContext as XtraApp
                             val result = runCatching {
                                 if (channelSpecific) {
                                     application.xtraModule.graphQLRepository.selectChannelChatBadge(networkLibrary, headers, identityChannelId, badge.setId, badge.version)
