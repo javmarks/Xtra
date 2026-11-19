@@ -1929,20 +1929,11 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 maxOf(inventoryWatched, minutes)
                             } else inventoryWatched
                             val claimed = dropSelf?.optBoolean("isClaimed", false) == true
+                            // Only claim with the real instance ID supplied by Twitch.
+                            // Creator Badge Drops are awarded automatically when eligible;
+                            // synthesizing an ID can create a misleading, non-functional claim action.
                             val claimId = dropSelf?.optString("dropInstanceID")
                                 ?.takeIf { !it.isNullOrBlank() && it != "null" }
-                                ?: run {
-                                    val userId = runCatching {
-                                        context.tokenPrefs().getString(C.USER_ID, null)
-                                    }.getOrNull().orEmpty()
-                                    val campaignId = campaign.optString("id")
-                                    val rewardDropId = drop.optString("id")
-                                    if (userId.isNotBlank() && campaignId.isNotBlank() &&
-                                        campaignId != "null" && rewardDropId.isNotBlank() &&
-                                        rewardDropId != "null") {
-                                        "$userId#$campaignId#$rewardDropId"
-                                    } else null
-                                }
                             // Twitch returns benefitEdges as either a direct array or a
                             // connection object containing edges/nodes, depending on the query.
                             val benefitEdgesValue = drop.opt("benefitEdges")
@@ -2047,7 +2038,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     )
                                 })
                             }
-                            val requirementMet = (required > 0 && watched >= required) || requiredSubs > 0
+                            val requirementMet = required > 0 && watched >= required
                             if (!claimed && requirementMet && !claimId.isNullOrBlank()) {
                                 card.addView(android.widget.Button(context).apply {
                                     text = "Claim reward"
