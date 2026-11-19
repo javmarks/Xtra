@@ -26,6 +26,13 @@
         app:singleLineTitle="false" />
 
     <Preference
+        android:key="drops_inventory"
+        android:title="@string/drops_inventory"
+        android:summary="@string/drops_inventory_summary"
+        app:iconSpaceReserved="false"
+        app:singleLineTitle="false" />
+
+    <Preference
         android:key="theme_settings"
         android:title="@string/theme"
         app:iconSpaceReserved="false"
