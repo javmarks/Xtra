@@ -2090,11 +2090,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             val progressText = when {
                                 isGtaviDvdChest && serverClaimed -> "✓ Daily badge claim confirmed by Twitch"
                                 isGtaviDvdChest && locallyAccepted -> "✓ Claim accepted · verify in Twitch Drops Inventory"
-                                isGtaviDvdChest && required > 0 && watched >= required &&
-                                    !claimId.isNullOrBlank() ->
-                                    "Daily chest ready · Use the Claim reward button below"
                                 isGtaviDvdChest && required > 0 && watched >= required ->
-                                    "Today's watchtime requirement met · Check Twitch Drops & Rewards for the badge"
+                                    "Today's watchtime requirement met · Twitch awards the badge automatically"
                                 isGtaviDvdChest && required > 0 ->
                                     "$watched / $required minutes today · " + (required - watched) + " min left"
                                 hasBadgeBenefit && claimed -> "✓ Badge awarded by Twitch"
@@ -2126,7 +2123,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 })
                             }
                             val requirementMet = required > 0 && watched >= required
-                            if ((!hasBadgeBenefit || isGtaviDvdChest) && !claimed && requirementMet && !claimId.isNullOrBlank()) {
+                            // GTA DVD Chest contains automatically awarded daily badges; it is not a separately claimable item.
+                            if (!hasBadgeBenefit && !isGtaviDvdChest && !claimed && requirementMet && !claimId.isNullOrBlank()) {
                                 card.addView(android.widget.Button(context).apply {
                                     text = "Claim reward"
                                     isAllCaps = false
