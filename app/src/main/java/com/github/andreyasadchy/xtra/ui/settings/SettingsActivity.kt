@@ -364,6 +364,14 @@ class SettingsActivity : AppCompatActivity() {
                 )
                 true
             }
+            findPreference<SwitchPreferenceCompat>(C.WATCH_STREAK_NOTIFICATIONS_ENABLED)?.setOnPreferenceChangeListener { _, _ ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ActivityCompat.checkSelfPermission(requireActivity(), Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    ActivityCompat.requestPermissions(requireActivity(), arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+                }
+                true
+            }
             findPreference<Preference>("drops_inventory")?.setOnPreferenceClickListener {
                 try {
                     startActivity(Intent(Intent.ACTION_VIEW, "https://www.twitch.tv/drops/inventory".toUri()))
