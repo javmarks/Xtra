@@ -2057,6 +2057,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     .joinToString(" · ")
                                     .ifBlank { "Daily chain badge" }
                             } else rawRewardName
+                            val isGtaviGoldenIguana = isGtaviCelebration &&
+                                (timedDropName.contains("Golden Iguana", true) ||
+                                    rewardNames.any { it.contains("Golden Iguana", true) })
                             val accountUserId = context.tokenPrefs().getString(C.USER_ID, null)
                                 ?.takeIf { it.matches(Regex("\\d+")) }
                             val campaignId = campaign.optString("id")
@@ -2072,6 +2075,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 locallyAcceptedDropClaims.contains(claimId)
                             val claimed = serverClaimed || locallyAccepted
                             val requirementLabel = when {
+                                isGtaviGoldenIguana -> "GTA VI collection completion reward · earn all 6 Bling badges and all 6 subscription rewards"
                                 isGtaviDvdChest -> "GTA VI daily badge collection · 1 hour on 6 different days"
                                 requiredSubs > 0 -> (if (hasBadgeBenefit) "Creator Badge · " else "Subscription Drop · ") +
                                     "$requiredSubs qualifying subscription(s)"
@@ -2179,10 +2183,18 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             } else {
                                 card.addView(rewardRow)
                             }
+                            if (isGtaviGoldenIguana) {
+                                card.addView(TextView(context).apply {
+                                    text = "Earn all 12 campaign rewards to unlock the Golden Iguana."
+                                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                                    setPadding(0, dp(5), 0, dp(5))
+                                })
+                            }
                             val progress = if (required > 0) {
                                 ((watched.toFloat() / required.toFloat()) * 100f).toInt().coerceIn(0, 100)
                             } else 0
                             val progressText = when {
+                                isGtaviGoldenIguana -> "Collection reward · no separate watchtime requirement"
                                 isGtaviDvdChest && required > 0 && watched >= required ->
                                     "Today's one-hour watch requirement is met · Twitch awards the day's badge automatically"
                                 isGtaviDvdChest && required > 0 ->
@@ -2204,7 +2216,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
                                 setPadding(0, dp(5), 0, dp(5))
                             })
-                            if (required > 0) {
+                            if (required > 0 && !isGtaviGoldenIguana) {
                                 card.addView(android.widget.ProgressBar(
                                     context, null, android.R.attr.progressBarStyleHorizontal
                                 ).apply {
@@ -2217,7 +2229,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             }
                             val requirementMet = required > 0 && watched >= required
                             // GTA DVD Chest contains automatically awarded daily badges; it is not a separately claimable item.
-                            if (!hasBadgeBenefit && !isGtaviDvdChest && !claimed && requirementMet && !claimId.isNullOrBlank()) {
+                            if (!hasBadgeBenefit && !isGtaviDvdChest && !isGtaviGoldenIguana && !claimed && requirementMet && !claimId.isNullOrBlank()) {
                                 card.addView(android.widget.Button(context).apply {
                                     text = "Claim reward"
                                     isAllCaps = false
@@ -2262,7 +2274,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                         }
                                     }
                                 })
-                            } else if (claimed) {
+                            } else if (claimed && !isGtaviGoldenIguana) {
                                 card.addView(TextView(context).apply {
                                     text = "✓ Reward claimed"
                                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
