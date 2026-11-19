@@ -307,7 +307,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     (8 * resources.displayMetrics.density).roundToInt()
                 )
             }
-            fun addBadgeSection(title: String, catalog: List<com.github.andreyasadchy.xtra.model.chat.TwitchBadge>) {
+            val identityChannelId = requireArguments().getString(KEY_CHANNEL_ID).orEmpty()
+            fun addBadgeSection(title: String, catalog: List<com.github.andreyasadchy.xtra.model.chat.TwitchBadge>, channelSpecific: Boolean) {
                 if (catalog.isEmpty()) return
                 content.addView(TextView(requireContext()).apply {
                     text = title
@@ -358,14 +359,47 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             }
                         }.getOrNull()
                     }
-                    if (badgeInfoUri != null) {
-                        row.isClickable = true
-                        row.setOnClickListener {
-                            runCatching {
-                                startActivity(Intent(Intent.ACTION_VIEW, badgeInfoUri))
-                            }.onFailure {
-                                Toast.makeText(requireContext(), "Unable to open badge information.", Toast.LENGTH_LONG).show()
+                    row.isClickable = true
+                    row.setOnClickListener {
+                        if (channelSpecific && identityChannelId.isBlank()) {
+                            Toast.makeText(requireContext(), "Twitch did not provide this channel ID.", Toast.LENGTH_LONG).show()
+                            return@setOnClickListener
+                        }
+                        row.isEnabled = false
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            val networkLibrary = requireContext().prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP)
+                            val headers = TwitchApiHelper.getGQLHeaders(requireContext(), true)
+                            val result = runCatching {
+                                if (channelSpecific) {
+                                    app.xtraModule.graphQLRepository.selectChannelChatBadge(networkLibrary, headers, identityChannelId, badge.setId, badge.version)
+                                } else {
+                                    app.xtraModule.graphQLRepository.selectGlobalChatBadge(networkLibrary, headers, badge.setId, badge.version)
+                                }
                             }
+                            if (!isAdded) return@launch
+                            val root = result.getOrNull()?.let { runCatching { JSONObject(it) }.getOrNull() }
+                            val data = root?.optJSONObject("data")
+                            val errors = root?.optJSONArray("errors")
+                            val mutationName = if (channelSpecific) "selectChannelBadge" else "selectGlobalBadge"
+                            val success = data?.optJSONObject(mutationName) != null && (errors == null || errors.length() == 0)
+                            if (success) {
+                                val current = viewModel.userChatBadges.value.orEmpty().toMutableList()
+                                current.removeAll { it.setId == badge.setId }
+                                current.add(com.github.andreyasadchy.xtra.model.chat.Badge(badge.setId, badge.version))
+                                viewModel.userChatBadges.value = current
+                                label.text = (badge.title?.takeIf { it.isNotBlank() } ?: badge.setId) + " - Selected"
+                                Toast.makeText(requireContext(), if (channelSpecific) "Badge selected for this channel." else "Global badge selected.", Toast.LENGTH_SHORT).show()
+                            } else {
+                                val message = errors?.optJSONObject(0)?.optString("message").orEmpty()
+                                Toast.makeText(requireContext(), "Twitch could not change this badge. " + message.take(120), Toast.LENGTH_LONG).show()
+                            }
+                            row.isEnabled = true
+                        }
+                    }
+                    if (badgeInfoUri != null) {
+                        row.setOnLongClickListener {
+                            runCatching { startActivity(Intent(Intent.ACTION_VIEW, badgeInfoUri)) }
+                            true
                         }
                     }
                     badge.description?.takeIf { it.isNotBlank() }?.let { description ->
@@ -377,8 +411,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     }
                 }
             }
-            addBadgeSection("Global badge catalog", globalCatalog)
-            addBadgeSection("Channel badge catalog", channelCatalog)
+            addBadgeSection("Global badges - choose one for all chats", globalCatalog, false)
+            addBadgeSection("This channel badges - choose one for this channel", channelCatalog, true)
             if (content.childCount == 0) {
                 content.addView(TextView(requireContext()).apply {
                     text = "Twitch has not reported your selected chat badges yet."
