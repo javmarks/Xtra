@@ -1894,6 +1894,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         ?: campaign.optString("name", "Drops campaign")
                     val campaignName = campaign.optString("name").takeIf { it.isNotBlank() }
                         ?: gameName
+                    val isGtaviCelebration = gameName.contains("Grand Theft Auto VI", true) ||
+                        campaignName.contains("GTAVI Launch Celebration", true)
                     val card = LinearLayout(context).apply {
                         orientation = LinearLayout.VERTICAL
                         setPadding(dp(12), dp(12), dp(12), dp(12))
@@ -1999,14 +2001,15 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     drop.optString("name").takeIf { it.isNotBlank() && it != "null" }
                                         ?: "Drop reward"
                                 }
-                            val requirementLabel = if (requiredSubs > 0) {
-                                (if (hasBadgeBenefit) "Creator Badge · " else "Subscription Drop · ") +
+                            val isGtaviDvdChest = isGtaviCelebration &&
+                                rewardName.contains("GTA DVD Chest", true)
+                            val requirementLabel = when {
+                                isGtaviDvdChest -> "GTA VI daily badge collection · 1 hour on 6 different days"
+                                requiredSubs > 0 -> (if (hasBadgeBenefit) "Creator Badge · " else "Subscription Drop · ") +
                                     "$requiredSubs qualifying subscription(s)"
-                            } else if (required > 0) {
-                                (if (hasBadgeBenefit) "Creator Watchtime Badge · " else "Watchtime Drop · ") +
+                                required > 0 -> (if (hasBadgeBenefit) "Creator Watchtime Badge · " else "Watchtime Drop · ") +
                                     "$required minutes"
-                            } else {
-                                if (hasBadgeBenefit) "Creator Badge" else "Drop reward"
+                                else -> if (hasBadgeBenefit) "Creator Badge" else "Drop reward"
                             }
                             card.addView(View(context).apply {
                                 layoutParams = LinearLayout.LayoutParams(
@@ -2058,6 +2061,11 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 ((watched.toFloat() / required.toFloat()) * 100f).toInt().coerceIn(0, 100)
                             } else 0
                             val progressText = when {
+                                isGtaviDvdChest && claimed -> "✓ Daily chain badge chest claimed"
+                                isGtaviDvdChest && required > 0 && watched >= required ->
+                                    "Daily chest ready · Claim to receive today's chain badge"
+                                isGtaviDvdChest && required > 0 ->
+                                    "$watched / $required minutes today · " + (required - watched) + " min left"
                                 hasBadgeBenefit && claimed -> "✓ Badge awarded by Twitch"
                                 hasBadgeBenefit && required > 0 && watched >= required ->
                                     "Requirement met · Twitch should award this badge automatically"
@@ -2128,7 +2136,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             }
                         }
                     }
-                    if (!linked) {
+                    if (!linked && !isGtaviCelebration) {
                         val linkUrl = campaign.optString("accountLinkURL")
                         if (linkUrl.startsWith("https://", true)) {
                             card.addView(android.widget.Button(context).apply {
