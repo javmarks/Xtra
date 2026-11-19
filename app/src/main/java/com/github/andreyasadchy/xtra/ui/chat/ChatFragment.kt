@@ -1739,9 +1739,13 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             Toast.makeText(context, "Drops status copied.", Toast.LENGTH_SHORT).show()
         }
 
-        // Keep a successful claim from reappearing as an actionable button while
-        // Twitch's inventory/dashboard queries catch up after the mutation.
-        val locallyAcceptedDropClaims = mutableSetOf<String>()
+        // Persist accepted claims across dashboard reopen/recreation while Twitch's
+        // inventory query catches up. Claim IDs include the account ID, so entries are
+        // naturally account-scoped; keep the set bounded.
+        val acceptedClaimsPrefsKey = "drops_locally_accepted_claim_ids"
+        val locallyAcceptedDropClaims = context.prefs()
+            .getStringSet(acceptedClaimsPrefsKey, emptySet())
+            ?.toMutableSet() ?: mutableSetOf()
 
         fun refreshDrops() {
             if (!isAdded || !dialog.isShowing) return
@@ -2140,6 +2144,12 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                             if (claimStatus == "ELIGIBLE_FOR_ALL" ||
                                                 claimStatus == "DROP_INSTANCE_ALREADY_CLAIMED") {
                                                 locallyAcceptedDropClaims.add(claimId)
+                                                while (locallyAcceptedDropClaims.size > 100) {
+                                                    locallyAcceptedDropClaims.remove(locallyAcceptedDropClaims.first())
+                                                }
+                                                context.prefs().edit()
+                                                    .putStringSet(acceptedClaimsPrefsKey, locallyAcceptedDropClaims.toSet())
+                                                    .apply()
                                                 Toast.makeText(
                                                     context,
                                                     if (claimStatus == "DROP_INSTANCE_ALREADY_CLAIMED")
