@@ -364,6 +364,14 @@ class SettingsActivity : AppCompatActivity() {
                 )
                 true
             }
+            findPreference<Preference>("drops_inventory")?.setOnPreferenceClickListener {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, "https://www.twitch.tv/drops/inventory".toUri()))
+                } catch (e: ActivityNotFoundException) {
+                    Toast.makeText(requireContext(), R.string.no_browser_found, Toast.LENGTH_LONG).show()
+                }
+                true
+            }
             findPreference<Preference>("theme_settings")?.setOnPreferenceClickListener {
                 requireActivity().findViewById<AppBarLayout>(R.id.appBar)?.setExpanded(true)
                 findNavController().navigate(SettingsNavGraphDirections.actionGlobalThemeSettingsFragment())
