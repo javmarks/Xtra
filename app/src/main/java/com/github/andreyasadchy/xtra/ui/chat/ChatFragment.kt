@@ -1908,17 +1908,32 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                         "$userId#$campaignId#$rewardDropId"
                                     } else null
                                 }
-                            val benefits = drop.optJSONArray("benefitEdges")
+                            // Twitch returns benefitEdges as either a direct array or a
+                            // connection object containing edges/nodes, depending on the query.
+                            val benefitEdgesValue = drop.opt("benefitEdges")
+                            val benefits = when (benefitEdgesValue) {
+                                is org.json.JSONArray -> benefitEdgesValue
+                                is JSONObject -> benefitEdgesValue.optJSONArray("edges")
+                                    ?: benefitEdgesValue.optJSONArray("nodes")
+                                else -> null
+                            }
+                            fun benefitAt(index: Int): JSONObject? {
+                                val edge = benefits?.optJSONObject(index) ?: return null
+                                return edge.optJSONObject("benefit") ?: edge
+                            }
                             val rewardNames = mutableListOf<String>()
                             if (benefits != null) {
                                 for (benefitIndex in 0 until benefits.length()) {
-                                    val benefit = benefits.optJSONObject(benefitIndex)
-                                        ?.optJSONObject("benefit")
-                                    benefit?.optString("name")?.takeIf { it.isNotBlank() }?.let(rewardNames::add)
+                                    benefitAt(benefitIndex)?.optString("name")
+                                        ?.takeIf { it.isNotBlank() && it != "null" }
+                                        ?.let(rewardNames::add)
                                 }
                             }
                             val rewardName = rewardNames.distinct().joinToString(" · ")
-                                .ifBlank { drop.optString("name", "Drop reward") }
+                                .ifBlank {
+                                    drop.optString("name").takeIf { it.isNotBlank() && it != "null" }
+                                        ?: "Drop reward"
+                                }
                             val requirementLabel = if (requiredSubs > 0) {
                                 "Subscription Drop · $requiredSubs qualifying subscription(s)"
                             } else if (required > 0) {
@@ -1938,10 +1953,12 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 setPadding(0, dp(2), 0, dp(2))
                             })
                             val rewardImageUrl = run {
-                                val firstBenefit = benefits?.optJSONObject(0)?.optJSONObject("benefit")
+                                val firstBenefit = benefitAt(0)
                                 firstBenefit?.optString("imageAssetURL")
                                     ?.takeIf { it.startsWith("https://", true) }
                                     ?: firstBenefit?.optString("imageURL")
+                                        ?.takeIf { it.startsWith("https://", true) }
+                                    ?: firstBenefit?.optString("imageUrl")
                                         ?.takeIf { it.startsWith("https://", true) }
                             }
                             val rewardRow = LinearLayout(context).apply {
