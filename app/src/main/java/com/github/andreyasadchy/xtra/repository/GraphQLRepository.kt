@@ -802,6 +802,26 @@ class GraphQLRepository(
         sendPersistedQuery(networkLibrary, headers, body)
     }
 
+    suspend fun loadAvailableChannelDrops(
+        networkLibrary: String?,
+        headers: Map<String, String>,
+        channelId: String,
+    ): String = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            putJsonObject("extensions") {
+                putJsonObject("persistedQuery") {
+                    put("sha256Hash", "782dad0f032942260171d2d80a654f88bdd0c5a9dddc392e9bc92218a0f42d20")
+                    put("version", 1)
+                }
+            }
+            put("operationName", "DropsHighlightService_AvailableDrops")
+            putJsonObject("variables") {
+                put("channelID", channelId)
+            }
+        }.toString()
+        sendPersistedQuery(networkLibrary, headers, body)
+    }
+
     suspend fun loadCurrentDropSession(
         networkLibrary: String?,
         headers: Map<String, String>,
