@@ -428,8 +428,16 @@ class ChatViewModel(
                     return@launch
                 }
                 val channel = response.data?.channel
-                val self = channel?.self
-                if (channel == null || self == null) {
+                if (channel == null) {
+                    watchStreakStatus.value = "Twitch returned incomplete Watch Streak data"
+                    return@launch
+                }
+                if (channel.id != channelId) {
+                    watchStreakStatus.value = "Twitch returned a different channel ID (requested $channelId, received ${channel.id ?: "missing"})"
+                    return@launch
+                }
+                val self = channel.self
+                if (self == null) {
                     watchStreakStatus.value = "Twitch returned incomplete Watch Streak data"
                     return@launch
                 }
