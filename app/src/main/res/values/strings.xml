@@ -598,4 +598,6 @@
     <string name="starting_proxy">Starting proxy</string>
     <string name="stopping_proxy">Stopping proxy</string>
     <string name="watch_streaks_show">Show Twitch Watch Streak notifications</string>
+    <string name="drops_inventory">Drops &amp; Rewards Inventory</string>
+    <string name="drops_inventory_summary">View and claim available Twitch Drops and campaign rewards</string>
 </resources>
