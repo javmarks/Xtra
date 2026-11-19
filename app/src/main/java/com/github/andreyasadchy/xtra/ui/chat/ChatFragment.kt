@@ -1894,8 +1894,16 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     return@launch
                 }
 
-                var gtaBadgeCatalog: Map<String, String> = emptyMap()
-                var gtaBadgeCatalogLoaded = false
+                // Twitch campaign badge artwork (Twitch CDN badge version 3).
+                // These are the actual VI pendant badges, not the generic global badge catalog.
+                val gtaBadgeCatalog = mapOf(
+                    "Purple Chain" to "https://static-cdn.jtvnw.net/badges/v1/07fdf1d1-f160-4415-821e-391a90852db6/3",
+                    "Bronze Chain" to "https://static-cdn.jtvnw.net/badges/v1/2e7cf17d-12ba-41cd-8f9d-4d96c5f69d45/3",
+                    "Silver Chain" to "https://static-cdn.jtvnw.net/badges/v1/b8b5b601-d707-41c9-9fb6-9610280285e6/3",
+                    "Gold Chain" to "https://static-cdn.jtvnw.net/badges/v1/b7974da7-9af4-4ff6-8029-a9ca95b8b037/3",
+                    "Diamond Chain" to "https://static-cdn.jtvnw.net/badges/v1/7498db8a-8085-4262-ac9c-b2d13591b75f/3",
+                    "Miami Chain" to "https://static-cdn.jtvnw.net/badges/v1/015f3db0-1a3f-4e4a-970d-bea3adb3a331/3"
+                )
                 val gtaBadgeNames = listOf(
                     "Purple Chain", "Bronze Chain", "Silver Chain",
                     "Gold Chain", "Diamond Chain", "Miami Chain"
@@ -1910,21 +1918,6 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         ?: gameName
                     val isGtaviCelebration = gameName.contains("Grand Theft Auto VI", true) ||
                         campaignName.contains("GTAVI Launch Celebration", true)
-                    if (isGtaviCelebration && !gtaBadgeCatalogLoaded) {
-                        gtaBadgeCatalogLoaded = true
-                        gtaBadgeCatalog = runCatching {
-                            app.xtraModule.helixRepository.getGlobalBadges(networkLibrary, headers)
-                                .data.orEmpty()
-                                .flatMap { badgeSet -> badgeSet.versions.orEmpty() }
-                                .mapNotNull { version ->
-                                    val title = version.title?.trim()?.takeIf { it.isNotEmpty() }
-                                    val image = version.url2x?.takeIf { it.startsWith("https://", true) }
-                                        ?: version.url1x?.takeIf { it.startsWith("https://", true) }
-                                    if (title != null && image != null) title to image else null
-                                }
-                                .toMap()
-                        }.getOrDefault(emptyMap())
-                    }
                     val card = LinearLayout(context).apply {
                         orientation = LinearLayout.VERTICAL
                         setPadding(dp(12), dp(12), dp(12), dp(12))
