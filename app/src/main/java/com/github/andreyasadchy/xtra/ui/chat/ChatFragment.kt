@@ -1982,10 +1982,15 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 return edge.optJSONObject("benefit") ?: edge
                             }
                             val rewardNames = mutableListOf<String>()
+                            var hasBadgeBenefit = false
                             if (benefits != null) {
                                 for (benefitIndex in 0 until benefits.length()) {
-                                    benefitAt(benefitIndex)?.optString("name")
-                                        ?.takeIf { it.isNotBlank() && it != "null" }
+                                    val benefit = benefitAt(benefitIndex) ?: continue
+                                    if (benefit.optString("distributionType").equals("BADGE", true)) {
+                                        hasBadgeBenefit = true
+                                    }
+                                    benefit.optString("name")
+                                        .takeIf { it.isNotBlank() && it != "null" }
                                         ?.let(rewardNames::add)
                                 }
                             }
@@ -1995,11 +2000,13 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                         ?: "Drop reward"
                                 }
                             val requirementLabel = if (requiredSubs > 0) {
-                                "Subscription Drop · $requiredSubs qualifying subscription(s)"
+                                (if (hasBadgeBenefit) "Creator Badge · " else "Subscription Drop · ") +
+                                    "$requiredSubs qualifying subscription(s)"
                             } else if (required > 0) {
-                                "Watchtime Drop · $required minutes"
+                                (if (hasBadgeBenefit) "Creator Watchtime Badge · " else "Watchtime Drop · ") +
+                                    "$required minutes"
                             } else {
-                                "Drop reward"
+                                if (hasBadgeBenefit) "Creator Badge" else "Drop reward"
                             }
                             card.addView(View(context).apply {
                                 layoutParams = LinearLayout.LayoutParams(
@@ -2051,6 +2058,13 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 ((watched.toFloat() / required.toFloat()) * 100f).toInt().coerceIn(0, 100)
                             } else 0
                             val progressText = when {
+                                hasBadgeBenefit && claimed -> "✓ Badge awarded by Twitch"
+                                hasBadgeBenefit && required > 0 && watched >= required ->
+                                    "Requirement met · Twitch should award this badge automatically"
+                                hasBadgeBenefit && required > 0 ->
+                                    "$watched / $required minutes · " + (required - watched) + " min left"
+                                hasBadgeBenefit ->
+                                    "Badge is awarded automatically when Twitch confirms the qualifying action"
                                 claimed -> "Claimed"
                                 required > 0 && watched >= required -> "Ready to claim"
                                 required > 0 -> "$watched / $required minutes · " + (required - watched) + " min left"
@@ -2073,7 +2087,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 })
                             }
                             val requirementMet = required > 0 && watched >= required
-                            if (!claimed && requirementMet && !claimId.isNullOrBlank()) {
+                            if (!hasBadgeBenefit && !claimed && requirementMet && !claimId.isNullOrBlank()) {
                                 card.addView(android.widget.Button(context).apply {
                                     text = "Claim reward"
                                     isAllCaps = false
