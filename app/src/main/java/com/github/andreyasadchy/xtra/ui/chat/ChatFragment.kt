@@ -1988,8 +1988,17 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 else -> null
                             }
                             fun benefitAt(index: Int): JSONObject? {
-                                val edge = benefits?.optJSONObject(index) ?: return null
-                                return edge.optJSONObject("benefit") ?: edge
+                                var item = benefits?.optJSONObject(index) ?: return null
+                                // Twitch may serialize a benefit edge directly, or as a
+                                // Relay edge whose node contains the benefit.
+                                repeat(3) {
+                                    val nested = item.optJSONObject("benefit")
+                                        ?: item.optJSONObject("node")
+                                        ?: item.optJSONObject("item")
+                                        ?: return@repeat
+                                    item = nested
+                                }
+                                return item
                             }
                             val rewardNames = mutableListOf<String>()
                             var hasBadgeBenefit = false
@@ -1999,8 +2008,15 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     if (benefit.optString("distributionType").equals("BADGE", true)) {
                                         hasBadgeBenefit = true
                                     }
-                                    benefit.optString("name")
+                                    val localized = benefit.optJSONObject("localizedContent")
+                                    (benefit.optString("name")
                                         .takeIf { it.isNotBlank() && it != "null" }
+                                        ?: benefit.optString("displayName")
+                                            .takeIf { it.isNotBlank() && it != "null" }
+                                        ?: localized?.optString("name")
+                                            ?.takeIf { !it.isNullOrBlank() && it != "null" }
+                                        ?: localized?.optString("title")
+                                            ?.takeIf { !it.isNullOrBlank() && it != "null" })
                                         ?.let(rewardNames::add)
                                 }
                             }
