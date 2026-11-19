@@ -449,7 +449,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             addBadgeSection("This channel badges - choose one for this channel", channelCatalog, true)
             if (content.childCount == 0) {
                 content.addView(TextView(requireContext()).apply {
-                    text = "Twitch has not reported your selected chat badges yet."
+                    text = "No badges are currently available to equip here, or Twitch did not return your badge collection."
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                     setPadding(0, (8 * resources.displayMetrics.density).roundToInt(), 0, (8 * resources.displayMetrics.density).roundToInt())
                 })
@@ -477,6 +477,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     }
                 }
                 .show()
+            }
         }
         binding.moderationLogsButton.setOnClickListener {
             val channelName = requireArguments().getString(KEY_CHANNEL_NAME)
