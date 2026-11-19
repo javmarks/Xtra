@@ -493,7 +493,7 @@ class ChatViewModel(
             )
         }
         val notification = NotificationCompat.Builder(applicationContext, notificationChannelId)
-            .setSmallIcon(R.drawable.notification_icon)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(applicationContext.getString(R.string.watch_streak_increased_title))
             .setContentText(applicationContext.getString(R.string.watch_streak_increased_text, count))
             .setAutoCancel(true)
