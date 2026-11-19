@@ -369,11 +369,12 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         viewLifecycleOwner.lifecycleScope.launch {
                             val networkLibrary = requireContext().prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP)
                             val headers = TwitchApiHelper.getGQLHeaders(requireContext(), true)
+                            val application = requireContext().applicationContext as XtraApp
                             val result = runCatching {
                                 if (channelSpecific) {
-                                    app.xtraModule.graphQLRepository.selectChannelChatBadge(networkLibrary, headers, identityChannelId, badge.setId, badge.version)
+                                    application.xtraModule.graphQLRepository.selectChannelChatBadge(networkLibrary, headers, identityChannelId, badge.setId, badge.version)
                                 } else {
-                                    app.xtraModule.graphQLRepository.selectGlobalChatBadge(networkLibrary, headers, badge.setId, badge.version)
+                                    application.xtraModule.graphQLRepository.selectGlobalChatBadge(networkLibrary, headers, badge.setId, badge.version)
                                 }
                             }
                             if (!isAdded) return@launch
