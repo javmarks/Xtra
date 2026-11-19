@@ -912,6 +912,28 @@ class GraphQLRepository(
         sendPersistedQuery(networkLibrary, headers, body)
     }
 
+    suspend fun loadAvailableChatBadges(
+        networkLibrary: String?,
+        headers: Map<String, String>,
+        targetLogin: String,
+        channelSpecific: Boolean,
+    ): String = withContext(Dispatchers.IO) {
+        val badgeField = if (channelSpecific) {
+            "self { availableBadges { setID version title imageURL(size: DOUBLE) } }"
+        } else {
+            "availableBadges { setID version title imageURL(size: DOUBLE) }"
+        }
+        val query = "query ChatIdentityAvailableBadges(\$login: String!) { user(login: \$login) { $badgeField } }"
+        val body = buildJsonObject {
+            put("query", query)
+            put("operationName", "ChatIdentityAvailableBadges")
+            putJsonObject("variables") {
+                put("login", targetLogin)
+            }
+        }.toString()
+        sendPersistedQuery(networkLibrary, headers, body)
+    }
+
     suspend fun selectGlobalChatBadge(
         networkLibrary: String?,
         headers: Map<String, String>,
