@@ -2132,7 +2132,27 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     setTypeface(typeface, android.graphics.Typeface.BOLD)
                                     setPadding(0, 0, 0, dp(5))
                                 })
-                                var displayedBadges = 0
+                                var completedBadgeRequests = 0
+                                var successfulBadgeImages = 0
+                                var failedBadgeImages = 0
+                                val badgeArtworkStatus = TextView(context).apply {
+                                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                                    isGone = true
+                                }
+                                collection.addView(badgeArtworkStatus)
+                                fun updateBadgeArtworkStatus() {
+                                    if (completedBadgeRequests < gtaBadgeNames.size) return
+                                    badgeArtworkStatus.post {
+                                        badgeArtworkStatus.text = when {
+                                            successfulBadgeImages == 0 ->
+                                                "Badge artwork is temporarily unavailable from Twitch."
+                                            failedBadgeImages > 0 ->
+                                                "Some badge artwork couldn't be loaded. Badge names are still shown."
+                                            else -> ""
+                                        }
+                                        badgeArtworkStatus.isVisible = failedBadgeImages > 0
+                                    }
+                                }
                                 for (badgeName in gtaBadgeNames) {
                                     val imageUrl = gtaBadgeCatalog.entries.firstOrNull {
                                         it.key.equals(badgeName, true)
@@ -2153,9 +2173,24 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                                 data(imageUrl)
                                                 crossfade(true)
                                                 target(badgeImage)
+                                                listener(
+                                                    onSuccess = { _, _ ->
+                                                        successfulBadgeImages++
+                                                        completedBadgeRequests++
+                                                        updateBadgeArtworkStatus()
+                                                    },
+                                                    onError = { _, _ ->
+                                                        failedBadgeImages++
+                                                        completedBadgeRequests++
+                                                        updateBadgeArtworkStatus()
+                                                    }
+                                                )
                                             }.build()
                                         )
                                         badgeRow.addView(badgeImage)
+                                    } else {
+                                        failedBadgeImages++
+                                        completedBadgeRequests++
                                     }
                                     badgeRow.addView(TextView(context).apply {
                                         text = badgeName
@@ -2164,14 +2199,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                         setPadding(if (imageUrl.isNullOrBlank()) 0 else dp(8), 0, 0, 0)
                                     })
                                     collection.addView(badgeRow)
-                                    displayedBadges++
                                 }
-                                if (displayedBadges == 0 || gtaBadgeCatalog.isEmpty()) {
-                                    collection.addView(TextView(context).apply {
-                                        text = "Badge artwork is temporarily unavailable from Twitch."
-                                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                                    })
-                                }
+                                updateBadgeArtworkStatus()
                                 card.addView(collection)
                             } else {
                                 card.addView(rewardRow)
