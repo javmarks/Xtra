@@ -1739,6 +1739,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
             Toast.makeText(context, "Drops status copied.", Toast.LENGTH_SHORT).show()
         }
 
+        // Keep a successful claim from reappearing as an actionable button while
+        // Twitch's inventory/dashboard queries catch up after the mutation.
+        val locallyAcceptedDropClaims = mutableSetOf<String>()
+
         fun refreshDrops() {
             if (!isAdded || !dialog.isShowing) return
             refreshButton.isEnabled = false
@@ -1964,7 +1968,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             val watched = if (drop.optString("id") == dropId && minutes >= 0) {
                                 maxOf(inventoryWatched, minutes)
                             } else inventoryWatched
-                            val claimed = dropSelf?.optBoolean("isClaimed", false) == true
+                            val serverClaimed = dropSelf?.optBoolean("isClaimed", false) == true
                             // Prefer Twitch's real instance ID. The GTA VI DVD Chest is a
                             // standard multi-day Drops reward; Twitch Drops clients also support
                             // its deterministic userID#campaignID#dropID claim ID fallback.
@@ -2014,6 +2018,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 !timedDropId.isNullOrBlank()) {
                                 "$accountUserId#$campaignId#$timedDropId"
                             } else null
+                            val locallyAccepted = !claimId.isNullOrBlank() &&
+                                locallyAcceptedDropClaims.contains(claimId)
+                            val claimed = serverClaimed || locallyAccepted
                             val requirementLabel = when {
                                 isGtaviDvdChest -> "GTA VI daily badge collection · 1 hour on 6 different days"
                                 requiredSubs > 0 -> (if (hasBadgeBenefit) "Creator Badge · " else "Subscription Drop · ") +
@@ -2072,7 +2079,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 ((watched.toFloat() / required.toFloat()) * 100f).toInt().coerceIn(0, 100)
                             } else 0
                             val progressText = when {
-                                isGtaviDvdChest && claimed -> "✓ Daily chain badge chest claimed"
+                                isGtaviDvdChest && serverClaimed -> "✓ Daily chain badge chest claimed"
+                                isGtaviDvdChest && locallyAccepted -> "✓ Claim accepted · verify in Twitch Drops Inventory"
                                 isGtaviDvdChest && required > 0 && watched >= required &&
                                     !claimId.isNullOrBlank() ->
                                     "Daily chest ready · Use the Claim reward button below"
@@ -2131,7 +2139,14 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                             }
                                             if (claimStatus == "ELIGIBLE_FOR_ALL" ||
                                                 claimStatus == "DROP_INSTANCE_ALREADY_CLAIMED") {
-                                                Toast.makeText(context, "Drop reward claimed.", Toast.LENGTH_LONG).show()
+                                                locallyAcceptedDropClaims.add(claimId)
+                                                Toast.makeText(
+                                                    context,
+                                                    if (claimStatus == "DROP_INSTANCE_ALREADY_CLAIMED")
+                                                        "Twitch reports this reward was already claimed."
+                                                    else "Twitch accepted the claim. Checking inventory…",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
                                                 refreshDrops()
                                             } else {
                                                 isEnabled = true
