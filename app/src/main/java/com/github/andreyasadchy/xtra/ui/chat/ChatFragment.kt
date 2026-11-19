@@ -1696,6 +1696,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 val dashboardResult = runCatching {
                     app.xtraModule.graphQLRepository.loadDropsDashboard(networkLibrary, headers)
                 }
+                val availableDropsResult = if (!channelId.isNullOrBlank()) runCatching {
+                    app.xtraModule.graphQLRepository.loadAvailableChannelDrops(networkLibrary, headers, channelId)
+                } else null
                 if (!isAdded || _binding == null || !dialog.isShowing) return@launch
                 refreshButton.isEnabled = true
                 refreshButton.text = "Refresh progress"
@@ -1746,6 +1749,18 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 if (inventoryCampaigns != null) {
                     for (index in 0 until inventoryCampaigns.length()) {
                         addCampaign(inventoryCampaigns.optJSONObject(index))
+                    }
+                }
+                val availableDropsText = availableDropsResult?.getOrNull()
+                val channelCampaigns = availableDropsText?.let { response ->
+                    runCatching {
+                        val root = JSONObject(response).optJSONObject("data")
+                        root?.optJSONObject("channel")?.optJSONArray("viewerDropCampaigns")
+                    }.getOrNull()
+                }
+                if (channelCampaigns != null) {
+                    for (index in 0 until channelCampaigns.length()) {
+                        addCampaign(channelCampaigns.optJSONObject(index))
                     }
                 }
                 val dashboardText = dashboardResult.getOrNull()
@@ -1806,6 +1821,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     val campaign = campaigns.optJSONObject(campaignIndex) ?: continue
                     val game = campaign.optJSONObject("game")
                     val gameName = game?.optString("displayName")?.takeIf { it.isNotBlank() }
+                        ?: game?.optString("name")?.takeIf { it.isNotBlank() }
                         ?: campaign.optString("name", "Drops campaign")
                     val campaignName = campaign.optString("name").takeIf { it.isNotBlank() }
                         ?: gameName
@@ -1824,9 +1840,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         orientation = LinearLayout.HORIZONTAL
                         gravity = android.view.Gravity.CENTER_VERTICAL
                     }
-                    val artUrl = game?.optString("boxArtURL")?.takeIf {
-                        it.startsWith("https://", true)
-                    }
+                    val artUrl = (game?.optString("boxArtURL")?.takeIf { it.startsWith("https://", true) }
+                        ?: campaign.optString("imageURL").takeIf { it.startsWith("https://", true) })
                     if (!artUrl.isNullOrBlank()) {
                         val art = android.widget.ImageView(context).apply {
                             layoutParams = LinearLayout.LayoutParams(dp(48), dp(64))
@@ -1872,6 +1887,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             val drop = drops.optJSONObject(dropIndex) ?: continue
                             val dropSelf = drop.optJSONObject("self")
                             val required = drop.optInt("requiredMinutesWatched", 0).coerceAtLeast(0)
+                            val requiredSubs = drop.optInt("requiredSubs", 0).coerceAtLeast(0)
                             val inventoryWatched = dropSelf?.optInt("currentMinutesWatched", 0)?.coerceAtLeast(0) ?: 0
                             val watched = if (drop.optString("id") == dropId && minutes >= 0) {
                                 maxOf(inventoryWatched, minutes)
@@ -1890,11 +1906,23 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             }
                             val rewardName = rewardNames.distinct().joinToString(" · ")
                                 .ifBlank { drop.optString("name", "Drop reward") }
+                            val requirementLabel = if (requiredSubs > 0) {
+                                "Subscription Drop · $requiredSubs qualifying subscription(s)"
+                            } else if (required > 0) {
+                                "Watchtime Drop · $required minutes"
+                            } else {
+                                "Drop reward"
+                            }
                             card.addView(View(context).apply {
                                 layoutParams = LinearLayout.LayoutParams(
                                     LinearLayout.LayoutParams.MATCH_PARENT, dp(1)
                                 ).apply { topMargin = dp(10); bottomMargin = dp(8) }
                                 setBackgroundColor(0x337F7F7F)
+                            })
+                            card.addView(TextView(context).apply {
+                                text = requirementLabel
+                                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                                setPadding(0, dp(2), 0, dp(2))
                             })
                             card.addView(TextView(context).apply {
                                 text = rewardName
