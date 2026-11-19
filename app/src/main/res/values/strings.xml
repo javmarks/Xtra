@@ -3,6 +3,7 @@
     <string name="app_name" translatable="false">Xtra</string>
     <string name="notification_downloads_channel_id" translatable="false">xtra_downloads_channel</string>
     <string name="notification_live_channel_id" translatable="false">xtra_live_channel</string>
+    <string name="notification_watch_streak_channel_id" translatable="false">xtra_watch_streak_channel</string>
     <string name="notification_playback_channel_id" translatable="false">xtra_playback_channel</string>
     <string name="CronetProviderClassName" translatable="false">com.github.andreyasadchy.xtra.util.PlayServicesCronetProvider</string>
     <string name="lang_de" translatable="false">Deutsch</string>
@@ -410,6 +411,11 @@
     <string name="update_check_frequency">Update check frequency</string>
     <string name="update_check_frequency_summary">Every %s days</string>
     <string name="notification_live_channel_title">Live notifications</string>
+    <string name="notification_watch_streak_channel_title">Watch Streak notifications</string>
+    <string name="watch_streak_notifications_enabled">Watch Streak notifications</string>
+    <string name="watch_streak_notifications_summary">Notify when Twitch confirms your Watch Streak has increased while watching</string>
+    <string name="watch_streak_increased_title">Watch Streak increased</string>
+    <string name="watch_streak_increased_text">Your Watch Streak is now %1$d days</string>
     <string name="live_notification">%s is live</string>
     <string name="live_notifications">Live notifications</string>
     <string name="sleep_timer_lock_screen">Lock screen after sleep timer is done</string>
