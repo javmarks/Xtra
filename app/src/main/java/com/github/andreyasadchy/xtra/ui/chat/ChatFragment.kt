@@ -1894,6 +1894,12 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     return@launch
                 }
 
+                var gtaBadgeCatalog: Map<String, String> = emptyMap()
+                var gtaBadgeCatalogLoaded = false
+                val gtaBadgeNames = listOf(
+                    "Purple Chain", "Bronze Chain", "Silver Chain",
+                    "Gold Chain", "Diamond Chain", "Miami Chain"
+                )
                 for (campaignIndex in 0 until campaigns.length()) {
                     val campaign = campaigns.optJSONObject(campaignIndex) ?: continue
                     val game = campaign.optJSONObject("game")
@@ -1904,6 +1910,21 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         ?: gameName
                     val isGtaviCelebration = gameName.contains("Grand Theft Auto VI", true) ||
                         campaignName.contains("GTAVI Launch Celebration", true)
+                    if (isGtaviCelebration && !gtaBadgeCatalogLoaded) {
+                        gtaBadgeCatalogLoaded = true
+                        gtaBadgeCatalog = runCatching {
+                            app.xtraModule.helixRepository.getGlobalBadges(networkLibrary, headers)
+                                .data.orEmpty()
+                                .flatMap { badgeSet -> badgeSet.versions.orEmpty() }
+                                .mapNotNull { version ->
+                                    val title = version.title?.trim()?.takeIf { it.isNotEmpty() }
+                                    val image = version.url2x?.takeIf { it.startsWith("https://", true) }
+                                        ?: version.url1x?.takeIf { it.startsWith("https://", true) }
+                                    if (title != null && image != null) title to image else null
+                                }
+                                .toMap()
+                        }.getOrDefault(emptyMap())
+                    }
                     val card = LinearLayout(context).apply {
                         orientation = LinearLayout.VERTICAL
                         setPadding(dp(12), dp(12), dp(12), dp(12))
@@ -2103,15 +2124,67 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 setTypeface(typeface, android.graphics.Typeface.BOLD)
                                 setPadding(if (rewardImageUrl.isNullOrBlank()) 0 else dp(10), 0, 0, 0)
                             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-                            card.addView(rewardRow)
+                            if (isGtaviDvdChest) {
+                                val collection = LinearLayout(context).apply {
+                                    orientation = LinearLayout.VERTICAL
+                                    setPadding(0, dp(6), 0, dp(2))
+                                }
+                                collection.addView(TextView(context).apply {
+                                    text = "BLING BADGE COLLECTION"
+                                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                                    setPadding(0, 0, 0, dp(5))
+                                })
+                                var displayedBadges = 0
+                                for (badgeName in gtaBadgeNames) {
+                                    val imageUrl = gtaBadgeCatalog.entries.firstOrNull {
+                                        it.key.equals(badgeName, true)
+                                    }?.value
+                                    val badgeRow = LinearLayout(context).apply {
+                                        orientation = LinearLayout.HORIZONTAL
+                                        gravity = android.view.Gravity.CENTER_VERTICAL
+                                        setPadding(0, dp(2), 0, dp(2))
+                                    }
+                                    if (!imageUrl.isNullOrBlank()) {
+                                        val badgeImage = android.widget.ImageView(context).apply {
+                                            layoutParams = LinearLayout.LayoutParams(dp(30), dp(30))
+                                            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
+                                            contentDescription = badgeName
+                                        }
+                                        context.imageLoader.enqueue(
+                                            ImageRequest.Builder(context).apply {
+                                                data(imageUrl)
+                                                crossfade(true)
+                                                target(badgeImage)
+                                            }.build()
+                                        )
+                                        badgeRow.addView(badgeImage)
+                                    }
+                                    badgeRow.addView(TextView(context).apply {
+                                        text = badgeName
+                                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                                        setTypeface(typeface, android.graphics.Typeface.BOLD)
+                                        setPadding(if (imageUrl.isNullOrBlank()) 0 else dp(8), 0, 0, 0)
+                                    })
+                                    collection.addView(badgeRow)
+                                    displayedBadges++
+                                }
+                                if (displayedBadges == 0 || gtaBadgeCatalog.isEmpty()) {
+                                    collection.addView(TextView(context).apply {
+                                        text = "Badge artwork is temporarily unavailable from Twitch."
+                                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                                    })
+                                }
+                                card.addView(collection)
+                            } else {
+                                card.addView(rewardRow)
+                            }
                             val progress = if (required > 0) {
                                 ((watched.toFloat() / required.toFloat()) * 100f).toInt().coerceIn(0, 100)
                             } else 0
                             val progressText = when {
-                                isGtaviDvdChest && serverClaimed -> "✓ Daily badge claim confirmed by Twitch"
-                                isGtaviDvdChest && locallyAccepted -> "✓ Claim accepted · verify in Twitch Drops Inventory"
                                 isGtaviDvdChest && required > 0 && watched >= required ->
-                                    "Today's watchtime requirement met · Twitch awards the badge automatically"
+                                    "Today's one-hour watch requirement is met · Twitch awards the day's badge automatically"
                                 isGtaviDvdChest && required > 0 ->
                                     "$watched / $required minutes today · " + (required - watched) + " min left"
                                 hasBadgeBenefit && claimed -> "✓ Badge awarded by Twitch"
@@ -2136,7 +2209,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     context, null, android.R.attr.progressBarStyleHorizontal
                                 ).apply {
                                     max = 100
-                                    this.progress = if (claimed) 100 else progress
+                                    this.progress = if (!isGtaviDvdChest && claimed) 100 else progress
                                     layoutParams = LinearLayout.LayoutParams(
                                         LinearLayout.LayoutParams.MATCH_PARENT, dp(6)
                                     )
