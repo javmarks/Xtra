@@ -266,13 +266,20 @@ object ChatAdapterUtils {
                     }
                 }
                 chatMessage.badges?.forEach { chatBadge ->
-                    val sourceBadges = chatMessage.sourceRoomId?.let { sourceChannelBadges[it] }
-                    val badge = sourceBadges?.find { it.setId == chatBadge.setId && it.version == chatBadge.version }
-                        ?: synchronized(channelBadges) {
+                    val sourceRoomId = chatMessage.sourceRoomId
+                    val sourceBadges = sourceRoomId?.let { sourceChannelBadges[it] }
+                    // Shared Chat badges belong to the broadcaster who sent the message.
+                    // Never substitute the host channel's badge when a source room is present.
+                    val channelBadge = if (sourceRoomId == null) {
+                        synchronized(channelBadges) {
                             channelBadges.find { it.setId == chatBadge.setId && it.version == chatBadge.version }
-                        } ?: synchronized(globalBadges) {
-                            globalBadges.find { it.setId == chatBadge.setId && it.version == chatBadge.version }
                         }
+                    } else {
+                        sourceBadges?.find { it.setId == chatBadge.setId && it.version == chatBadge.version }
+                    }
+                    val badge = channelBadge ?: synchronized(globalBadges) {
+                        globalBadges.find { it.setId == chatBadge.setId && it.version == chatBadge.version }
+                    }
                     if (badge != null) {
                         builder.append(". ")
                         builder.setSpan(ForegroundColorSpan(Color.TRANSPARENT), builderIndex, builderIndex + 1, SPAN_EXCLUSIVE_EXCLUSIVE)
