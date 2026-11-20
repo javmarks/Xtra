@@ -242,12 +242,11 @@ class ChatViewModel(
                     if (started) {
                         loadSharedChatParticipants(channelId)
                         refreshPinnedChatMessage(channelId)
-                        // Recheck Twitch's authoritative Watch Streak while the stream is open.
-                        // Twitch does not expose a per-increment event unless the viewer shares a milestone.
-                        refreshWatchStreak(channelId)
-                        // Channel Points can use the slower refresh interval.
+                        // Keep Watch Streak polling at the previous five-minute interval.
+                        // One-minute polling did not produce fresher visible data and may add avoidable network pressure.
                         accountRefreshMinutes++
                         if (accountRefreshMinutes >= 5) {
+                            refreshWatchStreak(channelId)
                             accountRefreshMinutes = 0
                             refreshChannelPointsBalance(channelLogin)
                         }
