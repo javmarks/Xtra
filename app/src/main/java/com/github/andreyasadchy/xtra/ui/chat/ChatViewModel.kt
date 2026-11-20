@@ -242,13 +242,14 @@ class ChatViewModel(
                     if (started) {
                         loadSharedChatParticipants(channelId)
                         refreshPinnedChatMessage(channelId)
+                        // Recheck Twitch's authoritative Watch Streak while the stream is open.
+                        // Twitch does not expose a per-increment event unless the viewer shares a milestone.
+                        refreshWatchStreak(channelId)
+                        // Channel Points can use the slower refresh interval.
                         accountRefreshMinutes++
-                        // Refresh the viewer's balance while live viewing continues.
-                        // Watch Streak stays Twitch-authoritative; never increment locally.
                         if (accountRefreshMinutes >= 5) {
                             accountRefreshMinutes = 0
                             refreshChannelPointsBalance(channelLogin)
-                            refreshWatchStreak(channelId)
                         }
                     }
                 }
@@ -2007,6 +2008,35 @@ class ChatViewModel(
         }
 
         override suspend fun onChatMessage(message: ChatUtils.IRCMessage, userNotice: Boolean) {
+            // Twitch reports a shared Watch Streak through IRC USERNOTICE as
+            // msg-id=viewermilestone + msg-param-category=watch-streak.
+            // Process it even when ordinary user notices are hidden in chat.
+            if (userNotice &&
+                message.tags["msg-id"] == "viewermilestone" &&
+                message.tags["msg-param-category"] == "watch-streak"
+            ) {
+                val count = message.tags["msg-param-value"]?.toIntOrNull()?.takeIf { it > 0 }
+                if (count != null && !channelId.isNullOrBlank()) {
+                    val current = if (watchStreakChannelId == channelId) watchStreak.value else null
+                    if (count > (current?.count ?: 0)) {
+                        notifyWatchStreakIncreased(channelId, channelLogin, count)
+                    }
+                    if (current == null || count >= current.count) {
+                        watchStreakChannelId = channelId
+                        watchStreak.value = if (current != null) {
+                            current.copy(count = count)
+                        } else {
+                            WatchStreakInfo(
+                                count = count,
+                                threshold = 0,
+                                bonusPoints = 0,
+                                state = "ACTIVE",
+                            )
+                        }
+                        watchStreakStatus.value = "Updated from Twitch Watch Streak chat notice"
+                    }
+                }
+            }
             if (!userNotice || showUserNotice) {
                 val chatMessage = ChatUtils.parseChatMessage(message)
                 if (chatMessage.reply?.message != null) {
