@@ -415,7 +415,7 @@
     <string name="watch_streak_notifications_enabled">Watch Streak notifications</string>
     <string name="watch_streak_notifications_summary">Notify when Twitch confirms your Watch Streak has increased while watching</string>
     <string name="watch_streak_increased_title">Watch Streak increased</string>
-    <string name="watch_streak_increased_text">%1$s · %2$d consecutive streams</string>
+    <string name="watch_streak_increased_text">%1$s · %2$d-stream streak</string>
     <string name="live_notification">%s is live</string>
     <string name="live_notifications">Live notifications</string>
     <string name="sleep_timer_lock_screen">Lock screen after sleep timer is done</string>
