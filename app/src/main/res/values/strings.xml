@@ -4,6 +4,7 @@
     <string name="notification_downloads_channel_id" translatable="false">xtra_downloads_channel</string>
     <string name="notification_live_channel_id" translatable="false">xtra_live_channel</string>
     <string name="notification_watch_streak_channel_id" translatable="false">xtra_watch_streak_channel</string>
+    <string name="notification_bits_badge_channel_id" translatable="false">xtra_bits_badge_channel</string>
     <string name="notification_playback_channel_id" translatable="false">xtra_playback_channel</string>
     <string name="CronetProviderClassName" translatable="false">com.github.andreyasadchy.xtra.util.PlayServicesCronetProvider</string>
     <string name="lang_de" translatable="false">Deutsch</string>
@@ -418,6 +419,11 @@
     <string name="watch_streak_increased_text">%1$s · %2$d-stream streak</string>
     <string name="watch_streak_at_risk_title">Watch Streak at risk</string>
     <string name="watch_streak_at_risk_text">%1$s · your %2$d-stream streak needs recovery within 24 hours</string>
+    <string name="notification_bits_badge_channel_title">Bits badge notifications</string>
+    <string name="bits_badge_notifications_enabled">Bits badge notifications</string>
+    <string name="bits_badge_notifications_summary">Notify when you earn a Twitch Bits badge, including its name and channel</string>
+    <string name="bits_badge_earned_title">Bits badge earned</string>
+    <string name="bits_badge_earned_text">%1$s · %2$s</string>
     <string name="live_notification">%s is live</string>
     <string name="live_notifications">Live notifications</string>
     <string name="sleep_timer_lock_screen">Lock screen after sleep timer is done</string>
