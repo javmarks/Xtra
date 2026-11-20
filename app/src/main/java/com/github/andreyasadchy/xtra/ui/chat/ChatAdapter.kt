@@ -121,12 +121,8 @@ class ChatAdapter(
         val chatMessage = synchronized(messages) {
             displayedMessages().getOrNull(position)
         } ?: return
-        bindMessage(
-            holder,
-            chatMessage,
-            showSourceChannel = !chatMessage.sourceChannelName.isNullOrBlank() &&
-                    !chatMessage.sourceRoomId.isNullOrBlank()
-        )
+        // Source-channel avatars are exclusive to the merged All Chats renderer.
+        bindMessage(holder, chatMessage)
     }
 
     fun bindMessage(holder: ViewHolder, chatMessage: ChatMessage, showSourceChannel: Boolean = false) {
