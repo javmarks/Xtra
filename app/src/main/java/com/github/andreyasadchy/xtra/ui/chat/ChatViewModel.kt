@@ -2382,10 +2382,11 @@ class ChatViewModel(
                     it.optInt("channel_points_awarded", it.optInt("points_awarded", 0))
                 }?.takeIf { it > 0 }
                 if (count != null) {
-                    val current = watchStreak.value
+                    val current = if (watchStreakChannelId == channelId) watchStreak.value else null
                     if (count > (current?.count ?: 0) && !channelId.isNullOrBlank()) {
                         notifyWatchStreakIncreased(channelId, channelLogin, count)
                     }
+                    watchStreakChannelId = channelId
                     watchStreak.value = if (current != null) {
                         current.copy(count = count, bonusPoints = points ?: current.bonusPoints)
                     } else {
