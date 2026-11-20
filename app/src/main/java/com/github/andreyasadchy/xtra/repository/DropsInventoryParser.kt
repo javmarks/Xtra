@@ -73,6 +73,14 @@ object DropsInventoryParser {
         return DropsInventorySnapshot(campaigns, claimedBenefitIds)
     }
 
+    fun parseCampaignDetails(rawResponse: String): DropCampaign? {
+        val root = runCatching { Json.parseToJsonElement(rawResponse).jsonObject }.getOrNull()
+            ?: return null
+        val campaign = root.objectAt("data")?.objectAt("user")?.objectAt("dropCampaign")
+            ?: return null
+        return campaign.toCampaign()
+    }
+
     private fun JsonObject.toCampaign(): DropCampaign? {
         val id = stringAt("id") ?: return null
         val name = stringAt("name") ?: return null
