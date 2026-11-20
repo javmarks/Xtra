@@ -2092,26 +2092,9 @@ class ChatViewModel(
         }
 
         override suspend fun onChatMessage(message: ChatUtils.IRCMessage, userNotice: Boolean) {
-            // Twitch reports a shared Watch Streak through IRC USERNOTICE as
-            // msg-id=viewermilestone + msg-param-category=watch-streak.
-            // Process it even when ordinary user notices are hidden in chat.
-            if (userNotice &&
-                message.tags["msg-id"] == "viewermilestone" &&
-                message.tags["msg-param-category"] == "watch-streak"
-            ) {
-                val count = message.tags["msg-param-value"]?.toIntOrNull()?.takeIf { it > 0 }
-                if (count != null && !channelId.isNullOrBlank()) {
-                    updateWatchStreakFromTwitch(
-                        channelId = channelId,
-                        channelName = channelLogin,
-                        incoming = (watchStreak.value?.takeIf { watchStreakChannelId == channelId } ?: WatchStreakInfo(
-                            count = count, threshold = 0, bonusPoints = 0, state = "ACTIVE",
-                        )).copy(count = count),
-                        notifyWhenFirstSeen = true,
-                    )
-                    watchStreakStatus.value = "Updated from Twitch Watch Streak chat notice"
-                }
-            }
+            // Keep the Twitch Watch Streak chat notice in chat, but do not use
+            // its milestone value as the account's current streak count. GraphQL
+            // is the authoritative source for the indicator and count notifications.
             if (!userNotice || showUserNotice) {
                 val chatMessage = ChatUtils.parseChatMessage(message)
                 if (chatMessage.reply?.message != null) {
@@ -2480,27 +2463,9 @@ class ChatViewModel(
         }
 
         override suspend fun onUserNotice(event: JSONObject, timestamp: String?) {
-            if (event.optString("notice_type") == "watch_streak") {
-                val streak = event.optJSONObject("watch_streak")
-                val count = streak?.optInt("streak_count", 0)?.takeIf { it > 0 }
-                val points = streak?.let {
-                    it.optInt("channel_points_awarded", it.optInt("points_awarded", 0))
-                }?.takeIf { it > 0 }
-                if (count != null) {
-                    if (!channelId.isNullOrBlank()) {
-                        val current = watchStreak.value?.takeIf { watchStreakChannelId == channelId }
-                        updateWatchStreakFromTwitch(
-                            channelId = channelId,
-                            channelName = channelLogin,
-                            incoming = (current ?: WatchStreakInfo(
-                                count = count, threshold = 0, bonusPoints = 0, state = "ACTIVE",
-                            )).copy(count = count, bonusPoints = points ?: current?.bonusPoints ?: 0),
-                            notifyWhenFirstSeen = true,
-                        )
-                    }
-                    watchStreakStatus.value = "Updated from Twitch watch-streak notification"
-                }
-            }
+            // Watch-streak EventSub notices remain available to chat rendering,
+            // but their event count is not used for the account indicator or
+            // notifications. Only the Twitch GraphQL milestone refresh may update those.
             if (moderationOnly) {
                 if (event.optString("notice_type") == "watch_streak" &&
                     applicationContext.prefs().getBoolean(C.CHAT_WATCH_STREAKS, true)
