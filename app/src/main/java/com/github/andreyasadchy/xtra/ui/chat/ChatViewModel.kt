@@ -489,8 +489,49 @@ class ChatViewModel(
                         expiresAt = incoming.expiresAt ?: current.expiresAt,
                     )
                 } else incoming
+
+                // Twitch supplies expiresAt for an at-risk streak; never infer this from stream status.
+                if (incoming.count >= 3 && !incoming.expiresAt.isNullOrBlank()) {
+                    notifyWatchStreakAtRisk(channelId, channelName, incoming.count, incoming.expiresAt)
+                }
             }
         }
+    }
+
+    private fun notifyWatchStreakAtRisk(channelId: String, channelName: String, count: Int, expiresAt: String) {
+        val prefs = applicationContext.prefs()
+        if (!prefs.getBoolean(C.WATCH_STREAK_NOTIFICATIONS_ENABLED, false)) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+
+        val expiryMillis = runCatching { java.time.Instant.parse(expiresAt).toEpochMilli() }.getOrNull() ?: return
+        if (expiryMillis <= System.currentTimeMillis()) return
+
+        val lastExpiryKey = "watch_streak_at_risk_notified_$channelId"
+        if (prefs.getString(lastExpiryKey, null) == expiresAt) return
+
+        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationChannelId = applicationContext.getString(R.string.notification_watch_streak_channel_id)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            notificationManager.getNotificationChannel(notificationChannelId) == null
+        ) {
+            notificationManager.createNotificationChannel(
+                NotificationChannel(
+                    notificationChannelId,
+                    applicationContext.getString(R.string.notification_watch_streak_channel_title),
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                )
+            )
+        }
+        val notification = NotificationCompat.Builder(applicationContext, notificationChannelId)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(applicationContext.getString(R.string.watch_streak_at_risk_title))
+            .setContentText(applicationContext.getString(R.string.watch_streak_at_risk_text, channelName, count))
+            .setAutoCancel(true)
+            .build()
+        notificationManager.notify((channelId + "_at_risk").hashCode(), notification)
+        prefs.edit().putString(lastExpiryKey, expiresAt).apply()
     }
 
     private fun notifyWatchStreakIncreased(channelId: String, channelName: String, count: Int) {
