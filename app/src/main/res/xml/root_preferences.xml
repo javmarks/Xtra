@@ -31,6 +31,13 @@
         android:summary="@string/watch_streak_notifications_summary"
         app:iconSpaceReserved="false"
         app:singleLineTitle="false" />
+    <SwitchPreferenceCompat
+        android:defaultValue="false"
+        android:key="bits_badge_notifications_enabled"
+        android:title="@string/bits_badge_notifications_enabled"
+        android:summary="@string/bits_badge_notifications_summary"
+        app:iconSpaceReserved="false"
+        app:singleLineTitle="false" />
 
     <Preference
         android:key="drops_inventory"
