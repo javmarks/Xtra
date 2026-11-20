@@ -166,6 +166,7 @@ class ChatViewModel(
     val channelPointRewardsStatus = MutableStateFlow("Not loaded")
     val watchStreak = MutableStateFlow<WatchStreakInfo?>(null)
     private var watchStreakChannelId: String? = null
+    private var watchStreakChannelLogin: String? = null
     val watchStreakStatus = MutableStateFlow("Not loaded")
     val pinnedChatMessage = MutableStateFlow<PinnedChatMessageResponse.PinnedMessage?>(null)
     val moderationLogs = MutableStateFlow<List<String>>(emptyList())
@@ -465,7 +466,7 @@ class ChatViewModel(
                 watchStreakChannelId = channelId
                 watchStreak.value = parsedStreak
                 if (channelId != null && previousStreak != null && parsedStreak != null && parsedStreak.count > previousStreak.count) {
-                    notifyWatchStreakIncreased(channelId, parsedStreak.count)
+                    notifyWatchStreakIncreased(channelId, watchStreakChannelLogin ?: channelId, parsedStreak.count)
                 }
                 watchStreakStatus.value = if (parsedStreak == null) {
                     "No active watch streak returned by Twitch"
@@ -488,7 +489,7 @@ class ChatViewModel(
         }
     }
 
-    private fun notifyWatchStreakIncreased(channelId: String, count: Int) {
+    private fun notifyWatchStreakIncreased(channelId: String, channelName: String, count: Int) {
         val prefs = applicationContext.prefs()
         if (!prefs.getBoolean(C.WATCH_STREAK_NOTIFICATIONS_ENABLED, false)) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -511,7 +512,7 @@ class ChatViewModel(
         val notification = NotificationCompat.Builder(applicationContext, notificationChannelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(applicationContext.getString(R.string.watch_streak_increased_title))
-            .setContentText(applicationContext.getString(R.string.watch_streak_increased_text, count))
+            .setContentText(applicationContext.getString(R.string.watch_streak_increased_text, channelName, count))
             .setAutoCancel(true)
             .build()
         notificationManager.notify(channelId.hashCode(), notification)
@@ -1715,6 +1716,7 @@ class ChatViewModel(
     }
 
     fun startLiveChat(channelId: String?, channelLogin: String) {
+        watchStreakChannelLogin = channelLogin
         loadModerationLogs(channelId)
         stopLiveChat()
         started = true
@@ -2381,6 +2383,9 @@ class ChatViewModel(
                 }?.takeIf { it > 0 }
                 if (count != null) {
                     val current = watchStreak.value
+                    if (count > (current?.count ?: 0) && !channelId.isNullOrBlank()) {
+                        notifyWatchStreakIncreased(channelId, channelLogin, count)
+                    }
                     watchStreak.value = if (current != null) {
                         current.copy(count = count, bonusPoints = points ?: current.bonusPoints)
                     } else {
