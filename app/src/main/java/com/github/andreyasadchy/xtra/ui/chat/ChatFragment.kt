@@ -703,7 +703,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     if (streak.threshold > 0) append("\nNext milestone: ${streak.threshold}")
                     if (streak.bonusPoints > 0) append("\nMilestone bonus: +${NumberFormat.getIntegerInstance().format(streak.bonusPoints)} Channel Points")
                     expiry?.let { append("\n$it") }
-                    if (streak.count == 0) append("\nRefresh status: ${viewModel.watchStreakStatus.value}")
+                    append("\nRefresh status: ${viewModel.watchStreakStatus.value}")
                 })
             if (streak.shareStatus == "CAN_SHARE" && !streak.milestoneId.isNullOrBlank()) {
                 dialog.setPositiveButton("Share Watch Streak") { _, _ ->
