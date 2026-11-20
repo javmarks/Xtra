@@ -29,6 +29,9 @@ import com.github.andreyasadchy.xtra.model.ui.OfflineVideo
 import com.github.andreyasadchy.xtra.repository.NotificationsRepository
 import com.github.andreyasadchy.xtra.repository.OfflineVideosRepository
 import com.github.andreyasadchy.xtra.repository.PlayerRepository
+import com.github.andreyasadchy.xtra.repository.GraphQLRepository
+import com.github.andreyasadchy.xtra.repository.DropsInventoryParser
+import com.github.andreyasadchy.xtra.repository.DropsInventorySnapshot
 import com.github.andreyasadchy.xtra.repository.RecentSearchesRepository
 import com.github.andreyasadchy.xtra.ui.main.LiveNotificationWorker
 import com.github.andreyasadchy.xtra.ui.main.MainActivity
@@ -74,6 +77,7 @@ class SettingsViewModel(
     private val cronetExecutor: Lazy<ExecutorService>,
     private val okHttpClient: Lazy<OkHttpClient>,
     private val json: Json,
+    private val graphQLRepository: GraphQLRepository,
 ) : ViewModel() {
 
     val updateUrl = MutableSharedFlow<String?>()
@@ -81,6 +85,11 @@ class SettingsViewModel(
     var updateJob: Job? = null
     val updateProgress = MutableSharedFlow<Int>()
     val closeUpdateDialog = MutableSharedFlow<Boolean>()
+
+    suspend fun loadDropsInventory(networkLibrary: String?, headers: Map<String, String>): DropsInventorySnapshot? {
+        val response = graphQLRepository.loadDropsInventory(networkLibrary, headers)
+        return DropsInventoryParser.parse(response)
+    }
 
     fun deletePositions() {
         viewModelScope.launch {
@@ -513,7 +522,7 @@ class SettingsViewModel(
             initializer {
                 val application = (this[APPLICATION_KEY] as XtraApp)
                 val xtraModule = application.xtraModule
-                SettingsViewModel(application.applicationContext, xtraModule.playerRepository, xtraModule.offlineVideosRepository, xtraModule.recentSearchesRepository, xtraModule.notificationsRepository, xtraModule.database, xtraModule.httpEngine, xtraModule.cronetEngine, xtraModule.cronetExecutor, xtraModule.okHttpClient, xtraModule.json)
+                SettingsViewModel(application.applicationContext, xtraModule.playerRepository, xtraModule.offlineVideosRepository, xtraModule.recentSearchesRepository, xtraModule.notificationsRepository, xtraModule.database, xtraModule.httpEngine, xtraModule.cronetEngine, xtraModule.cronetExecutor, xtraModule.okHttpClient, xtraModule.json, xtraModule.graphQLRepository)
             }
         }
     }
