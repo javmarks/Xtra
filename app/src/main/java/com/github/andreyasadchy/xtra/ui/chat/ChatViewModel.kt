@@ -231,45 +231,7 @@ class ChatViewModel(
         if (chatReadIRCSocket == null && chatReadWebSocket == null && eventSub == null && channelLogin != null) {
             messageLimit = applicationContext.prefs().getInt(C.CHAT_LIMIT, 600)
             startLiveChat(channelId, channelLogin)
-            loadSharedChatParticipants(channelId)
-            // Refresh Shared Chat participants periodically instead of creating three
-            // cost-bearing EventSub subscriptions for every open channel.
-            sharedChatRefreshJob?.cancel()
-            sharedChatRefreshJob = viewModelScope.launch {
-                var accountRefreshMinutes = 0
-                while (started) {
-                    delay(60_000L)
-                    if (started) {
-                        loadSharedChatParticipants(channelId)
-                        refreshPinnedChatMessage(channelId)
-                        // Keep Watch Streak polling at the previous five-minute interval.
-                        // One-minute polling did not produce fresher visible data and may add avoidable network pressure.
-                        accountRefreshMinutes++
-                        if (accountRefreshMinutes >= 5) {
-                            refreshWatchStreak(channelId)
-                            accountRefreshMinutes = 0
-                            refreshChannelPointsBalance(channelLogin)
-                        }
-                    }
-                }
-            }
-            refreshChannelPointsBalance(channelLogin)
-            refreshWatchStreak(channelId)
-            // Retry only the initial account/channel data fetches; do not create
-            // additional chat sockets or EventSub subscriptions.
-            channelPointsRetryJob?.cancel()
-            channelPointsRetryJob = viewModelScope.launch {
-                // Twitch may initially return a zero streak while the current broadcast
-                // is still being qualified. Recheck zero as well as missing data, including
-                // after the minimum broadcast window; never increment the count locally.
-                for (waitMs in listOf(20_000L, 60_000L, 120_000L, 600_000L)) {
-                    delay(waitMs)
-                    if (!started) break
-                    if (channelPointsBalance.value == null) refreshChannelPointsBalance(channelLogin)
-                    if ((watchStreak.value?.count ?: 0) == 0) refreshWatchStreak(channelId)
-                }
-            }
-            refreshPinnedChatMessage(channelId)
+            startLiveRefreshJobs(channelId, channelLogin)
             addChatter(channelName)
             loadEmotes(channelId, channelLogin)
             if (applicationContext.prefs().getBoolean(C.CHAT_RECENT, true)) {
@@ -815,8 +777,48 @@ class ChatViewModel(
     }
 
     fun resumeLive(channelId: String?, channelLogin: String?) {
-        if ((chatReadJob?.isActive == false) && channelLogin != null && autoReconnect) {
+        // stopLiveChat() clears chatReadJob, so a null job also means the reader needs
+        // reconnecting after the fragment returns from the stopped state.
+        if (chatReadJob?.isActive != true && channelLogin != null && autoReconnect) {
             startLiveChat(channelId, channelLogin)
+            startLiveRefreshJobs(channelId, channelLogin)
+        }
+    }
+
+    private fun startLiveRefreshJobs(channelId: String?, channelLogin: String?) {
+        if (!started) return
+        sharedChatRefreshJob?.cancel()
+        channelPointsRetryJob?.cancel()
+        loadSharedChatParticipants(channelId)
+        refreshChannelPointsBalance(channelLogin)
+        refreshWatchStreak(channelId)
+        refreshPinnedChatMessage(channelId)
+        // Keep Shared Chat and pinned-message refreshes alive after returning to a stream.
+        // Account data uses the existing five-minute interval to avoid excess requests.
+        sharedChatRefreshJob = viewModelScope.launch {
+            var accountRefreshMinutes = 0
+            while (started) {
+                delay(60_000L)
+                if (started) {
+                    loadSharedChatParticipants(channelId)
+                    refreshPinnedChatMessage(channelId)
+                    accountRefreshMinutes++
+                    if (accountRefreshMinutes >= 5) {
+                        refreshWatchStreak(channelId)
+                        accountRefreshMinutes = 0
+                        refreshChannelPointsBalance(channelLogin)
+                    }
+                }
+            }
+        }
+        // Retry initial account/channel fetches when Twitch has not populated the data yet.
+        channelPointsRetryJob = viewModelScope.launch {
+            for (waitMs in listOf(20_000L, 60_000L, 120_000L, 600_000L)) {
+                delay(waitMs)
+                if (!started) break
+                if (channelPointsBalance.value == null) refreshChannelPointsBalance(channelLogin)
+                if ((watchStreak.value?.count ?: 0) == 0) refreshWatchStreak(channelId)
+            }
         }
     }
 
