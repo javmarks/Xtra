@@ -682,6 +682,12 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     .setPositiveButton("Retry") { _, _ ->
                         viewModel.refreshWatchStreakForUi(requireArguments().getString(KEY_CHANNEL_ID))
                     }
+                    .setNeutralButton("Copy diagnostics") { _, _ ->
+                        val diagnostics = viewModel.watchStreakStatus.value
+                        val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Watch Streak diagnostics", diagnostics))
+                        Toast.makeText(requireContext(), "Watch Streak diagnostics copied", Toast.LENGTH_SHORT).show()
+                    }
                     .setNegativeButton(android.R.string.cancel, null)
                     .show()
                 return@setOnClickListener
@@ -705,6 +711,12 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     expiry?.let { append("\n$it") }
                     append("\nRefresh status: ${viewModel.watchStreakStatus.value}")
                 })
+            dialog.setNeutralButton("Copy diagnostics") { _, _ ->
+                val diagnostics = viewModel.watchStreakStatus.value
+                val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Watch Streak diagnostics", diagnostics))
+                Toast.makeText(requireContext(), "Watch Streak diagnostics copied", Toast.LENGTH_SHORT).show()
+            }
             if (streak.shareStatus == "CAN_SHARE" && !streak.milestoneId.isNullOrBlank()) {
                 dialog.setPositiveButton("Share Watch Streak") { _, _ ->
                     viewModel.shareWatchStreak(requireArguments().getString(KEY_CHANNEL_ID)) { success, error ->
