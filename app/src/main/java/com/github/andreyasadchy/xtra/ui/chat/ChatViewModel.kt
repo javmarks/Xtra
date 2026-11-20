@@ -2590,7 +2590,9 @@ class ChatViewModel(
             } else {
                 // Badge unlock notices are account-specific and independent of chat notice visibility.
                 if (event.optString("notice_type") == "bits_badge_tier") {
-                    notifyBitsBadgeEarned(event, networkLibrary, helixHeaders, accountId, channelLogin)
+                    viewModelScope.launch {
+                        notifyBitsBadgeEarned(event, networkLibrary, helixHeaders, accountId, channelLogin)
+                    }
                 }
                 // Leaderboard tracking must not depend on whether the user has chat notices hidden.
                 recordTopGifterEvent(event, networkLibrary, helixHeaders)
