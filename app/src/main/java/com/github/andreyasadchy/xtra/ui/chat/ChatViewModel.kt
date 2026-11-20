@@ -167,6 +167,7 @@ class ChatViewModel(
     val watchStreak = MutableStateFlow<WatchStreakInfo?>(null)
     private var watchStreakChannelId: String? = null
     private var watchStreakChannelLogin: String? = null
+    private val watchStreakUpdateLock = Any()
     val watchStreakStatus = MutableStateFlow("Not loaded")
     val pinnedChatMessage = MutableStateFlow<PinnedChatMessageResponse.PinnedMessage?>(null)
     val moderationLogs = MutableStateFlow<List<String>>(emptyList())
@@ -424,11 +425,18 @@ class ChatViewModel(
                         shareStatus = viewerMilestone.shareStatus.orEmpty(),
                     )
                 }
-                val previousStreak = if (watchStreakChannelId == channelId) watchStreak.value else null
-                watchStreakChannelId = channelId
-                watchStreak.value = parsedStreak
-                if (channelId != null && previousStreak != null && parsedStreak != null && parsedStreak.count > previousStreak.count) {
-                    notifyWatchStreakIncreased(channelId, watchStreakChannelLogin ?: channelId, parsedStreak.count)
+                if (parsedStreak == null) {
+                    synchronized(watchStreakUpdateLock) {
+                        if (watchStreakChannelId == channelId) watchStreak.value = null
+                        watchStreakChannelId = channelId
+                    }
+                } else {
+                    updateWatchStreakFromTwitch(
+                        channelId = channelId,
+                        channelName = watchStreakChannelLogin ?: channelId,
+                        incoming = parsedStreak,
+                        notifyWhenFirstSeen = false,
+                    )
                 }
                 watchStreakStatus.value = if (parsedStreak == null) {
                     "No active watch streak returned by Twitch"
@@ -447,6 +455,40 @@ class ChatViewModel(
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 watchStreakStatus.value = "Request failed: ${e.javaClass.simpleName}: ${e.message ?: "no details"}"
                 // Keep the last known streak during transient GraphQL/network failures.
+            }
+        }
+    }
+
+    // IRC, EventSub and GraphQL can report the same milestone in different orders.
+    // Keep the highest Twitch-confirmed count and persist the last notified count per channel.
+    private fun updateWatchStreakFromTwitch(
+        channelId: String,
+        channelName: String,
+        incoming: WatchStreakInfo,
+        notifyWhenFirstSeen: Boolean,
+    ) {
+        synchronized(watchStreakUpdateLock) {
+            val current = if (watchStreakChannelId == channelId) watchStreak.value else null
+            val increased = current != null && incoming.count > current.count
+            val firstEvent = current == null && notifyWhenFirstSeen
+            val lastNotifiedKey = "watch_streak_last_notified_$channelId"
+            val lastNotified = applicationContext.prefs().getInt(lastNotifiedKey, 0)
+            if ((increased || firstEvent) && incoming.count > lastNotified) {
+                applicationContext.prefs().edit().putInt(lastNotifiedKey, incoming.count).apply()
+                notifyWatchStreakIncreased(channelId, channelName, incoming.count)
+            }
+
+            // Never let a delayed response or duplicate event move the displayed count backwards.
+            if (current == null || incoming.count >= current.count) {
+                watchStreakChannelId = channelId
+                watchStreak.value = if (current != null && incoming.count == current.count) {
+                    incoming.copy(
+                        bonusPoints = if (incoming.bonusPoints > 0) incoming.bonusPoints else current.bonusPoints,
+                        milestoneId = incoming.milestoneId ?: current.milestoneId,
+                        shareStatus = incoming.shareStatus.ifBlank { current.shareStatus },
+                        expiresAt = incoming.expiresAt ?: current.expiresAt,
+                    )
+                } else incoming
             }
         }
     }
@@ -2018,24 +2060,15 @@ class ChatViewModel(
             ) {
                 val count = message.tags["msg-param-value"]?.toIntOrNull()?.takeIf { it > 0 }
                 if (count != null && !channelId.isNullOrBlank()) {
-                    val current = if (watchStreakChannelId == channelId) watchStreak.value else null
-                    if (count > (current?.count ?: 0)) {
-                        notifyWatchStreakIncreased(channelId, channelLogin, count)
-                    }
-                    if (current == null || count >= current.count) {
-                        watchStreakChannelId = channelId
-                        watchStreak.value = if (current != null) {
-                            current.copy(count = count)
-                        } else {
-                            WatchStreakInfo(
-                                count = count,
-                                threshold = 0,
-                                bonusPoints = 0,
-                                state = "ACTIVE",
-                            )
-                        }
-                        watchStreakStatus.value = "Updated from Twitch Watch Streak chat notice"
-                    }
+                    updateWatchStreakFromTwitch(
+                        channelId = channelId,
+                        channelName = channelLogin,
+                        incoming = (watchStreak.value?.takeIf { watchStreakChannelId == channelId } ?: WatchStreakInfo(
+                            count = count, threshold = 0, bonusPoints = 0, state = "ACTIVE",
+                        )).copy(count = count),
+                        notifyWhenFirstSeen = true,
+                    )
+                    watchStreakStatus.value = "Updated from Twitch Watch Streak chat notice"
                 }
             }
             if (!userNotice || showUserNotice) {
@@ -2413,19 +2446,15 @@ class ChatViewModel(
                     it.optInt("channel_points_awarded", it.optInt("points_awarded", 0))
                 }?.takeIf { it > 0 }
                 if (count != null) {
-                    val current = if (watchStreakChannelId == channelId) watchStreak.value else null
-                    if (count > (current?.count ?: 0) && !channelId.isNullOrBlank()) {
-                        notifyWatchStreakIncreased(channelId, channelLogin, count)
-                    }
-                    watchStreakChannelId = channelId
-                    watchStreak.value = if (current != null) {
-                        current.copy(count = count, bonusPoints = points ?: current.bonusPoints)
-                    } else {
-                        WatchStreakInfo(
-                            count = count,
-                            threshold = 0,
-                            bonusPoints = points ?: 0,
-                            state = "ACTIVE",
+                    if (!channelId.isNullOrBlank()) {
+                        val current = watchStreak.value?.takeIf { watchStreakChannelId == channelId }
+                        updateWatchStreakFromTwitch(
+                            channelId = channelId,
+                            channelName = channelLogin,
+                            incoming = (current ?: WatchStreakInfo(
+                                count = count, threshold = 0, bonusPoints = 0, state = "ACTIVE",
+                            )).copy(count = count, bonusPoints = points ?: current?.bonusPoints ?: 0),
+                            notifyWhenFirstSeen = true,
                         )
                     }
                     watchStreakStatus.value = "Updated from Twitch watch-streak notification"
