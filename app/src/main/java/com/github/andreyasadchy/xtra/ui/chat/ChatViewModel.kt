@@ -467,10 +467,11 @@ class ChatViewModel(
                 if (channelId != null && previousStreak != null && parsedStreak != null && parsedStreak.count > previousStreak.count) {
                     notifyWatchStreakIncreased(channelId, parsedStreak.count)
                 }
-                watchStreakStatus.value = when {
-                    parsedStreak == null -> "No active watch streak returned by Twitch"
-                    parsedStreak.count == 0 -> buildString {
-                        append("Twitch returned count=0")
+                watchStreakStatus.value = if (parsedStreak == null) {
+                    "No active watch streak returned by Twitch"
+                } else {
+                    buildString {
+                        append("Twitch returned count=${parsedStreak.count}")
                         append(" · state=${parsedStreak.state.ifBlank { "missing" }}")
                         append(" · threshold=${parsedStreak.threshold}")
                         append(" · bonus=${parsedStreak.bonusPoints}")
@@ -478,7 +479,6 @@ class ChatViewModel(
                         append(" · shareStatus=${parsedStreak.shareStatus.ifBlank { "missing" }}")
                         append(" · expiresAt=${parsedStreak.expiresAt ?: "missing"}")
                     }
-                    else -> "Watch streak loaded"
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
