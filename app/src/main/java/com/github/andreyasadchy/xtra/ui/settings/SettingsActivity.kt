@@ -373,10 +373,55 @@ class SettingsActivity : AppCompatActivity() {
                 true
             }
             findPreference<Preference>("drops_inventory")?.setOnPreferenceClickListener {
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, "https://www.twitch.tv/drops/inventory".toUri()))
-                } catch (e: ActivityNotFoundException) {
-                    Toast.makeText(requireContext(), R.string.no_browser_found, Toast.LENGTH_LONG).show()
+                val loadingDialog = AlertDialog.Builder(requireContext())
+                    .setTitle("Drops inventory")
+                    .setMessage("Loading your Twitch Drops…")
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .create()
+                loadingDialog.show()
+                lifecycleScope.launch {
+                    val result = runCatching {
+                        viewModel.loadDropsInventory(
+                            requireContext().prefs().getString(C.NETWORK_LIBRARY, C.OKHTTP),
+                            TwitchApiHelper.getGQLHeaders(requireContext(), true)
+                        )
+                    }
+                    if (!isAdded) return@launch
+                    loadingDialog.dismiss()
+                    val snapshot = result.getOrNull()
+                    val message = when {
+                        result.isFailure -> "Couldn't load your Drops inventory. Check your connection and try again."
+                        snapshot == null -> "Twitch didn't return a valid Drops inventory. Check that you're logged in and try again."
+                        snapshot.campaigns.isEmpty() -> "You don't have any active Drops campaigns right now."
+                        else -> buildString {
+                            snapshot.campaigns.forEachIndexed { index, campaign ->
+                                if (index > 0) append("\\n\\n")
+                                append(campaign.name)
+                                campaign.gameName?.let { append(" · ").append(it) }
+                                campaign.drops.forEach { drop ->
+                                    append("\\n  ").append(drop.name)
+                                    if (drop.currentMinutes != null && drop.requiredMinutes != null) {
+                                        append(" — ").append(drop.currentMinutes).append("/")
+                                            .append(drop.requiredMinutes).append(" min")
+                                    }
+                                    when (drop.isClaimed) {
+                                        true -> append(" · Claimed")
+                                        false -> if (drop.currentMinutes != null && drop.requiredMinutes != null &&
+                                            drop.currentMinutes >= drop.requiredMinutes
+                                        ) append(" · Ready to claim")
+                                    }
+                                    drop.rewards.forEach { reward ->
+                                        append("\\n    ").append(reward.name)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    AlertDialog.Builder(requireContext())
+                        .setTitle("Drops inventory")
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
                 }
                 true
             }
