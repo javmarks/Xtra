@@ -584,7 +584,9 @@ class ChatViewModel(
         val tier = event.optJSONObject("bits_badge_tier")?.optInt("tier", 0) ?: 0
         if (tier <= 0) return
         val eventId = event.optString("message_id").takeIf { it.isNotBlank() } ?: return
-        if (!seenBitsBadgeEvents.add(eventId)) return
+        val storedIds = prefs.getStringSet("bits_badge_notified_event_ids", emptySet()).orEmpty()
+        if (eventId in storedIds || !seenBitsBadgeEvents.add(eventId)) return
+        var notificationPosted = false
 
         try {
             var badge = synchronized(globalBadges) {
@@ -653,12 +655,13 @@ class ChatViewModel(
             }
             notificationManager.notify(("bits_badge_$eventId").hashCode(), builder.build())
 
-            val storedIds = prefs.getStringSet("bits_badge_notified_event_ids", emptySet())?.toMutableSet() ?: mutableSetOf()
-            storedIds.add(eventId)
-            while (storedIds.size > 100) storedIds.remove(storedIds.first())
-            prefs.edit().putStringSet("bits_badge_notified_event_ids", storedIds).apply()
+            val updatedIds = prefs.getStringSet("bits_badge_notified_event_ids", emptySet())?.toMutableSet() ?: mutableSetOf()
+            updatedIds.add(eventId)
+            while (updatedIds.size > 100) updatedIds.remove(updatedIds.first())
+            prefs.edit().putStringSet("bits_badge_notified_event_ids", updatedIds).apply()
+            notificationPosted = true
         } finally {
-            // Keep successful/in-flight IDs in memory to prevent duplicate notices on reconnect.
+            if (!notificationPosted) seenBitsBadgeEvents.remove(eventId)
         }
     }
 
