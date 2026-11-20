@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.ContentResolver
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
 import android.util.Base64
 import android.util.JsonReader
@@ -20,6 +21,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.github.andreyasadchy.xtra.R
 import com.github.andreyasadchy.xtra.XtraApp
+import com.bumptech.glide.Glide
 import com.github.andreyasadchy.xtra.model.chat.Badge
 import com.github.andreyasadchy.xtra.model.chat.ChannelPointReward
 import com.github.andreyasadchy.xtra.model.chat.WatchStreakInfo
@@ -118,6 +120,7 @@ class ChatViewModel(
     private var stvUserId: String? = null
     private var stvLastPresenceUpdate: Long? = null
     private val allEmotes = mutableListOf<String>()
+    private val seenBitsBadgeEvents = ConcurrentHashMap.newKeySet<String>()
     private var usedRaidId: String? = null
     private var usedPollId: String? = null
     private var pollTimeoutJob: Job? = null
@@ -561,6 +564,102 @@ class ChatViewModel(
             .setAutoCancel(true)
             .build()
         notificationManager.notify(channelId.hashCode(), notification)
+    }
+
+    private suspend fun notifyBitsBadgeEarned(
+        event: JSONObject,
+        networkLibrary: String?,
+        helixHeaders: Map<String, String>,
+        accountId: String?,
+        channelLogin: String,
+    ) {
+        val prefs = applicationContext.prefs()
+        if (!prefs.getBoolean(C.BITS_BADGE_NOTIFICATIONS_ENABLED, false)) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return
+        if (accountId.isNullOrBlank() || event.optString("chatter_user_id") != accountId) return
+        if (event.optString("notice_type") != "bits_badge_tier") return
+
+        val tier = event.optJSONObject("bits_badge_tier")?.optInt("tier", 0) ?: 0
+        if (tier <= 0) return
+        val eventId = event.optString("message_id").takeIf { it.isNotBlank() } ?: return
+        if (!seenBitsBadgeEvents.add(eventId)) return
+
+        try {
+            var badge = synchronized(globalBadges) {
+                globalBadges.firstOrNull { it.setId.equals("bits", ignoreCase = true) && it.version == tier.toString() }
+            }
+            if (badge == null) {
+                val response = helixRepository.getGlobalBadges(networkLibrary, helixHeaders)
+                val bitsSet = response.data.firstOrNull { it.setId.equals("bits", ignoreCase = true) }
+                val version = bitsSet?.versions?.firstOrNull { it.id == tier.toString() }
+                if (version != null) {
+                    badge = TwitchBadge(
+                        setId = "bits",
+                        version = tier.toString(),
+                        url1x = version.url1x,
+                        url2x = version.url2x,
+                        url4x = version.url4x,
+                        title = version.title,
+                        description = version.description,
+                        clickAction = version.clickAction,
+                        clickUrl = version.clickUrl,
+                    )
+                    synchronized(globalBadges) { globalBadges.add(badge!!) }
+                }
+            }
+            val resolvedBadge = badge ?: return
+            val badgeName = resolvedBadge.title?.takeIf { it.isNotBlank() } ?: return
+            val imageUrl = resolvedBadge.url2x ?: resolvedBadge.url1x ?: resolvedBadge.url4x
+            val bitmap = if (!imageUrl.isNullOrBlank()) {
+                withContext(Dispatchers.IO) {
+                    runCatching {
+                        val target = Glide.with(applicationContext).asBitmap().load(imageUrl).submit()
+                        try {
+                            target.get()
+                        } finally {
+                            Glide.with(applicationContext).clear(target)
+                        }
+                    }.getOrNull()
+                }
+            } else null
+
+            val channelName = event.optString("source_broadcaster_user_name")
+                .takeIf { it.isNotBlank() }
+                ?: event.optString("broadcaster_user_name").takeIf { it.isNotBlank() }
+                ?: channelLogin
+            val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val notificationChannelId = applicationContext.getString(R.string.notification_bits_badge_channel_id)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                notificationManager.getNotificationChannel(notificationChannelId) == null
+            ) {
+                notificationManager.createNotificationChannel(
+                    NotificationChannel(
+                        notificationChannelId,
+                        applicationContext.getString(R.string.notification_bits_badge_channel_title),
+                        NotificationManager.IMPORTANCE_DEFAULT,
+                    )
+                )
+            }
+            val builder = NotificationCompat.Builder(applicationContext, notificationChannelId)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(applicationContext.getString(R.string.bits_badge_earned_title))
+                .setContentText(applicationContext.getString(R.string.bits_badge_earned_text, badgeName, channelName))
+                .setAutoCancel(true)
+            if (bitmap != null) {
+                builder.setLargeIcon(bitmap)
+                    .setStyle(NotificationCompat.BigPictureStyle().bigPicture(bitmap).bigLargeIcon(bitmap))
+            }
+            notificationManager.notify(("bits_badge_$eventId").hashCode(), builder.build())
+
+            val storedIds = prefs.getStringSet("bits_badge_notified_event_ids", emptySet())?.toMutableSet() ?: mutableSetOf()
+            storedIds.add(eventId)
+            while (storedIds.size > 100) storedIds.remove(storedIds.first())
+            prefs.edit().putStringSet("bits_badge_notified_event_ids", storedIds).apply()
+        } finally {
+            // Keep successful/in-flight IDs in memory to prevent duplicate notices on reconnect.
+        }
     }
 
     fun shareWatchStreak(channelId: String?, onResult: (Boolean, String?) -> Unit) {
@@ -2486,6 +2585,10 @@ class ChatViewModel(
                     }
                 }
             } else {
+                // Badge unlock notices are account-specific and independent of chat notice visibility.
+                if (event.optString("notice_type") == "bits_badge_tier") {
+                    notifyBitsBadgeEarned(event, networkLibrary, helixHeaders, accountId, channelLogin)
+                }
                 // Leaderboard tracking must not depend on whether the user has chat notices hidden.
                 recordTopGifterEvent(event, networkLibrary, helixHeaders)
                 if (showUserNotice) {
