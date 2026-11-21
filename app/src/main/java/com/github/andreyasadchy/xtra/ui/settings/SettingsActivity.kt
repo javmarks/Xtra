@@ -409,6 +409,7 @@ class SettingsActivity : AppCompatActivity() {
                                         false -> if (drop.currentMinutes != null && drop.requiredMinutes != null &&
                                             drop.currentMinutes >= drop.requiredMinutes
                                         ) append(" · Ready to claim")
+                                        null -> Unit
                                     }
                                     drop.rewards.forEach { reward ->
                                         append("\\n    ").append(reward.name)
