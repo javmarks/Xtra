@@ -207,12 +207,6 @@ class ExoPlayerService : BasePlaybackService() {
                         if (type == STREAM && !streamSnapshotSaved) {
                             streamSnapshotSaved = true
                             updateSavedPosition()
-                            restoredPlaybackStateId?.let { savedId ->
-                                restoredPlaybackStateId = null
-                                lifecycleScope.launch {
-                                    xtraModule.playerRepository.deletePlaybackState(savedId)
-                                }
-                            }
                         }
                         if (!loaded) {
                             loaded = true
