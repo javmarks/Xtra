@@ -134,6 +134,9 @@ class ExoPlayerService : BasePlaybackService() {
     private var sleepTimerEndTime = 0L
     private var lastSavedPosition: Long? = null
     private var savePositionTimer: Timer? = null
+    private var preserveSavedPlaybackStateOnStart = false
+    private var restoredPlaybackStateId: Int? = null
+    private var streamSnapshotSaved = false
     private var positionSaveJob: Job? = null
     private var stopServiceTimer: Timer? = null
 
@@ -201,6 +204,16 @@ class ExoPlayerService : BasePlaybackService() {
 
                 override fun onTracksChanged(tracks: Tracks) {
                     if (!tracks.isEmpty) {
+                        if (type == STREAM && !streamSnapshotSaved) {
+                            streamSnapshotSaved = true
+                            updateSavedPosition()
+                            restoredPlaybackStateId?.let { savedId ->
+                                restoredPlaybackStateId = null
+                                lifecycleScope.launch {
+                                    xtraModule.playerRepository.deletePlaybackState(savedId)
+                                }
+                            }
+                        }
                         if (!loaded) {
                             loaded = true
                             serviceListener?.loaded()
@@ -760,7 +773,8 @@ class ExoPlayerService : BasePlaybackService() {
 
     private fun start(restorePauseState: Boolean) {
         lifecycleScope.launch {
-            restorePlaybackState()
+            restoredPlaybackStateId = restorePlaybackState(preserveSavedPlaybackStateOnStart)
+            preserveSavedPlaybackStateOnStart = false
             when (type) {
                 STREAM -> {
                     started = true
@@ -2974,6 +2988,13 @@ class ExoPlayerService : BasePlaybackService() {
             INTENT_FAST_FORWARD -> seekForward()
             INTENT_START -> create(restorePauseState = true)
             Intent.ACTION_MEDIA_BUTTON -> create(restorePauseState = false)
+            null -> lifecycleScope.launch {
+                val savedState = xtraModule.playerRepository.getPlaybackStates().firstOrNull()
+                if (!created && savedState?.type == STREAM && !savedState.streamId.isNullOrBlank() && !savedState.channelLogin.isNullOrBlank()) {
+                    preserveSavedPlaybackStateOnStart = true
+                    create(restorePauseState = true)
+                }
+            }
         }
         return START_STICKY
     }
