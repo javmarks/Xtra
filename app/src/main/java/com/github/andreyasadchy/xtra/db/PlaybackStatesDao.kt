@@ -18,6 +18,9 @@ interface PlaybackStatesDao {
     @Query("DELETE FROM playback_states")
     fun deleteAll()
 
+    @Query("DELETE FROM playback_states WHERE id = :id")
+    fun deleteById(id: Int)
+
     @Transaction
     fun replaceItems(items: List<PlaybackState>) {
         deleteAll()
