@@ -2995,11 +2995,23 @@ class ExoPlayerService : BasePlaybackService() {
     }
 
     override fun onDestroy() {
+        sleepTimer?.cancel()
+        sleepTimer = null
+        savePositionTimer?.cancel()
+        savePositionTimer = null
+        stopServiceTimer?.cancel()
+        stopServiceTimer = null
+        dropsSegmentPlaybackActive = false
+        dropsSegmentJob?.cancel()
+        secondaryPlayerTimerJob?.cancel()
+        adDelayJob?.cancel()
+        bitmapLoadJob?.cancel()
+        dynamicsProcessing?.release()
+        dynamicsProcessing = null
         super.onDestroy()
         player?.release()
         secondaryPlayer?.release()
         session?.release()
-        bitmapLoadJob?.cancel()
         notificationManager?.cancel(NOTIFICATION_ID)
     }
 
