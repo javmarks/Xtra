@@ -2119,4 +2119,8 @@ class PlayerRepository(
     suspend fun deletePlaybackStates() = withContext(Dispatchers.IO) {
         playbackStatesDao.deleteAll()
     }
+
+    suspend fun deletePlaybackState(id: Int) = withContext(Dispatchers.IO) {
+        playbackStatesDao.deleteById(id)
+    }
 }
