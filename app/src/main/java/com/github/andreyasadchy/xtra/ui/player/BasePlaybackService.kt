@@ -125,9 +125,11 @@ abstract class BasePlaybackService : LifecycleService() {
         super.onDestroy()
     }
 
-    protected suspend fun restorePlaybackState() {
+    protected suspend fun restorePlaybackState(preserveSavedState: Boolean = false): Int? {
         val savedState = xtraModule.playerRepository.getPlaybackStates().firstOrNull()
-        xtraModule.playerRepository.deletePlaybackStates()
+        if (!preserveSavedState) {
+            xtraModule.playerRepository.deletePlaybackStates()
+        }
         if (savedState != null) {
             type = savedState.type
             streamId = savedState.streamId
@@ -168,6 +170,7 @@ abstract class BasePlaybackService : LifecycleService() {
             currentStreamProxy = savedState.currentStreamProxy
             skipAccessToken = savedState.skipAccessToken
         }
+        return savedState?.id
     }
 
     protected suspend fun savePlaybackState(position: Long?, paused: Boolean) {
