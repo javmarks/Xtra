@@ -2623,7 +2623,7 @@ class ChatViewModel(
                         moderationEventSubManager.shouldReportSubscriptionError()
                     ) {
                         onMessage(ChatMessage(
-                            systemMsg = "Twitch EventSub subscription failed: ${e.message ?: "Unknown error"}",
+                            systemMsg = "Twitch EventSub $type subscription failed: ${e.message ?: "Unknown error"}",
                             fullMsg = e.stackTraceToString()
                         ))
                     }
