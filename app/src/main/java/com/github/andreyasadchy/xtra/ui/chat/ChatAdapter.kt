@@ -121,8 +121,14 @@ class ChatAdapter(
         val chatMessage = synchronized(messages) {
             displayedMessages().getOrNull(position)
         } ?: return
-        // Source-channel avatars are exclusive to the merged All Chats renderer.
-        bindMessage(holder, chatMessage)
+        // Show source-channel avatars in native individual chat only for messages
+        // that Twitch identifies as originating from another Shared Chat broadcaster.
+        // Ordinary messages keep the normal individual-chat layout.
+        val sourceRoomId = chatMessage.sourceRoomId
+        val roomId = chatMessage.roomId
+        val isSharedChatMessage = !sourceRoomId.isNullOrBlank() &&
+            !roomId.isNullOrBlank() && sourceRoomId != roomId
+        bindMessage(holder, chatMessage, showSourceChannel = isSharedChatMessage)
     }
 
     fun bindMessage(holder: ViewHolder, chatMessage: ChatMessage, showSourceChannel: Boolean = false) {
