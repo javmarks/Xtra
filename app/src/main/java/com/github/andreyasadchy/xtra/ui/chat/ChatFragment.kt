@@ -1451,6 +1451,29 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         repeatOnLifecycle(Lifecycle.State.STARTED) {
                             viewModel.isNativeSharedChatActive.collectLatest { active ->
                                 adapter?.setNativeSharedChatActive(active)
+                                binding.sharedChatIndicator.isVisible = active
+                            }
+                        }
+                    }
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        repeatOnLifecycle(Lifecycle.State.STARTED) {
+                            viewModel.sharedChatStartedAt.collectLatest { startedAt ->
+                                val banner = binding.sharedChatStartedBanner
+                                if (startedAt == null) {
+                                    banner.isGone = true
+                                } else {
+                                    val remaining = 10_000L - (System.currentTimeMillis() - startedAt)
+                                    if (remaining > 0L) {
+                                        banner.isVisible = true
+                                        banner.postDelayed({
+                                            if (_binding != null && viewModel.sharedChatStartedAt.value == startedAt) {
+                                                binding.sharedChatStartedBanner.isGone = true
+                                            }
+                                        }, remaining)
+                                    } else {
+                                        banner.isGone = true
+                                    }
+                                }
                             }
                         }
                     }
