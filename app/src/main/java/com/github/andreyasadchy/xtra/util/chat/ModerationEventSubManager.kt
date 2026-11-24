@@ -27,6 +27,7 @@ class ModerationEventSubManager {
     // leave multiple transports alive for the same user/client pair.
     private var disconnecting = false
     private var subscriptionErrorReported = false
+    private var costDiagnosticRequested = false
 
     // Twitch limits the total subscription cost on one WebSocket transport to 10.
     // Shared Chat begin costs 1 and channel.moderate costs 2. Reserve room for
@@ -52,6 +53,14 @@ class ModerationEventSubManager {
             }
     }
 
+    /** Allow one read-only cost snapshot after a 429 for this socket lifetime. */
+    fun shouldCollectCostDiagnostic(): Boolean = synchronized(lock) {
+        if (costDiagnosticRequested) false else {
+            costDiagnosticRequested = true
+            true
+        }
+    }
+
     /** Allow only one subscription-failure row for the lifetime of a shared socket. */
     fun shouldReportSubscriptionError(): Boolean = synchronized(lock) {
         if (subscriptionErrorReported) false else {
@@ -63,6 +72,7 @@ class ModerationEventSubManager {
     private fun startSocketLocked() {
         if (socket != null || disconnecting || listeners.isEmpty()) return
         subscriptionErrorReported = false
+        costDiagnosticRequested = false
         val sharedSocket = EventSubWebSocket(SharedListener())
         socket = sharedSocket
         socketJob = sharedSocket.connect(scope)

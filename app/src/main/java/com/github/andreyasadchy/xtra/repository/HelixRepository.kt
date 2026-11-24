@@ -1151,6 +1151,67 @@ class HelixRepository(
         }
     }
 
+    // Read-only snapshot used only after a subscription-cost rejection.
+    suspend fun getEventSubSubscriptionCost(networkLibrary: String?, headers: Map<String, String>): String? = withContext(Dispatchers.IO) {
+        val url = "https://api.twitch.tv/helix/eventsub/subscriptions"
+        val response = when {
+            networkLibrary == C.HTTP_ENGINE && httpEngine.value != null -> @SuppressLint("NewApi") {
+                val result = suspendCancellableCoroutine { continuation ->
+                    val timeout = NetworkUtils.HttpEngineTimeout()
+                    val request = httpEngine.value!!.newUrlRequestBuilder(
+                        url,
+                        cronetExecutor.value,
+                        NetworkUtils.ByteArrayUrlCallback(continuation, timeout)
+                    ).apply {
+                        headers.forEach { addHeader(it.key, it.value) }
+                    }.build()
+                    timeout.start(request, continuation)
+                    request.start()
+                    continuation.invokeOnCancellation {
+                        request.cancel()
+                        timeout.stop()
+                    }
+                }
+                result.info.httpStatusCode to result.body.decodeToString()
+            }
+            networkLibrary == C.CRONET && cronetEngine.value != null -> {
+                val result = suspendCancellableCoroutine { continuation ->
+                    val timeout = NetworkUtils.CronetTimeout()
+                    val request = cronetEngine.value!!.newUrlRequestBuilder(
+                        url,
+                        NetworkUtils.ByteArrayCronetCallback(continuation, timeout),
+                        cronetExecutor.value
+                    ).apply {
+                        headers.forEach { addHeader(it.key, it.value) }
+                    }.build()
+                    timeout.start(request, continuation)
+                    request.start()
+                    continuation.invokeOnCancellation {
+                        request.cancel()
+                        timeout.stop()
+                    }
+                }
+                result.info.httpStatusCode to result.body.decodeToString()
+            }
+            else -> {
+                okHttpClient.value.newCall(Request.Builder().apply {
+                    url(url)
+                    headers(headers.toHeaders())
+                }.build()).executeAsync().use { result ->
+                    result.code to result.body.string()
+                }
+            }
+        }
+        if (response.first !in 200..299) {
+            return@withContext "EventSub cost lookup HTTP ${response.first}"
+        }
+        val payload = runCatching { json.parseToJsonElement(response.second).jsonObject }.getOrNull()
+            ?: return@withContext null
+        val totalCost = payload["total_cost"]?.jsonPrimitive?.contentOrNull ?: return@withContext null
+        val maxTotalCost = payload["max_total_cost"]?.jsonPrimitive?.contentOrNull ?: return@withContext null
+        "EventSub transport cost: $totalCost/$maxTotalCost"
+    }
+
     // Include the HTTP status in failures so transient EventSub rejections can be diagnosed.
     suspend fun createEventSubSubscription(networkLibrary: String?, headers: Map<String, String>, userId: String?, channelId: String?, type: String?, sessionId: String?, version: String = "1", useModeratorCondition: Boolean = false, broadcasterOnlyCondition: Boolean = false): String? = withContext(Dispatchers.IO) {
         val url = "https://api.twitch.tv/helix/eventsub/subscriptions"

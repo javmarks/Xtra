@@ -2612,9 +2612,20 @@ class ChatViewModel(
                         if (type != "channel.moderate" && !type.startsWith("channel.shared_chat.") ||
                             moderationEventSubManager.shouldReportSubscriptionError()
                         ) {
+                            val costDiagnostic = if (
+                                error.startsWith("HTTP 429:") &&
+                                moderationEventSubManager.shouldCollectCostDiagnostic()
+                            ) {
+                                try {
+                                    helixRepository.getEventSubSubscriptionCost(networkLibrary, helixHeaders)
+                                } catch (_: Exception) {
+                                    null
+                                }
+                            } else null
+                            val details = listOfNotNull(error, costDiagnostic).joinToString("\n")
                             onMessage(ChatMessage(
-                                systemMsg = "Twitch EventSub $type subscription failed: $error",
-                                fullMsg = error
+                                systemMsg = "Twitch EventSub $type subscription failed: $details",
+                                fullMsg = details
                             ))
                         }
                     }
