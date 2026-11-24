@@ -1451,7 +1451,6 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         repeatOnLifecycle(Lifecycle.State.STARTED) {
                             viewModel.isNativeSharedChatActive.collectLatest { active ->
                                 adapter?.setNativeSharedChatActive(active)
-                                binding.sharedChatIndicator.isVisible = active
                             }
                         }
                     }
