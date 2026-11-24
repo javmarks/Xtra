@@ -113,6 +113,8 @@ class ChatViewModel(
     private var eventSub: EventSubWebSocket? = null
     private var moderationEventSubListener: EventSubWebSocket.Listener? = null
     private var moderationEventSubChannelId: String? = null
+    private var sharedChatEventSubListener: EventSubWebSocket.Listener? = null
+    private var sharedChatEventSubChannelId: String? = null
     private var hermesWebSocket: HermesWebSocket? = null
     private var pubSubJob: Job? = null
     private var stvEventApi: STVEventApiWebSocket? = null
@@ -2007,6 +2009,20 @@ class ChatViewModel(
             }
         }
         if (!applicationContext.prefs().getBoolean(C.DEBUG_EVENT_SUB_CHAT, false) &&
+            !channelId.isNullOrBlank() && !helixHeaders[C.HEADER_TOKEN].isNullOrBlank()
+        ) {
+            // Shared Chat lifecycle events are available to ordinary viewers and do not
+            // require chat scopes. Reuse the account-wide EventSub transport rather than
+            // opening another WebSocket alongside the normal IRC chat connection.
+            val sharedListener = EventSubListener(
+                helixHeaders, channelLogin, showUserNotice, showClearChat, usePubSub,
+                networkLibrary, isLoggedIn, accountId, channelId, sharedChatOnly = true
+            )
+            sharedChatEventSubListener = sharedListener
+            sharedChatEventSubChannelId = channelId
+            moderationEventSubManager.register(channelId, sharedListener)
+        }
+        if (!applicationContext.prefs().getBoolean(C.DEBUG_EVENT_SUB_CHAT, false) &&
             !channelId.isNullOrBlank() && !accountId.isNullOrBlank() &&
             !helixHeaders[C.HEADER_TOKEN].isNullOrBlank()
         ) {
@@ -2127,6 +2143,8 @@ class ChatViewModel(
             val oldEventSub = eventSub
             val oldModerationEventSubListener = moderationEventSubListener
             val oldModerationEventSubChannelId = moderationEventSubChannelId
+            val oldSharedChatEventSubListener = sharedChatEventSubListener
+            val oldSharedChatEventSubChannelId = sharedChatEventSubChannelId
             val oldHermesWebSocket = hermesWebSocket
             val oldPubSubJob = pubSubJob
             val oldStvEventApi = stvEventApi
@@ -2142,6 +2160,8 @@ class ChatViewModel(
             eventSub = null
             moderationEventSubListener = null
             moderationEventSubChannelId = null
+            sharedChatEventSubListener = null
+            sharedChatEventSubChannelId = null
             hermesWebSocket = null
             pubSubJob = null
             stvEventApi = null
@@ -2162,6 +2182,11 @@ class ChatViewModel(
                 runCatching {
                     if (oldModerationEventSubListener != null && !oldModerationEventSubChannelId.isNullOrBlank()) {
                         moderationEventSubManager.unregister(oldModerationEventSubChannelId, oldModerationEventSubListener)
+                    }
+                }
+                runCatching {
+                    if (oldSharedChatEventSubListener != null && !oldSharedChatEventSubChannelId.isNullOrBlank()) {
+                        moderationEventSubManager.unregister(oldSharedChatEventSubChannelId, oldSharedChatEventSubListener)
                     }
                 }
                 runCatching { oldHermesWebSocket?.disconnect(oldPubSubJob) }
@@ -2544,15 +2569,23 @@ class ChatViewModel(
         private val accountId: String?,
         private val channelId: String?,
         private val moderationOnly: Boolean = false,
+        private val sharedChatOnly: Boolean = false,
     ) : EventSubWebSocket.Listener {
         override suspend fun onConnect() {
-            if (!moderationOnly) onMessage(ChatMessage(systemMsg = ContextCompat.getString(applicationContext, R.string.chat_join).format(channelLogin)))
+            if (!moderationOnly && !sharedChatOnly) onMessage(ChatMessage(systemMsg = ContextCompat.getString(applicationContext, R.string.chat_join).format(channelLogin)))
         }
 
         override suspend fun onWelcomeMessage(sessionId: String) {
-            val subscriptions = if (moderationOnly) listOf(
-                Triple("channel.moderate", "2", true),
-            ) else listOf(
+            val subscriptions = when {
+                moderationOnly -> listOf(
+                    Triple("channel.moderate", "2", true),
+                )
+                sharedChatOnly -> listOf(
+                    Triple("channel.shared_chat.begin", "1", false),
+                    Triple("channel.shared_chat.update", "1", false),
+                    Triple("channel.shared_chat.end", "1", false),
+                )
+                else -> listOf(
                 Triple("channel.chat.clear", "1", false),
                 Triple("channel.chat.message", "1", false),
                 Triple("channel.chat.notification", "1", false),
