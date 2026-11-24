@@ -2009,7 +2009,8 @@ class ChatViewModel(
             }
         }
         if (!applicationContext.prefs().getBoolean(C.DEBUG_EVENT_SUB_CHAT, false) &&
-            !channelId.isNullOrBlank() && !helixHeaders[C.HEADER_TOKEN].isNullOrBlank()
+            !channelId.isNullOrBlank() && !accountId.isNullOrBlank() && isLoggedIn &&
+            !helixHeaders[C.HEADER_TOKEN].isNullOrBlank()
         ) {
             // Shared Chat lifecycle events are available to ordinary viewers and do not
             // require chat scopes. Reuse the account-wide EventSub transport rather than
