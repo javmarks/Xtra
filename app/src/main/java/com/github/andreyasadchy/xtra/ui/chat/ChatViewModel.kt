@@ -1911,6 +1911,18 @@ class ChatViewModel(
         }
     }
 
+    // A duration of 0 means the mode is enabled but its duration is not known yet.
+    // Do not treat that placeholder as a real change; do preserve genuine 10 -> 30 updates.
+    private fun hasFollowerModeChanged(previous: String, next: String): Boolean {
+        val wasEnabled = previous.toIntOrNull()?.let { it >= 0 } == true
+        val isEnabled = next.toIntOrNull()?.let { it >= 0 } == true
+        if (wasEnabled != isEnabled) return true
+        if (!wasEnabled) return false
+        val previousDuration = previous.toIntOrNull() ?: 0
+        val nextDuration = next.toIntOrNull() ?: 0
+        return previousDuration > 0 && nextDuration > 0 && previousDuration != nextDuration
+    }
+
     private fun saveModerationLog(channelId: String?, entry: String) {
         if (channelId.isNullOrBlank()) return
         viewModelScope.launch {
@@ -2367,7 +2379,7 @@ class ChatViewModel(
                 emote?.takeIf { previous?.emote != null && previous.emote != it }?.let {
                     add(if (it == "1") "Emote-only enabled" else "Emote-only disabled")
                 }
-                followers?.takeIf { previous?.followers != null && previous.followers != it }?.let { value ->
+                followers?.takeIf { previous?.followers != null && hasFollowerModeChanged(previous.followers, it) }?.let { value ->
                     add(if (value.toIntOrNull()?.let { it >= 0 } == true) "Followers-only enabled ($value m)" else "Followers-only disabled")
                 }
                 unique?.takeIf { previous?.unique != null && previous.unique != it }?.let {
@@ -2719,13 +2731,23 @@ class ChatViewModel(
             val hasUnique = includes("unique_chat_mode")
             val hasSlow = includes("slow_mode")
             val hasSubs = includes("subscriber_mode")
+            // EventSub sometimes omits the follower duration on a partial update.
+            // Keep the last known duration rather than turning an active mode into
+            // "0 minutes", which would look like a second setting change.
+            val nextFollowers = if (updated.followers == "-1") {
+                "-1"
+            } else {
+                event.optInt("follower_mode_duration_minutes", 0).takeIf { it > 0 }?.toString()
+                    ?: previous?.followers?.takeIf { it != "-1" }
+                    ?: "0"
+            }
             val changes = buildList {
                 if (hasEmote && previous?.emote != null && previous.emote != updated.emote) {
                     add(if (updated.emote == "1") "Emote-only enabled" else "Emote-only disabled")
                 }
-                if (hasFollowers && previous?.followers != null && previous.followers != updated.followers) {
-                    val duration = event.optInt("follower_mode_duration_minutes", 0)
-                    add(if (updated.followers != "-1") {
+                if (hasFollowers && previous?.followers != null && hasFollowerModeChanged(previous.followers, nextFollowers)) {
+                    val duration = nextFollowers.toIntOrNull() ?: 0
+                    add(if (nextFollowers != "-1") {
                         if (duration > 0) "Followers-only enabled ($duration min)" else "Followers-only enabled"
                     } else "Followers-only disabled")
                 }
@@ -2756,7 +2778,7 @@ class ChatViewModel(
             }
             roomState.value = RoomState(
                 emote = if (hasEmote) updated.emote else previous?.emote,
-                followers = if (hasFollowers) updated.followers else previous?.followers,
+                followers = if (hasFollowers) nextFollowers else previous?.followers,
                 unique = if (hasUnique) updated.unique else previous?.unique,
                 slow = if (hasSlow) updated.slow else previous?.slow,
                 subs = if (hasSubs) updated.subs else previous?.subs,
