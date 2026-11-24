@@ -82,6 +82,13 @@ class ChatAdapter(
 ) : RecyclerView.Adapter<ChatAdapter.ViewHolder>() {
 
     var translateAllMessages = false
+    private var nativeSharedChatActive = false
+
+    fun setNativeSharedChatActive(active: Boolean) {
+        if (nativeSharedChatActive == active) return
+        nativeSharedChatActive = active
+        notifyDataSetChanged()
+    }
     private var selectedMessage: ChatMessage? = null
     private val random = Random()
     private val userColors = HashMap<String, Int>()
@@ -121,9 +128,12 @@ class ChatAdapter(
         val chatMessage = synchronized(messages) {
             displayedMessages().getOrNull(position)
         } ?: return
-        // Individual chat stays unchanged; Shared Chat avatar display is enabled only
-        // when the active native Shared Chat session is explicitly detected.
-        bindMessage(holder, chatMessage)
+        // Ordinary individual chat stays avatar-free. Only foreign-source messages
+        // receive a source-channel avatar while Twitch confirms a native Shared Chat session.
+        val showSourceChannel = nativeSharedChatActive &&
+            !chatMessage.sourceRoomId.isNullOrBlank() &&
+            chatMessage.sourceRoomId != channelId
+        bindMessage(holder, chatMessage, showSourceChannel)
     }
 
     fun bindMessage(holder: ViewHolder, chatMessage: ChatMessage, showSourceChannel: Boolean = false) {
