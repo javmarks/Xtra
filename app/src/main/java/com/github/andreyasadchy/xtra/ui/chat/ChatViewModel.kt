@@ -2582,9 +2582,12 @@ class ChatViewModel(
                     Triple("channel.moderate", "2", true),
                 )
                 sharedChatOnly -> listOf(
+                    // The viewer token pays cost 1 for each broadcaster-scoped
+                    // Shared Chat subscription. Subscribe only to begin; the existing
+                    // Helix session refresh detects participant updates and session end.
+                    // Three subscriptions per channel exhaust Twitch's cost-10 limit
+                    // quickly when All Chats has several channels open.
                     Triple("channel.shared_chat.begin", "1", false),
-                    Triple("channel.shared_chat.update", "1", false),
-                    Triple("channel.shared_chat.end", "1", false),
                 )
                 else -> listOf(
                     Triple("channel.chat.clear", "1", false),
