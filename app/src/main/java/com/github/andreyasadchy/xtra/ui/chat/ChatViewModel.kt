@@ -2605,7 +2605,7 @@ class ChatViewModel(
                         networkLibrary, helixHeaders, accountId, channelId, type, sessionId, version,
                         moderatorCondition, broadcasterOnlyCondition = type.startsWith("channel.shared_chat.")
                     )?.let { error ->
-                        if (type != "channel.moderate" ||
+                        if (type != "channel.moderate" && !type.startsWith("channel.shared_chat.") ||
                             moderationEventSubManager.shouldReportSubscriptionError()
                         ) {
                             onMessage(ChatMessage(
@@ -2617,7 +2617,7 @@ class ChatViewModel(
                         }
                     }
                 } catch (e: Exception) {
-                    if (type == "channel.moderate" &&
+                    if ((type == "channel.moderate" || type.startsWith("channel.shared_chat.")) &&
                         moderationEventSubManager.shouldReportSubscriptionError()
                     ) {
                         onMessage(ChatMessage(
@@ -2798,10 +2798,12 @@ class ChatViewModel(
         }
 
         override suspend fun onDisconnect(message: String, fullMsg: String?) {
-            onMessage(ChatMessage(
-                systemMsg = ContextCompat.getString(applicationContext, R.string.chat_disconnect).format(channelLogin, message),
-                fullMsg = fullMsg
-            ))
+            if (!sharedChatOnly) {
+                onMessage(ChatMessage(
+                    systemMsg = ContextCompat.getString(applicationContext, R.string.chat_disconnect).format(channelLogin, message),
+                    fullMsg = fullMsg
+                ))
+            }
         }
     }
 
