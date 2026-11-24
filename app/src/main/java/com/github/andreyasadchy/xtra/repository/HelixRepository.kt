@@ -1190,7 +1190,7 @@ class HelixRepository(
                 if (response.info.httpStatusCode in 200..299) {
                     null
                 } else {
-                    response.body.decodeToString()
+                    "HTTP ${response.info.httpStatusCode}: ${response.body.decodeToString()}"
                 }
             }
             networkLibrary == C.CRONET && cronetEngine.value != null -> {
@@ -1215,7 +1215,7 @@ class HelixRepository(
                 if (response.info.httpStatusCode in 200..299) {
                     null
                 } else {
-                    response.body.decodeToString()
+                    "HTTP ${response.info.httpStatusCode}: ${response.body.decodeToString()}"
                 }
             }
             else -> {
@@ -1228,7 +1228,7 @@ class HelixRepository(
                     if (response.isSuccessful) {
                         null
                     } else {
-                        response.body.string()
+                        "HTTP ${response.code}: ${response.body.string()}"
                     }
                 }
             }

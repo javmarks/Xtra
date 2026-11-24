@@ -2613,9 +2613,7 @@ class ChatViewModel(
                             moderationEventSubManager.shouldReportSubscriptionError()
                         ) {
                             onMessage(ChatMessage(
-                                systemMsg = if (type == "channel.moderate") {
-                                    "Twitch EventSub subscription failed: $error"
-                                } else error,
+                                systemMsg = "Twitch EventSub $type subscription failed: $error",
                                 fullMsg = error
                             ))
                         }
