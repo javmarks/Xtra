@@ -18,7 +18,7 @@ class ModerationEventSubManager {
     private val lock = Any()
     // All subscription creation for this transport must be sequential.
     private val subscriptionMutex = Mutex()
-    private val listeners = LinkedHashMap<String, MutableList<EventSubWebSocket.Listener>>()
+    private val listeners = LinkedHashMap<String, MutableList<Pair<String, EventSubWebSocket.Listener>>>()
     private var socket: EventSubWebSocket? = null
     private var socketJob: Job? = null
     private var sessionId: String? = null
@@ -44,15 +44,16 @@ class ModerationEventSubManager {
         socketJob = sharedSocket.connect(scope)
     }
 
-    fun register(channelId: String, listener: EventSubWebSocket.Listener) {
+    fun register(channelId: String, listener: EventSubWebSocket.Listener, subscriptionKey: String) {
         synchronized(lock) {
             val channelListeners = listeners.getOrPut(channelId) { mutableListOf() }
-            if (channelListeners.any { it === listener }) return
-            channelListeners.add(listener)
+            if (channelListeners.any { it.second === listener }) return
+            val shouldSubscribe = channelListeners.none { it.first == subscriptionKey }
+            channelListeners.add(subscriptionKey to listener)
             val activeSessionId = sessionId
-            if (activeSessionId != null) {
+            if (activeSessionId != null && shouldSubscribe) {
                 scope.launch { subscriptionMutex.withLock { listener.onWelcomeMessage(activeSessionId) } }
-            } else {
+            } else if (activeSessionId == null) {
                 startSocketLocked()
             }
         }
@@ -63,7 +64,7 @@ class ModerationEventSubManager {
         val oldJob: Job?
         synchronized(lock) {
             val channelListeners = listeners[channelId] ?: return
-            channelListeners.removeAll { it === listener }
+            channelListeners.removeAll { it.second === listener }
             if (channelListeners.isNotEmpty()) return
             listeners.remove(channelId)
             if (listeners.isNotEmpty()) return
@@ -91,7 +92,7 @@ class ModerationEventSubManager {
 
     private fun listenersFor(event: JSONObject): List<EventSubWebSocket.Listener> {
         val channelId = event.optString("broadcaster_user_id").takeIf { it.isNotBlank() } ?: return emptyList()
-        return synchronized(lock) { listeners[channelId]?.toList().orEmpty() }
+        return synchronized(lock) { listeners[channelId]?.map { it.second }.orEmpty() }
     }
 
     private inner class SharedListener : EventSubWebSocket.Listener {
@@ -100,7 +101,7 @@ class ModerationEventSubManager {
         override suspend fun onWelcomeMessage(sessionId: String) {
             val active = synchronized(lock) {
                 this@ModerationEventSubManager.sessionId = sessionId
-                listeners.values.flatten()
+                listeners.values.flatten().distinctBy { it.first }.map { it.second }
             }
             active.forEach { listener ->
                 subscriptionMutex.withLock { listener.onWelcomeMessage(sessionId) }
