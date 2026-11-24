@@ -135,7 +135,7 @@ class ModerationEventSubManager {
         override suspend fun onDisconnect(message: String, fullMsg: String?) {
             val active = synchronized(lock) {
                 this@ModerationEventSubManager.sessionId = null
-                listeners.values.flatten()
+                listeners.values.flatten().map { it.second }.distinct()
             }
             active.forEach { it.onDisconnect(message, fullMsg) }
         }
