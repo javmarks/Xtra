@@ -162,6 +162,8 @@ class ChatViewModel(
     var predictionTimer: Timer? = null
     private val _streamInfo = MutableStateFlow<PubSubUtils.StreamInfo?>(null)
     val sharedChatParticipants = MutableStateFlow<List<String>>(emptyList())
+    // True only when Twitch confirms this broadcaster is in a native Shared Chat session.
+    val isNativeSharedChatActive = MutableStateFlow(false)
     // Twitch-authoritative badge selection reported by the authenticated USERSTATE message.
     val userChatBadges = MutableStateFlow<List<Badge>?>(null)
     val channelPointsBalance = MutableStateFlow<Int?>(null)
@@ -891,6 +893,7 @@ class ChatViewModel(
                         }
                         .distinct()
                     sharedChatParticipants.value = participantIds
+                    isNativeSharedChatActive.value = response.data.isNotEmpty()
                     // An empty session response can be a transient/incomplete Twitch snapshot.
                     // Preserve last-known-good source badge catalogs until we have participants.
                     if (participantIds.isNotEmpty()) {
@@ -2512,9 +2515,6 @@ class ChatViewModel(
 
         override suspend fun onWelcomeMessage(sessionId: String) {
             val subscriptions = if (moderationOnly) listOf(
-                // Shared Chat participants are refreshed through Get Shared Chat Session.
-                // Avoid per-channel begin/update/end subscriptions consuming the account's
-                // 10-point EventSub WebSocket cost budget.
                 Triple("channel.moderate", "2", true),
             ) else listOf(
                 Triple("channel.chat.clear", "1", false),
@@ -2522,6 +2522,10 @@ class ChatViewModel(
                 Triple("channel.chat.notification", "1", false),
                 Triple("channel.chat_settings.update", "1", false),
                 Triple("channel.moderate", "2", true),
+                // Twitch documents these broadcaster-only Shared Chat events at cost 0.
+                Triple("channel.shared_chat.begin", "1", false),
+                Triple("channel.shared_chat.update", "1", false),
+                Triple("channel.shared_chat.end", "1", false),
             )
             // Create subscriptions one at a time. Parallel POSTs from every open
             // chat can race Twitch's per-transport cost accounting and trigger 429s.
@@ -2677,16 +2681,14 @@ class ChatViewModel(
         }
 
         override suspend fun onSharedChat(event: JSONObject, subscriptionType: String) {
-            // Refresh only this broadcaster's participant state when Twitch reports
-            // a Shared Chat session starting, changing, or ending.
-            if (moderationOnly && event.optString("broadcaster_user_id") == channelId) {
-                // Invalidate the stream-list cache as well as refreshing the open chat.
-                // A generation guard prevents an older in-flight request from restoring stale data.
-                (applicationContext.applicationContext as? XtraApp)
-                    ?.xtraModule?.sharedChatParticipantsCache?.invalidate(channelId.orEmpty())
-                if (subscriptionType == "channel.shared_chat.end") delay(500L)
-                loadSharedChatParticipants(channelId)
-            }
+            if (event.optString("broadcaster_user_id") != channelId) return
+            // EventSub is the immediate signal; the Helix session response below supplies
+            // the authoritative participant list and profile images.
+            isNativeSharedChatActive.value = subscriptionType != "channel.shared_chat.end"
+            (applicationContext.applicationContext as? XtraApp)
+                ?.xtraModule?.sharedChatParticipantsCache?.invalidate(channelId.orEmpty())
+            if (subscriptionType == "channel.shared_chat.end") delay(500L)
+            loadSharedChatParticipants(channelId)
         }
 
         override suspend fun onModerate(event: JSONObject, timestamp: String?) {
