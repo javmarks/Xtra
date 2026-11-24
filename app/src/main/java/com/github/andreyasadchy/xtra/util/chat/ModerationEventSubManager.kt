@@ -101,7 +101,7 @@ class ModerationEventSubManager {
         override suspend fun onWelcomeMessage(sessionId: String) {
             val active = synchronized(lock) {
                 this@ModerationEventSubManager.sessionId = sessionId
-                listeners.values.flatten().distinctBy { it.first }.map { it.second }
+                listeners.values.flatten().map { it.second }.distinct()
             }
             active.forEach { listener ->
                 subscriptionMutex.withLock { listener.onWelcomeMessage(sessionId) }
