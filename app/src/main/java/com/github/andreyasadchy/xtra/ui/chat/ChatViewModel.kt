@@ -1937,6 +1937,14 @@ class ChatViewModel(
         watchStreakChannelLogin = channelLogin
         loadModerationLogs(channelId)
         stopLiveChat()
+        // A ViewModel can survive a stream switch. Treat the next session response
+        // as a fresh baseline so an already-active session on the new channel does
+        // not look like a new Shared Chat start.
+        sharedChatSessionSnapshotInitialized = false
+        lastSharedChatStartedSessionId = null
+        isNativeSharedChatActive.value = false
+        sharedChatParticipants.value = emptyList()
+        sharedChatStartedAt.value = null
         started = true
         roomStateInitialized = false
         val gqlHeaders = TwitchApiHelper.getGQLHeaders(applicationContext, true)
