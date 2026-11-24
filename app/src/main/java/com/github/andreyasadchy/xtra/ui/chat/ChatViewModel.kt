@@ -856,9 +856,11 @@ class ChatViewModel(
                 var changedMessages = false
                 synchronized(chatMessages) {
                     chatMessages.forEach { chatMessage ->
-                        if (chatMessage.sourceRoomId == sourceChannelId) {
+                        if (chatMessage.sourceRoomId == sourceChannelId ||
+                            (chatMessage.sourceRoomId.isNullOrBlank() && chatMessage.roomId == sourceChannelId)
+                        ) {
                             chatMessage.sourceChannelImageUrl = user.profileImageURL
-                            chatMessage.sourceChannelName = user?.displayName ?: user?.login
+                            chatMessage.sourceChannelName = user.displayName ?: user.login
                             changedMessages = true
                         }
                     }
@@ -3133,18 +3135,15 @@ class ChatViewModel(
         // that profile once per channel so All Chats can show the channel avatar even
         // when the channel was restored from a saved tab. The merged adapter applies
         // this metadata only in All Chats; individual chat keeps its normal layout.
+        // Twitch omits source-room-id for messages from the local broadcaster.
+        // Use roomId as their source so the host avatar is available too.
+        val sourceChannelId = message.sourceRoomId?.takeIf { it.isNotBlank() } ?: message.roomId
         if (message.sourceRoomId.isNullOrBlank()) {
             loadSharedChatSourceProfile(message.roomId)
         }
-        // Twitch supplies source-room-id for messages mirrored from another
-        // broadcaster in a native Shared Chat session. Ordinary channel messages
-        // (including the primary channel's own messages) keep their existing layout.
-        val sourceChannelId = message.sourceRoomId
         if (!sourceChannelId.isNullOrBlank()) {
             val knownProfile = sharedChatParticipantUsers.value.firstOrNull { it.id == sourceChannelId }
             if (knownProfile != null && sharedChatParticipants.value.contains(sourceChannelId)) {
-                // This also covers the host broadcaster: Twitch can mark host messages
-                // with the host's own source-room-id during a confirmed Shared Chat.
                 message.sourceChannelImageUrl = knownProfile.profileImageURL
                 message.sourceChannelName = knownProfile.displayName ?: knownProfile.login
             } else if (sourceChannelId != channelId) {
