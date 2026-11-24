@@ -18,10 +18,7 @@ class ModerationEventSubManager {
     private val lock = Any()
     // All subscription creation for this transport must be sequential.
     private val subscriptionMutex = Mutex()
-    private val listeners = LinkedHashMap<String, EventSubWebSocket.Listener>()
-    // Keep subscriptions alive for the lifetime of the shared socket session.
-    // Reopening a channel replaces its listener, but must not create duplicate subscriptions.
-    private val subscribedChannels = HashSet<String>()
+    private val listeners = LinkedHashMap<String, MutableList<EventSubWebSocket.Listener>>()
     private var socket: EventSubWebSocket? = null
     private var socketJob: Job? = null
     private var sessionId: String? = null
@@ -49,12 +46,12 @@ class ModerationEventSubManager {
 
     fun register(channelId: String, listener: EventSubWebSocket.Listener) {
         synchronized(lock) {
-            listeners[channelId] = listener
+            val channelListeners = listeners.getOrPut(channelId) { mutableListOf() }
+            if (channelListeners.any { it === listener }) return
+            channelListeners.add(listener)
             val activeSessionId = sessionId
             if (activeSessionId != null) {
-                if (subscribedChannels.add(channelId)) {
-                    scope.launch { subscriptionMutex.withLock { listener.onWelcomeMessage(activeSessionId) } }
-                }
+                scope.launch { subscriptionMutex.withLock { listener.onWelcomeMessage(activeSessionId) } }
             } else {
                 startSocketLocked()
             }
@@ -65,10 +62,11 @@ class ModerationEventSubManager {
         val oldSocket: EventSubWebSocket?
         val oldJob: Job?
         synchronized(lock) {
-            if (listeners[channelId] !== listener) return
+            val channelListeners = listeners[channelId] ?: return
+            channelListeners.removeAll { it === listener }
+            if (channelListeners.isNotEmpty()) return
             listeners.remove(channelId)
             if (listeners.isNotEmpty()) return
-            subscribedChannels.clear()
             oldSocket = socket
             oldJob = socketJob
             socket = null
@@ -91,9 +89,9 @@ class ModerationEventSubManager {
         }
     }
 
-    private fun listenerFor(event: JSONObject): EventSubWebSocket.Listener? {
-        val channelId = event.optString("broadcaster_user_id").takeIf { it.isNotBlank() } ?: return null
-        return synchronized(lock) { listeners[channelId] }
+    private fun listenersFor(event: JSONObject): List<EventSubWebSocket.Listener> {
+        val channelId = event.optString("broadcaster_user_id").takeIf { it.isNotBlank() } ?: return emptyList()
+        return synchronized(lock) { listeners[channelId]?.toList().orEmpty() }
     }
 
     private inner class SharedListener : EventSubWebSocket.Listener {
@@ -102,9 +100,7 @@ class ModerationEventSubManager {
         override suspend fun onWelcomeMessage(sessionId: String) {
             val active = synchronized(lock) {
                 this@ModerationEventSubManager.sessionId = sessionId
-                subscribedChannels.clear()
-                subscribedChannels.addAll(listeners.keys)
-                listeners.values.toList()
+                listeners.values.flatten()
             }
             active.forEach { listener ->
                 subscriptionMutex.withLock { listener.onWelcomeMessage(sessionId) }
@@ -112,34 +108,33 @@ class ModerationEventSubManager {
         }
 
         override suspend fun onChatMessage(event: JSONObject, timestamp: String?) {
-            listenerFor(event)?.onChatMessage(event, timestamp)
+            listenersFor(event).forEach { it.onChatMessage(event, timestamp) }
         }
 
         override suspend fun onUserNotice(event: JSONObject, timestamp: String?) {
-            listenerFor(event)?.onUserNotice(event, timestamp)
+            listenersFor(event).forEach { it.onUserNotice(event, timestamp) }
         }
 
         override suspend fun onClearChat(event: JSONObject, timestamp: String?) {
-            listenerFor(event)?.onClearChat(event, timestamp)
+            listenersFor(event).forEach { it.onClearChat(event, timestamp) }
         }
 
         override suspend fun onRoomState(event: JSONObject, timestamp: String?) {
-            listenerFor(event)?.onRoomState(event, timestamp)
+            listenersFor(event).forEach { it.onRoomState(event, timestamp) }
         }
 
         override suspend fun onModerate(event: JSONObject, timestamp: String?) {
-            listenerFor(event)?.onModerate(event, timestamp)
+            listenersFor(event).forEach { it.onModerate(event, timestamp) }
         }
 
         override suspend fun onSharedChat(event: JSONObject, subscriptionType: String) {
-            listenerFor(event)?.onSharedChat(event, subscriptionType)
+            listenersFor(event).forEach { it.onSharedChat(event, subscriptionType) }
         }
 
         override suspend fun onDisconnect(message: String, fullMsg: String?) {
             val active = synchronized(lock) {
                 this@ModerationEventSubManager.sessionId = null
-                subscribedChannels.clear()
-                listeners.values.toList()
+                listeners.values.flatten()
             }
             active.forEach { it.onDisconnect(message, fullMsg) }
         }
