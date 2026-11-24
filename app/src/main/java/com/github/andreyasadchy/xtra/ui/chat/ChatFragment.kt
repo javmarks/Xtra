@@ -71,6 +71,7 @@ import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.text.NumberFormat
@@ -1451,6 +1452,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                         repeatOnLifecycle(Lifecycle.State.STARTED) {
                             viewModel.isNativeSharedChatActive.collectLatest { active ->
                                 adapter?.setNativeSharedChatActive(active)
+                                binding.sharedChatIndicator.isVisible = active
                             }
                         }
                     }
@@ -1464,11 +1466,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                     val remaining = 10_000L - (System.currentTimeMillis() - startedAt)
                                     if (remaining > 0L) {
                                         banner.isVisible = true
-                                        banner.postDelayed({
-                                            if (_binding != null && viewModel.sharedChatStartedAt.value == startedAt) {
-                                                binding.sharedChatStartedBanner.isGone = true
-                                            }
-                                        }, remaining)
+                                        delay(remaining)
+                                        if (viewModel.sharedChatStartedAt.value == startedAt) {
+                                            banner.isGone = true
+                                        }
                                     } else {
                                         banner.isGone = true
                                     }
