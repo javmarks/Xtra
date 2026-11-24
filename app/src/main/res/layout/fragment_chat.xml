@@ -69,22 +69,6 @@
             android:textAppearance="?attr/textAppearanceLabelSmall"
             android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/sharedChatIndicator"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:paddingStart="8dp"
-            android:paddingTop="4dp"
-            android:paddingEnd="8dp"
-            android:paddingBottom="4dp"
-            android:background="?attr/chatStatus"
-            android:text="SHARED CHAT"
-            android:textColor="?attr/colorPrimary"
-            android:textStyle="bold"
-            android:textAppearance="?attr/textAppearanceLabelSmall"
-            android:visibility="gone" />
-
         <LinearLayout
             android:id="@+id/topGiftersBar"
             android:layout_width="match_parent"
