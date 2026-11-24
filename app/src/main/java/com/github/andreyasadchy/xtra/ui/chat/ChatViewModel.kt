@@ -164,6 +164,9 @@ class ChatViewModel(
     val sharedChatParticipants = MutableStateFlow<List<String>>(emptyList())
     // True only when Twitch confirms this broadcaster is in a native Shared Chat session.
     val isNativeSharedChatActive = MutableStateFlow(false)
+    // Event timestamp drives the short-lived Twitch-style start banner without replaying it later.
+    val sharedChatStartedAt = MutableStateFlow<Long?>(null)
+    private var lastSharedChatStartedSessionId: String? = null
     // Twitch-authoritative badge selection reported by the authenticated USERSTATE message.
     val userChatBadges = MutableStateFlow<List<Badge>?>(null)
     val channelPointsBalance = MutableStateFlow<Int?>(null)
@@ -2687,6 +2690,15 @@ class ChatViewModel(
             // EventSub is the immediate signal; the Helix session response below supplies
             // the authoritative participant list and profile images.
             isNativeSharedChatActive.value = subscriptionType != "channel.shared_chat.end"
+            if (subscriptionType == "channel.shared_chat.begin") {
+                val sessionId = event.optString("session_id").takeIf { it.isNotBlank() && it != "null" }
+                if (sessionId != null && sessionId != lastSharedChatStartedSessionId) {
+                    lastSharedChatStartedSessionId = sessionId
+                    sharedChatStartedAt.value = System.currentTimeMillis()
+                    // Keep a normal history row so the announcement scrolls away with chat.
+                    onMessage(ChatMessage(systemMsg = "Shared Chat started!"))
+                }
+            }
             (applicationContext.applicationContext as? XtraApp)
                 ?.xtraModule?.sharedChatParticipantsCache?.invalidate(channelId.orEmpty())
             if (subscriptionType == "channel.shared_chat.end") delay(500L)
