@@ -1151,6 +1151,7 @@ class HelixRepository(
         }
     }
 
+    // Include the HTTP status in failures so transient EventSub rejections can be diagnosed.
     suspend fun createEventSubSubscription(networkLibrary: String?, headers: Map<String, String>, userId: String?, channelId: String?, type: String?, sessionId: String?, version: String = "1", useModeratorCondition: Boolean = false, broadcasterOnlyCondition: Boolean = false): String? = withContext(Dispatchers.IO) {
         val url = "https://api.twitch.tv/helix/eventsub/subscriptions"
         val body = buildJsonObject {
