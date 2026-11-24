@@ -1449,6 +1449,13 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     }
                     viewLifecycleOwner.lifecycleScope.launch {
                         repeatOnLifecycle(Lifecycle.State.STARTED) {
+                            viewModel.isNativeSharedChatActive.collectLatest { active ->
+                                adapter?.setNativeSharedChatActive(active)
+                            }
+                        }
+                    }
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        repeatOnLifecycle(Lifecycle.State.STARTED) {
                             viewModel.removeMessages.collect { size ->
                                 if (adapter?.isDisplayPaused() != true) adapter?.notifyItemRangeRemoved(0, size)
                             }
