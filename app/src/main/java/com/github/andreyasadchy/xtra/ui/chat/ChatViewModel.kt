@@ -167,6 +167,7 @@ class ChatViewModel(
     // Event timestamp drives the short-lived Twitch-style start banner without replaying it later.
     val sharedChatStartedAt = MutableStateFlow<Long?>(null)
     private var lastSharedChatStartedSessionId: String? = null
+    private var sharedChatSessionSnapshotInitialized = false
     // Twitch-authoritative badge selection reported by the authenticated USERSTATE message.
     val userChatBadges = MutableStateFlow<List<Badge>?>(null)
     val channelPointsBalance = MutableStateFlow<Int?>(null)
@@ -875,6 +876,13 @@ class ChatViewModel(
         }
     }
 
+    private fun announceSharedChatStarted(sessionId: String?) {
+        if (sessionId != null) lastSharedChatStartedSessionId = sessionId
+        sharedChatStartedAt.value = System.currentTimeMillis()
+        // Keep a normal history row so the announcement scrolls away with chat.
+        onMessage(ChatMessage(systemMsg = "Shared Chat started!"))
+    }
+
     private fun loadSharedChatParticipants(channelId: String?) {
         if (channelId.isNullOrBlank()) return
         viewModelScope.launch {
@@ -898,7 +906,22 @@ class ChatViewModel(
                         }
                         .distinct()
                     sharedChatParticipants.value = participantIds
-                    isNativeSharedChatActive.value = response.data.isNotEmpty()
+                    val activeSession = response.data.firstOrNull()
+                    val wasActive = isNativeSharedChatActive.value
+                    val isActive = response.data.isNotEmpty()
+                    val sessionId = activeSession?.sessionId
+                    if (sharedChatSessionSnapshotInitialized && isActive &&
+                        (!wasActive || (sessionId != null && lastSharedChatStartedSessionId != null &&
+                            sessionId != lastSharedChatStartedSessionId))
+                    ) {
+                        announceSharedChatStarted(sessionId)
+                    } else if (!sharedChatSessionSnapshotInitialized && sessionId != null) {
+                        // Opening a stream mid-session should show the active header,
+                        // not replay a start notification that happened before the viewer arrived.
+                        lastSharedChatStartedSessionId = sessionId
+                    }
+                    sharedChatSessionSnapshotInitialized = true
+                    isNativeSharedChatActive.value = isActive
                     // An empty session response can be a transient/incomplete Twitch snapshot.
                     // Preserve last-known-good source badge catalogs until we have participants.
                     if (participantIds.isNotEmpty()) {
@@ -2689,14 +2712,14 @@ class ChatViewModel(
             if (event.optString("broadcaster_user_id") != channelId) return
             // EventSub is the immediate signal; the Helix session response below supplies
             // the authoritative participant list and profile images.
+            val wasActive = isNativeSharedChatActive.value
             isNativeSharedChatActive.value = subscriptionType != "channel.shared_chat.end"
             if (subscriptionType == "channel.shared_chat.begin") {
                 val sessionId = event.optString("session_id").takeIf { it.isNotBlank() && it != "null" }
-                if (sessionId == null || sessionId != lastSharedChatStartedSessionId) {
-                    if (sessionId != null) lastSharedChatStartedSessionId = sessionId
-                    sharedChatStartedAt.value = System.currentTimeMillis()
-                    // Keep a normal history row so the announcement scrolls away with chat.
-                    onMessage(ChatMessage(systemMsg = "Shared Chat started!"))
+                if (sessionId != null && sessionId != lastSharedChatStartedSessionId ||
+                    sessionId == null && !wasActive
+                ) {
+                    announceSharedChatStarted(sessionId)
                 }
             }
             (applicationContext.applicationContext as? XtraApp)
