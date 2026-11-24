@@ -29,18 +29,25 @@ class ModerationEventSubManager {
     private var subscriptionErrorReported = false
 
     // Twitch limits the total subscription cost on one WebSocket transport to 10.
-    // Shared Chat begin costs 1; channel.moderate costs 2. Keep all registrations
-    // tracked for event delivery, but only subscribe listeners that fit this budget.
+    // Shared Chat begin costs 1 and channel.moderate costs 2. Reserve room for
+    // one moderator subscription so adding more chats can never push an already
+    // active moderator subscription over the transport limit.
     private fun subscriptionsWithinCostLimitLocked(): List<Pair<String, EventSubWebSocket.Listener>> {
-        var usedCost = 0
+        var sharedChatCount = 0
+        var moderationCount = 0
         return listeners.values.flatten()
-            .distinctBy { it.first to System.identityHashCode(it.second) }
-            .sortedBy { if (it.first == "shared_chat") 0 else 1 }
+            .distinct()
             .filter { (key, _) ->
-                val cost = if (key == "moderation") 2 else 1
-                if (usedCost + cost > 10) false else {
-                    usedCost += cost
-                    true
+                when (key) {
+                    "shared_chat" -> if (sharedChatCount < 8) {
+                        sharedChatCount++
+                        true
+                    } else false
+                    "moderation" -> if (moderationCount < 1) {
+                        moderationCount++
+                        true
+                    } else false
+                    else -> false
                 }
             }
     }
