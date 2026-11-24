@@ -876,7 +876,7 @@ class ChatViewModel(
         }
     }
 
-    private fun announceSharedChatStarted(sessionId: String?) {
+    private suspend fun announceSharedChatStarted(sessionId: String?) {
         if (sessionId != null) lastSharedChatStartedSessionId = sessionId
         sharedChatStartedAt.value = System.currentTimeMillis()
         // Keep a normal history row so the announcement scrolls away with chat.
