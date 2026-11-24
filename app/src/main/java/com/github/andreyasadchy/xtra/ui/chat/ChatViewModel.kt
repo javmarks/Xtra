@@ -2021,7 +2021,7 @@ class ChatViewModel(
             )
             sharedChatEventSubListener = sharedListener
             sharedChatEventSubChannelId = channelId
-            moderationEventSubManager.register(channelId, sharedListener)
+            moderationEventSubManager.register(channelId, sharedListener, "shared_chat")
         }
         if (!applicationContext.prefs().getBoolean(C.DEBUG_EVENT_SUB_CHAT, false) &&
             !channelId.isNullOrBlank() && !accountId.isNullOrBlank() &&
@@ -2038,7 +2038,7 @@ class ChatViewModel(
                     )
                     moderationEventSubListener = listener
                     moderationEventSubChannelId = channelId
-                    moderationEventSubManager.register(channelId, listener)
+                    moderationEventSubManager.register(channelId, listener, "moderation")
                 }
             }
         }
