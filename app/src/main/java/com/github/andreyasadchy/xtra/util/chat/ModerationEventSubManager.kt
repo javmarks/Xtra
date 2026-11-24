@@ -124,6 +124,15 @@ class ModerationEventSubManager {
     private inner class SharedListener : EventSubWebSocket.Listener {
         override suspend fun onConnect() = Unit
 
+        override suspend fun onReconnectWelcomeMessage(sessionId: String) {
+            // Twitch has already transferred this transport's subscriptions to
+            // the replacement session. Refresh the session ID for future channel
+            // registrations, but do not POST duplicate subscriptions.
+            synchronized(lock) {
+                this@ModerationEventSubManager.sessionId = sessionId
+            }
+        }
+
         override suspend fun onWelcomeMessage(sessionId: String) {
             val active = synchronized(lock) {
                 this@ModerationEventSubManager.sessionId = sessionId
