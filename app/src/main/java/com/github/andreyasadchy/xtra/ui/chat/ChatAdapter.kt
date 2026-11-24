@@ -128,12 +128,10 @@ class ChatAdapter(
         val chatMessage = synchronized(messages) {
             displayedMessages().getOrNull(position)
         } ?: return
-        // Ordinary individual chat stays avatar-free. Only foreign-source messages
-        // receive a source-channel avatar while Twitch confirms a native Shared Chat session.
-        val showSourceChannel = nativeSharedChatActive &&
-            !chatMessage.sourceRoomId.isNullOrBlank() &&
-            chatMessage.sourceRoomId != channelId
-        bindMessage(holder, chatMessage, showSourceChannel)
+        // Ordinary individual chat stays avatar-free. During a confirmed native
+        // Shared Chat session, show the source-channel avatar on every chat message.
+        // The message formatter still skips reply-preview rows and rows without profile data.
+        bindMessage(holder, chatMessage, nativeSharedChatActive)
     }
 
     fun bindMessage(holder: ViewHolder, chatMessage: ChatMessage, showSourceChannel: Boolean = false) {
