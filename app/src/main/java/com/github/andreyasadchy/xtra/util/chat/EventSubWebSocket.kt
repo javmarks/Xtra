@@ -17,6 +17,8 @@ class EventSubWebSocket(
     private var pongTimer: Timer? = null
     private var timeout = 10000L
     private val handledMessageIds = mutableListOf<String>()
+    // Twitch transfers existing subscriptions when a reconnect URL is used.
+    private var reconnectHandoff = false
 
     fun connect(coroutineScope: CoroutineScope): Job {
         webSocket = WebSocket("wss://eventsub.wss.twitch.tv/ws", WebSocketListener())
@@ -45,6 +47,8 @@ class EventSubWebSocket(
     interface Listener {
         suspend fun onConnect() {}
         suspend fun onWelcomeMessage(sessionId: String) {}
+        /** Welcome after Twitch transferred the prior session's subscriptions. */
+        suspend fun onReconnectWelcomeMessage(sessionId: String) {}
         suspend fun onChatMessage(event: JSONObject, timestamp: String?) {}
         suspend fun onUserNotice(event: JSONObject, timestamp: String?) {}
         suspend fun onClearChat(event: JSONObject, timestamp: String?) {}
@@ -110,6 +114,7 @@ class EventSubWebSocket(
                             // EventSub session, which would require resubscribing and
                             // can consume another concurrent transport slot.
                             if (!reconnectUrl.isNullOrBlank()) {
+                                reconnectHandoff = true
                                 webSocket.reconnectTo(reconnectUrl)
                             }
                             webSocket.disconnect()
@@ -126,7 +131,12 @@ class EventSubWebSocket(
                             startPongTimer()
                             val sessionId = session?.optString("id")
                             if (!sessionId.isNullOrBlank()) {
-                                listener.onWelcomeMessage(sessionId)
+                                if (reconnectHandoff) {
+                                    reconnectHandoff = false
+                                    listener.onReconnectWelcomeMessage(sessionId)
+                                } else {
+                                    listener.onWelcomeMessage(sessionId)
+                                }
                             }
                         }
                     }
