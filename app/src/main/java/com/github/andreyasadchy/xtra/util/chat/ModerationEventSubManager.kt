@@ -28,6 +28,23 @@ class ModerationEventSubManager {
     private var disconnecting = false
     private var subscriptionErrorReported = false
 
+    // Twitch limits the total subscription cost on one WebSocket transport to 10.
+    // Shared Chat begin costs 1; channel.moderate costs 2. Keep all registrations
+    // tracked for event delivery, but only subscribe listeners that fit this budget.
+    private fun subscriptionsWithinCostLimitLocked(): List<Pair<String, EventSubWebSocket.Listener>> {
+        var usedCost = 0
+        return listeners.values.flatten()
+            .distinctBy { it.first to System.identityHashCode(it.second) }
+            .sortedBy { if (it.first == "shared_chat") 0 else 1 }
+            .filter { (key, _) ->
+                val cost = if (key == "moderation") 2 else 1
+                if (usedCost + cost > 10) false else {
+                    usedCost += cost
+                    true
+                }
+            }
+    }
+
     /** Allow only one subscription-failure row for the lifetime of a shared socket. */
     fun shouldReportSubscriptionError(): Boolean = synchronized(lock) {
         if (subscriptionErrorReported) false else {
@@ -51,7 +68,9 @@ class ModerationEventSubManager {
             val shouldSubscribe = channelListeners.none { it.first == subscriptionKey }
             channelListeners.add(subscriptionKey to listener)
             val activeSessionId = sessionId
-            if (activeSessionId != null && shouldSubscribe) {
+            if (activeSessionId != null && shouldSubscribe &&
+                subscriptionsWithinCostLimitLocked().any { it.first == subscriptionKey && it.second === listener }
+            ) {
                 scope.launch { subscriptionMutex.withLock { listener.onWelcomeMessage(activeSessionId) } }
             } else if (activeSessionId == null) {
                 startSocketLocked()
@@ -101,7 +120,7 @@ class ModerationEventSubManager {
         override suspend fun onWelcomeMessage(sessionId: String) {
             val active = synchronized(lock) {
                 this@ModerationEventSubManager.sessionId = sessionId
-                listeners.values.flatten().map { it.second }.distinct()
+                subscriptionsWithinCostLimitLocked().map { it.second }.distinct()
             }
             active.forEach { listener ->
                 subscriptionMutex.withLock { listener.onWelcomeMessage(sessionId) }
