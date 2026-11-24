@@ -2692,8 +2692,8 @@ class ChatViewModel(
             isNativeSharedChatActive.value = subscriptionType != "channel.shared_chat.end"
             if (subscriptionType == "channel.shared_chat.begin") {
                 val sessionId = event.optString("session_id").takeIf { it.isNotBlank() && it != "null" }
-                if (sessionId != null && sessionId != lastSharedChatStartedSessionId) {
-                    lastSharedChatStartedSessionId = sessionId
+                if (sessionId == null || sessionId != lastSharedChatStartedSessionId) {
+                    if (sessionId != null) lastSharedChatStartedSessionId = sessionId
                     sharedChatStartedAt.value = System.currentTimeMillis()
                     // Keep a normal history row so the announcement scrolls away with chat.
                     onMessage(ChatMessage(systemMsg = "Shared Chat started!"))
