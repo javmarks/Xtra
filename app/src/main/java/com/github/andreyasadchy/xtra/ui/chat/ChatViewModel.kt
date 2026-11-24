@@ -2586,16 +2586,17 @@ class ChatViewModel(
                     Triple("channel.shared_chat.end", "1", false),
                 )
                 else -> listOf(
-                Triple("channel.chat.clear", "1", false),
-                Triple("channel.chat.message", "1", false),
-                Triple("channel.chat.notification", "1", false),
-                Triple("channel.chat_settings.update", "1", false),
-                Triple("channel.moderate", "2", true),
-                // Twitch documents these broadcaster-only Shared Chat events at cost 0.
-                Triple("channel.shared_chat.begin", "1", false),
-                Triple("channel.shared_chat.update", "1", false),
-                Triple("channel.shared_chat.end", "1", false),
-            )
+                    Triple("channel.chat.clear", "1", false),
+                    Triple("channel.chat.message", "1", false),
+                    Triple("channel.chat.notification", "1", false),
+                    Triple("channel.chat_settings.update", "1", false),
+                    Triple("channel.moderate", "2", true),
+                    // Twitch documents these broadcaster-only Shared Chat events at cost 0.
+                    Triple("channel.shared_chat.begin", "1", false),
+                    Triple("channel.shared_chat.update", "1", false),
+                    Triple("channel.shared_chat.end", "1", false),
+                )
+            }
             // Create subscriptions one at a time. Parallel POSTs from every open
             // chat can race Twitch's per-transport cost accounting and trigger 429s.
             for ((type, version, moderatorCondition) in subscriptions) {
