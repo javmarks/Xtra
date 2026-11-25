@@ -88,7 +88,23 @@ class ModerationEventSubManager {
             if (activeSessionId != null && shouldSubscribe &&
                 subscriptionsWithinCostLimitLocked().any { it.first == subscriptionKey && it.second === listener }
             ) {
-                scope.launch { subscriptionMutex.withLock { listener.onWelcomeMessage(activeSessionId) } }
+                scope.launch {
+                    subscriptionMutex.withLock {
+                        // A channel can be registered just as Twitch closes this
+                        // transport. Do not POST subscriptions with a captured,
+                        // already-invalid session ID after a disconnect/reconnect.
+                        val sessionIsCurrent = synchronized(lock) {
+                            sessionId == activeSessionId && socket != null && !disconnecting &&
+                                listeners[channelId]?.any {
+                                    it.first == subscriptionKey && it.second === listener
+                                } == true &&
+                                subscriptionsWithinCostLimitLocked().any {
+                                    it.first == subscriptionKey && it.second === listener
+                                }
+                        }
+                        if (sessionIsCurrent) listener.onWelcomeMessage(activeSessionId)
+                    }
+                }
             } else if (activeSessionId == null) {
                 startSocketLocked()
             }
