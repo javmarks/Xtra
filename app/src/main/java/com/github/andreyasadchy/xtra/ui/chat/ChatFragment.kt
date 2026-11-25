@@ -332,7 +332,6 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     }
                 }
                 if (!isAdded) return@launch
-                val selectedBadges = viewModel.userChatBadges.value.orEmpty()
                 val globalCatalog = parseAvailableBadges(globalResponse, false)
                 val channelCatalog = parseAvailableBadges(channelResponse, true)
             val content = LinearLayout(requireContext()).apply {
@@ -354,7 +353,6 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     setPadding(0, (10 * resources.displayMetrics.density).roundToInt(), 0, (4 * resources.displayMetrics.density).roundToInt())
                 })
                 catalog.distinctBy { it.setId to it.version }.forEach { badge ->
-                    val selected = selectedBadges.any { it.setId == badge.setId && it.version == badge.version }
                     val row = LinearLayout(requireContext()).apply {
                         orientation = LinearLayout.HORIZONTAL
                         gravity = android.view.Gravity.CENTER_VERTICAL
@@ -380,8 +378,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     }
                     row.addView(badgeImage)
                     val label = TextView(requireContext()).apply {
-                        text = (badge.title?.takeIf { it.isNotBlank() } ?: badge.setId) +
-                            if (selected) " · Selected" else ""
+                        text = badge.title?.takeIf { it.isNotBlank() } ?: badge.setId
                         setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                         setPadding((12 * resources.displayMetrics.density).roundToInt(), 0, 0, 0)
                     }
@@ -418,11 +415,6 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             val mutationName = if (channelSpecific) "selectChannelBadge" else "selectGlobalBadge"
                             val success = data?.optJSONObject(mutationName) != null && (errors == null || errors.length() == 0)
                             if (success) {
-                                val current = viewModel.userChatBadges.value.orEmpty().toMutableList()
-                                current.removeAll { it.setId == badge.setId }
-                                current.add(com.github.andreyasadchy.xtra.model.chat.Badge(badge.setId, badge.version))
-                                viewModel.userChatBadges.value = current
-                                label.text = (badge.title?.takeIf { it.isNotBlank() } ?: badge.setId) + " - Selected"
                                 Toast.makeText(requireContext(), if (channelSpecific) "Badge selected for this channel." else "Global badge selected.", Toast.LENGTH_SHORT).show()
                             } else {
                                 val message = errors?.optJSONObject(0)?.optString("message").orEmpty()
@@ -446,8 +438,8 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     }
                 }
             }
-            addBadgeSection("Global badges - choose one for all chats", globalCatalog, false)
-            addBadgeSection("This channel badges - choose one for this channel", channelCatalog, true)
+            addBadgeSection("Available global badges - choose one for all chats", globalCatalog, false)
+            addBadgeSection("Available badges for this channel - choose one for this channel", channelCatalog, true)
             if (content.childCount == 0) {
                 content.addView(TextView(requireContext()).apply {
                     text = "No badges are currently available to equip here, or Twitch did not return your badge collection."
@@ -456,7 +448,7 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 })
             }
             content.addView(TextView(requireContext()).apply {
-                text = "To change badges on your Twitch account, open this channel in Twitch, open Chat Identity beside the chat box, and choose your badges. Xtra will show the updated selection when Twitch reports it."
+                text = "These lists show badges Twitch says are available to equip; they do not indicate which badge is currently selected. A channel-specific badge overrides your global choice in this channel. Twitch's USERSTATE message reports the badges currently appearing in chat."
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                 setPadding(0, (12 * resources.displayMetrics.density).roundToInt(), 0, 0)
             })
