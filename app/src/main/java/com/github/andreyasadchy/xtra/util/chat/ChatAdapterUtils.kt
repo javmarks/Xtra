@@ -288,10 +288,15 @@ object ChatAdapterUtils {
                             builder.setSpan(object : ClickableSpan() {
                                 override fun onClick(widget: View) {
                                     val subscriberMonths = chatBadge.info.toIntOrNull()?.takeIf { chatBadge.setId == "subscriber" && it > 0 }
-                                    val badgeDetails = if (subscriberMonths != null) {
-                                        "${badge.title ?: "Subscriber"} • $subscriberMonths months subscribed"
-                                    } else {
-                                        badge.title
+                                    val badgeDetails = buildString {
+                                        append(badge.title ?: "Twitch badge")
+                                        if (subscriberMonths != null) {
+                                            append(" • $subscriberMonths months subscribed")
+                                        }
+                                        badge.description?.takeIf { it.isNotBlank() }?.let {
+                                            append("\n")
+                                            append(it)
+                                        }
                                     }
                                     imageClick(badge.url4x ?: badge.url3x ?: badge.url2x ?: badge.url1x, badgeDetails, null, null, null, null, null)
                                 }
