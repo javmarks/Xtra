@@ -881,8 +881,7 @@ class ChatViewModel(
     private suspend fun announceSharedChatStarted(sessionId: String?) {
         if (sessionId != null) lastSharedChatStartedSessionId = sessionId
         sharedChatStartedAt.value = System.currentTimeMillis()
-        // Keep a normal history row so the announcement scrolls away with chat.
-        onMessage(ChatMessage(systemMsg = "Shared Chat started!"))
+        // Twitch shows this as a temporary banner, not a permanent chat-history message.
     }
 
     private fun loadSharedChatParticipants(channelId: String?) {
