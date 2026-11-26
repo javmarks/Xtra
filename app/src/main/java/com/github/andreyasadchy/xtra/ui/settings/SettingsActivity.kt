@@ -440,17 +440,17 @@ class SettingsActivity : AppCompatActivity() {
                 }
                 val loginInput = EditText(context).apply {
                     hint = "Twitch channel login"
-                    singleLine = true
+                    setSingleLine(true)
                 }
                 val streamIdInput = EditText(context).apply {
                     hint = "Stream ID"
                     inputType = InputType.TYPE_CLASS_NUMBER
-                    singleLine = true
+                    setSingleLine(true)
                 }
                 val timestampInput = EditText(context).apply {
                     hint = "Stream start time (Unix seconds)"
                     inputType = InputType.TYPE_CLASS_NUMBER
-                    singleLine = true
+                    setSingleLine(true)
                 }
                 val minuteOnly = CheckBox(context).apply {
                     text = "I only know the start time to the minute"
