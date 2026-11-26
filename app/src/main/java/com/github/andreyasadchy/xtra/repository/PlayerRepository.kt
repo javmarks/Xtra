@@ -1520,6 +1520,43 @@ class PlayerRepository(
         }
     }
 
+    private suspend fun enrichBadgeMetadata(
+        badges: List<TwitchBadge>,
+        loadMetadata: suspend () -> com.github.andreyasadchy.xtra.model.helix.chat.BadgesResponse
+    ): List<TwitchBadge> {
+        if (badges.isEmpty()) return badges
+        return try {
+            val metadata = loadMetadata().data.flatMap { set ->
+                val setId = set.setId ?: return@flatMap emptyList()
+                set.versions.orEmpty().mapNotNull { version ->
+                    version.id?.let { id -> (setId to id) to version }
+                }
+            }.toMap()
+            badges.map { badge ->
+                val version = metadata[badge.setId to badge.version]
+                if (version == null) {
+                    badge
+                } else {
+                    TwitchBadge(
+                        setId = badge.setId,
+                        version = badge.version,
+                        localData = badge.localData,
+                        url1x = badge.url1x,
+                        url2x = badge.url2x,
+                        url3x = badge.url3x,
+                        url4x = badge.url4x,
+                        title = badge.title ?: version.title,
+                        description = version.description,
+                        clickAction = version.clickAction,
+                        clickUrl = version.clickUrl
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            badges
+        }
+    }
+
     suspend fun loadGlobalBadges(networkLibrary: String?, helixHeaders: Map<String, String>, gqlHeaders: Map<String, String>, emoteQuality: String, enableIntegrity: Boolean): List<TwitchBadge> = withContext(Dispatchers.IO) {
         try {
             val response = graphQLRepository.loadQueryBadges(networkLibrary, gqlHeaders,
@@ -1533,7 +1570,7 @@ class PlayerRepository(
             if (enableIntegrity) {
                 response.errors?.find { it.message == C.FAILED_INTEGRITY_CHECK }?.let { throw Exception(it.message) }
             }
-            response.data!!.badges?.mapNotNull {
+            enrichBadgeMetadata(response.data!!.badges?.mapNotNull {
                 it?.setID?.let { setId ->
                     it.version?.let { version ->
                         it.imageURL?.let { url ->
@@ -1549,7 +1586,9 @@ class PlayerRepository(
                         }
                     }
                 }
-            } ?: emptyList()
+            } ?: emptyList()) {
+                helixRepository.getGlobalBadges(networkLibrary, helixHeaders)
+            }
         } catch (e: Exception) {
             if (e.message == C.FAILED_INTEGRITY_CHECK) throw e
             try {
@@ -1612,7 +1651,7 @@ class PlayerRepository(
             if (enableIntegrity) {
                 response.errors?.find { it.message == C.FAILED_INTEGRITY_CHECK }?.let { throw Exception(it.message) }
             }
-            response.data!!.user?.broadcastBadges?.mapNotNull {
+            enrichBadgeMetadata(response.data!!.user?.broadcastBadges?.mapNotNull {
                 it?.setID?.let { setId ->
                     it.version?.let { version ->
                         it.imageURL?.let { url ->
@@ -1628,7 +1667,10 @@ class PlayerRepository(
                         }
                     }
                 }
-            } ?: emptyList()
+            } ?: emptyList()) {
+                if (channelId.isNullOrBlank()) throw IllegalStateException("Channel ID unavailable for badge metadata")
+                helixRepository.getChannelBadges(networkLibrary, helixHeaders, channelId)
+            }
         } catch (e: Exception) {
             if (e.message == C.FAILED_INTEGRITY_CHECK) throw e
             try {
