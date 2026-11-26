@@ -2911,13 +2911,15 @@ class ExoPlayerService : BasePlaybackService() {
 
     private fun reinitializeDynamicsProcessing(audioSessionId: Int) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            dynamicsProcessing = DynamicsProcessing(0, audioSessionId, null).apply {
-                for (channelIdx in 0 until channelCount) {
-                    for (bandIdx in 0 until getMbcByChannelIndex(channelIdx).bandCount) {
-                        setMbcBandByChannelIndex(
+            var effect: DynamicsProcessing? = null
+            try {
+                effect = DynamicsProcessing(0, audioSessionId, null)
+                for (channelIdx in 0 until effect.channelCount) {
+                    for (bandIdx in 0 until effect.getMbcByChannelIndex(channelIdx).bandCount) {
+                        effect.setMbcBandByChannelIndex(
                             channelIdx,
                             bandIdx,
-                            getMbcBandByChannelIndex(channelIdx, bandIdx).apply {
+                            effect.getMbcBandByChannelIndex(channelIdx, bandIdx).apply {
                                 attackTime = 0f
                                 releaseTime = 0.25f
                                 ratio = 1.6f
@@ -2929,7 +2931,13 @@ class ExoPlayerService : BasePlaybackService() {
                         )
                     }
                 }
-                enabled = true
+                effect.enabled = true
+                dynamicsProcessing = effect
+            } catch (e: Exception) {
+                runCatching { effect?.release() }
+                dynamicsProcessing = null
+                prefs().edit { putBoolean(C.PLAYER_AUDIO_COMPRESSOR, false) }
+                Log.w("XtraAudioCompressor", "Audio compressor unavailable; continuing without it", e)
             }
         }
     }
