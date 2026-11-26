@@ -443,21 +443,45 @@ class SettingsActivity : AppCompatActivity() {
                     setSingleLine(true)
                 }
                 val streamIdInput = EditText(context).apply {
-                    hint = "Stream ID"
-                    inputType = InputType.TYPE_CLASS_NUMBER
+                    hint = "Deleted VOD link or ID"
                     setSingleLine(true)
                 }
-                val timestampInput = EditText(context).apply {
-                    hint = "Stream start time (Unix seconds)"
-                    inputType = InputType.TYPE_CLASS_NUMBER
-                    setSingleLine(true)
+                val startTime = java.util.Calendar.getInstance().apply { set(2000, 0, 1, 0, 0, 0) }
+                val startTimeButton = android.widget.Button(context).apply {
+                    text = "Choose broadcast date and start time"
+                    setOnClickListener {
+                        android.app.DatePickerDialog(
+                            context,
+                            { _, year, month, day ->
+                                startTime.set(year, month, day)
+                                android.app.TimePickerDialog(
+                                    context,
+                                    { _, hour, minute ->
+                                        startTime.set(java.util.Calendar.YEAR, year)
+                                        startTime.set(java.util.Calendar.MONTH, month)
+                                        startTime.set(java.util.Calendar.DAY_OF_MONTH, day)
+                                        startTime.set(java.util.Calendar.HOUR_OF_DAY, hour)
+                                        startTime.set(java.util.Calendar.MINUTE, minute)
+                                        startTime.set(java.util.Calendar.SECOND, 0)
+                                        text = java.text.DateFormat.getDateTimeInstance().format(startTime.time)
+                                    },
+                                    startTime.get(java.util.Calendar.HOUR_OF_DAY),
+                                    startTime.get(java.util.Calendar.MINUTE),
+                                    false
+                                ).show()
+                            },
+                            startTime.get(java.util.Calendar.YEAR),
+                            startTime.get(java.util.Calendar.MONTH),
+                            startTime.get(java.util.Calendar.DAY_OF_MONTH)
+                        ).show()
+                    }
                 }
                 val minuteOnly = CheckBox(context).apply {
-                    text = "I only know the start time to the minute"
+                    text = "Start time is approximate (within one minute)"
                 }
                 layout.addView(loginInput)
                 layout.addView(streamIdInput)
-                layout.addView(timestampInput)
+                layout.addView(startTimeButton)
                 layout.addView(minuteOnly)
                 val dialog = AlertDialog.Builder(context)
                     .setTitle("Deleted VOD recovery")
@@ -469,10 +493,12 @@ class SettingsActivity : AppCompatActivity() {
                 dialog.setOnShowListener {
                     dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                         val login = loginInput.text.toString().trim()
-                        val streamId = streamIdInput.text.toString().toLongOrNull()
-                        val timestamp = timestampInput.text.toString().toLongOrNull()
+                        val rawVodId = streamIdInput.text.toString().trim()
+                        val streamId = Regex("(?:videos/|video/)?(\\d+)(?:[/?#]|$)", RegexOption.IGNORE_CASE)
+                            .find(rawVodId)?.groupValues?.get(1)?.toLongOrNull()
+                        val timestamp = startTime.takeIf { startTime.get(java.util.Calendar.YEAR) > 2000 }?.timeInMillis?.div(1000L)
                         if (login.isBlank() || streamId == null || timestamp == null) {
-                            Toast.makeText(context, "Enter a channel login, stream ID, and Unix start time.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Enter a channel name, a Twitch VOD link or ID, and choose its broadcast date/time.", Toast.LENGTH_LONG).show()
                             return@setOnClickListener
                         }
                         val searchButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
