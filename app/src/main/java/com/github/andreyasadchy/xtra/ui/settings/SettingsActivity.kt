@@ -19,6 +19,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.CheckBox
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -63,6 +66,8 @@ import com.github.andreyasadchy.xtra.databinding.DialogUpdateDownloadBinding
 import com.github.andreyasadchy.xtra.model.ui.SettingsDragListItem
 import com.github.andreyasadchy.xtra.model.ui.SettingsSearchItem
 import com.github.andreyasadchy.xtra.ui.common.IntegrityDialog
+import com.github.andreyasadchy.xtra.ui.main.MainActivity
+import com.github.andreyasadchy.xtra.util.vod.VodRecoveryRepository
 import com.github.andreyasadchy.xtra.ui.settings.SettingsViewModel.Companion.SettingsViewModelFactory
 import com.github.andreyasadchy.xtra.util.C
 import com.github.andreyasadchy.xtra.util.TwitchApiHelper
@@ -424,6 +429,107 @@ class SettingsActivity : AppCompatActivity() {
                         .setPositiveButton(android.R.string.ok, null)
                         .show()
                 }
+                true
+            }
+            findPreference<Preference>("deleted_vod_recovery")?.setOnPreferenceClickListener {
+                val context = requireContext()
+                val padding = (16 * resources.displayMetrics.density).toInt()
+                val layout = LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(padding, padding / 2, padding, 0)
+                }
+                val loginInput = EditText(context).apply {
+                    hint = "Twitch channel login"
+                    singleLine = true
+                }
+                val streamIdInput = EditText(context).apply {
+                    hint = "Stream ID"
+                    inputType = InputType.TYPE_CLASS_NUMBER
+                    singleLine = true
+                }
+                val timestampInput = EditText(context).apply {
+                    hint = "Stream start time (Unix seconds)"
+                    inputType = InputType.TYPE_CLASS_NUMBER
+                    singleLine = true
+                }
+                val minuteOnly = CheckBox(context).apply {
+                    text = "I only know the start time to the minute"
+                }
+                layout.addView(loginInput)
+                layout.addView(streamIdInput)
+                layout.addView(timestampInput)
+                layout.addView(minuteOnly)
+                val dialog = AlertDialog.Builder(context)
+                    .setTitle("Deleted VOD recovery")
+                    .setMessage("Recovery only works if Twitch's original video segments still exist.")
+                    .setView(layout)
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton("Search", null)
+                    .create()
+                dialog.setOnShowListener {
+                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val login = loginInput.text.toString().trim()
+                        val streamId = streamIdInput.text.toString().toLongOrNull()
+                        val timestamp = timestampInput.text.toString().toLongOrNull()
+                        if (login.isBlank() || streamId == null || timestamp == null) {
+                            Toast.makeText(context, "Enter a channel login, stream ID, and Unix start time.", Toast.LENGTH_LONG).show()
+                            return@setOnClickListener
+                        }
+                        val searchButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                        searchButton.isEnabled = false
+                        searchButton.text = "Searching…"
+                        lifecycleScope.launch {
+                            val result = runCatching {
+                                VodRecoveryRepository.recover(login, streamId, timestamp, minuteOnly.isChecked)
+                            }
+                            if (!isAdded || !dialog.isShowing) return@launch
+                            searchButton.isEnabled = true
+                            searchButton.text = "Search"
+                            val recovered = result.getOrNull()
+                            if (result.isFailure) {
+                                AlertDialog.Builder(context)
+                                    .setTitle("Recovery search failed")
+                                    .setMessage(result.exceptionOrNull()?.message ?: "Check the details and try again.")
+                                    .setPositiveButton(android.R.string.ok, null)
+                                    .show()
+                            } else if (recovered == null) {
+                                AlertDialog.Builder(context)
+                                    .setTitle("No playable copy found")
+                                    .setMessage("No matching playlist with reachable video segments was found. Twitch may have permanently deleted the media.")
+                                    .setPositiveButton(android.R.string.ok, null)
+                                    .show()
+                            } else {
+                                val labels = recovered.qualities.map { quality ->
+                                    buildString {
+                                        append(quality.name)
+                                        quality.frameRate?.let { append(" · ").append(it.toInt()).append(" fps") }
+                                        quality.bitrate?.let { append(" · ").append(it / 1000).append(" kbps") }
+                                    }
+                                }.toTypedArray()
+                                AlertDialog.Builder(context)
+                                    .setTitle("Playable copy found")
+                                    .setMessage("Choose a quality to play. Download support will be added through Xtra's existing download queue.")
+                                    .setItems(labels) { _, selected ->
+                                        val intent = Intent(context, MainActivity::class.java).apply {
+                                            action = MainActivity.INTENT_PLAY_RECOVERED_VOD
+                                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                            putExtra(MainActivity.KEY_RECOVERED_LOGIN, recovered.streamerLogin)
+                                            putExtra(MainActivity.KEY_RECOVERED_STREAM_ID, recovered.streamId.toString())
+                                            putStringArrayListExtra(MainActivity.KEY_RECOVERED_URLS, ArrayList(recovered.qualities.map { it.url }))
+                                            putStringArrayListExtra(MainActivity.KEY_RECOVERED_NAMES, arrayListOf(recovered.qualities[selected].name))
+                                            putExtra(MainActivity.KEY_RECOVERED_RESOLUTIONS, intArrayOf(recovered.qualities[selected].resolution ?: 0))
+                                            putExtra(MainActivity.KEY_RECOVERED_FRAME_RATES, floatArrayOf(recovered.qualities[selected].frameRate ?: 0f))
+                                            putExtra(MainActivity.KEY_RECOVERED_BITRATES, intArrayOf(recovered.qualities[selected].bitrate ?: 0))
+                                        }
+                                        startActivity(intent)
+                                    }
+                                    .setNegativeButton(android.R.string.cancel, null)
+                                    .show()
+                            }
+                        }
+                    }
+                }
+                dialog.show()
                 true
             }
             findPreference<Preference>("theme_settings")?.setOnPreferenceClickListener {
