@@ -919,9 +919,9 @@ class GraphQLRepository(
         channelSpecific: Boolean,
     ): String = withContext(Dispatchers.IO) {
         val badgeField = if (channelSpecific) {
-            "self { availableBadges { setID version title imageURL(size: DOUBLE) } }"
+            "self { availableBadges { setID version title description clickURL imageURL(size: DOUBLE) } }"
         } else {
-            "availableBadges { setID version title imageURL(size: DOUBLE) }"
+            "availableBadges { setID version title description clickURL imageURL(size: DOUBLE) }"
         }
         val query = "query ChatIdentityAvailableBadges(\$login: String!) { user(login: \$login) { $badgeField } }"
         val body = buildJsonObject {

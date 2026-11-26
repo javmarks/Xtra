@@ -326,7 +326,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                             add(com.github.andreyasadchy.xtra.model.chat.TwitchBadge(
                                 setId = setId, version = version,
                                 url1x = image, url2x = image, url3x = image, url4x = image,
-                                title = badge.optString("title").takeIf { it.isNotBlank() && it != "null" }
+                                title = badge.optString("title").takeIf { it.isNotBlank() && it != "null" },
+                                description = badge.optString("description").takeIf { it.isNotBlank() && it != "null" },
+                                clickUrl = badge.optString("clickURL").takeIf { it.isNotBlank() && it != "null" }
                             ))
                         }
                     }
