@@ -47,6 +47,13 @@
         app:singleLineTitle="false" />
 
     <Preference
+        android:key="deleted_vod_recovery"
+        android:title="Deleted VOD recovery"
+        android:summary="Search for and play Twitch VODs whose media is still available"
+        app:iconSpaceReserved="false"
+        app:singleLineTitle="false" />
+
+    <Preference
         android:key="theme_settings"
         android:title="@string/theme"
         app:iconSpaceReserved="false"
