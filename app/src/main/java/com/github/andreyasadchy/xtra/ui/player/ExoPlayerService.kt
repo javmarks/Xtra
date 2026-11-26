@@ -2600,11 +2600,36 @@ class ExoPlayerService : BasePlaybackService() {
                             }
                         }
                         if (response != null) {
-                            val bitmap = BitmapFactory.decodeByteArray(response, 0, response.size)
+                            // Channel artwork is only used in the media notification. Decode it
+                            // at a bounded size instead of retaining a full-resolution image.
+                            val bounds = BitmapFactory.Options().apply {
+                                inJustDecodeBounds = true
+                            }
+                            BitmapFactory.decodeByteArray(response, 0, response.size, bounds)
+                            val maxArtworkSize = 512
+                            var sampleSize = 1
+                            while (
+                                bounds.outWidth / sampleSize > maxArtworkSize ||
+                                bounds.outHeight / sampleSize > maxArtworkSize
+                            ) {
+                                sampleSize *= 2
+                            }
+                            val bitmap = BitmapFactory.decodeByteArray(
+                                response,
+                                0,
+                                response.size,
+                                BitmapFactory.Options().apply {
+                                    inSampleSize = sampleSize
+                                }
+                            )
                             if (bitmap != null) {
-                                cachedBitmap = bitmap
                                 withContext(Dispatchers.Main) {
-                                    setMetadata(bitmap)
+                                    if (isActive && url == channelImage) {
+                                        cachedBitmap = bitmap
+                                        setMetadata(bitmap)
+                                    } else {
+                                        bitmap.recycle()
+                                    }
                                 }
                             }
                         }
