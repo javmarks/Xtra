@@ -66,6 +66,7 @@ import com.github.andreyasadchy.xtra.R
 import com.github.andreyasadchy.xtra.databinding.ActivityMainBinding
 import com.github.andreyasadchy.xtra.databinding.DialogUpdateDownloadBinding
 import com.github.andreyasadchy.xtra.model.PlaybackState
+import com.github.andreyasadchy.xtra.model.VideoQuality
 import com.github.andreyasadchy.xtra.model.ui.Clip
 import com.github.andreyasadchy.xtra.model.ui.OfflineVideo
 import com.github.andreyasadchy.xtra.model.ui.Stream
@@ -93,6 +94,8 @@ import com.github.andreyasadchy.xtra.util.TwitchApiHelper
 import com.github.andreyasadchy.xtra.util.applyTheme
 import com.github.andreyasadchy.xtra.util.getAlertDialogBuilder
 import com.github.andreyasadchy.xtra.util.prefs
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import com.github.andreyasadchy.xtra.util.tokenPrefs
 import com.google.android.material.color.MaterialColors
 import kotlinx.coroutines.flow.collectLatest
@@ -112,6 +115,14 @@ class MainActivity : AppCompatActivity() {
         const val INTENT_OPEN_DOWNLOADS_TAB = "com.github.andreyasadchy.xtra.OPEN_DOWNLOADS_TAB"
         const val INTENT_OPEN_DOWNLOADED_VIDEO = "com.github.andreyasadchy.xtra.OPEN_DOWNLOADED_VIDEO"
         const val INTENT_OPEN_PLAYER = "com.github.andreyasadchy.xtra.OPEN_PLAYER"
+        const val INTENT_PLAY_RECOVERED_VOD = "com.github.andreyasadchy.xtra.PLAY_RECOVERED_VOD"
+        const val KEY_RECOVERED_LOGIN = "recovered_login"
+        const val KEY_RECOVERED_STREAM_ID = "recovered_stream_id"
+        const val KEY_RECOVERED_URLS = "recovered_urls"
+        const val KEY_RECOVERED_NAMES = "recovered_names"
+        const val KEY_RECOVERED_RESOLUTIONS = "recovered_resolutions"
+        const val KEY_RECOVERED_FRAME_RATES = "recovered_frame_rates"
+        const val KEY_RECOVERED_BITRATES = "recovered_bitrates"
         const val INTENT_START_AUDIO_ONLY = "com.github.andreyasadchy.xtra.START_AUDIO_ONLY"
         const val INTENT_PLAY_PAUSE_PLAYER = "com.github.andreyasadchy.xtra.PLAY_PAUSE_PLAYER"
     }
@@ -830,6 +841,37 @@ class MainActivity : AppCompatActivity() {
                     intent.getParcelableExtra(KEY_VIDEO)
                 }?.let {
                     startStream(it)
+                }
+            }
+            INTENT_PLAY_RECOVERED_VOD -> {
+                val login = intent.getStringExtra(KEY_RECOVERED_LOGIN).orEmpty()
+                val streamId = intent.getStringExtra(KEY_RECOVERED_STREAM_ID).orEmpty()
+                val urls = intent.getStringArrayListExtra(KEY_RECOVERED_URLS).orEmpty()
+                val names = intent.getStringArrayListExtra(KEY_RECOVERED_NAMES).orEmpty()
+                val resolutions = intent.getIntArrayExtra(KEY_RECOVERED_RESOLUTIONS)
+                val frameRates = intent.getFloatArrayExtra(KEY_RECOVERED_FRAME_RATES)
+                val bitrates = intent.getIntArrayExtra(KEY_RECOVERED_BITRATES)
+                if (login.isNotBlank() && urls.isNotEmpty()) {
+                    val recoveredQualities = urls.mapIndexed { index, url ->
+                        VideoQuality(
+                            name = names.getOrNull(index) ?: "source",
+                            resolution = resolutions?.getOrNull(index),
+                            frameRate = frameRates?.getOrNull(index),
+                            bitrate = bitrates?.getOrNull(index),
+                            url = url,
+                        )
+                    }
+                    startVideo(
+                        Video(
+                            channelLogin = login,
+                            channelName = login,
+                            title = "Recovered VOD · $streamId",
+                        ),
+                        offset = null,
+                        qualities = Json.encodeToString(recoveredQualities),
+                    )
+                } else {
+                    Toast.makeText(this, "Recovered VOD data is incomplete.", Toast.LENGTH_LONG).show()
                 }
             }
             INTENT_OPEN_DOWNLOADS_TAB -> {
