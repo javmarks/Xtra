@@ -1,5 +1,6 @@
 package com.github.andreyasadchy.xtra.util.vod
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -56,13 +57,17 @@ object VodRecoveryRepository {
         require(streamId > 0) { "Enter a valid stream ID." }
         require(startTimestamp > 0) { "Enter a valid Unix start timestamp." }
 
+        // Prevent a minute-only lookup from turning into an unbounded CDN scan.
+        val deadlineNanos = System.nanoTime() + 90_000_000_000L
         val offsets = if (timestampIsMinuteOnly) 0L..59L else 0L..0L
         for (offset in offsets) {
             coroutineContext.ensureActive()
+            if (System.nanoTime() >= deadlineNanos) return@withContext null
             val timestamp = startTimestamp + offset
             val path = buildPlaylistPath(login, streamId, timestamp)
             for (host in vodHosts) {
                 coroutineContext.ensureActive()
+                if (System.nanoTime() >= deadlineNanos) return@withContext null
                 val masterUrl = "$host$path"
                 val master = fetchPlaylist(masterUrl) ?: continue
                 val qualities = parseQualities(master, masterUrl)
@@ -123,17 +128,23 @@ object VodRecoveryRepository {
     private fun fetchPlaylist(url: String): String? {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = 2500
-            readTimeout = 2500
+            connectTimeout = 1500
+            readTimeout = 1500
             setRequestProperty("User-Agent", "Mozilla/5.0")
             setRequestProperty("Range", "bytes=0-65535")
         }
         return try {
             if (connection.responseCode !in 200..299) return null
             connection.inputStream.bufferedReader().use { reader ->
-                val text = reader.readText().take(65536)
-                text.takeIf { it.startsWith("#EXTM3U") }
+                val text = StringBuilder()
+                while (text.length < 65536) {
+                    val line = reader.readLine() ?: break
+                    text.append(line).append('\n')
+                }
+                text.toString().takeIf { it.startsWith("#EXTM3U") }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         } finally {
@@ -151,6 +162,8 @@ object VodRecoveryRepository {
         }
         return try {
             connection.responseCode in 200..299
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             false
         } finally {
