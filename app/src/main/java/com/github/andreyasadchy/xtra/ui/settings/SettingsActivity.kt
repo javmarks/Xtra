@@ -442,116 +442,117 @@ class SettingsActivity : AppCompatActivity() {
                     hint = "Twitch channel login"
                     setSingleLine(true)
                 }
-                val streamIdInput = EditText(context).apply {
-                    hint = "Deleted VOD link or ID"
-                    setSingleLine(true)
-                }
-                val startTime = java.util.Calendar.getInstance().apply { set(2000, 0, 1, 0, 0, 0) }
-                val startTimeButton = android.widget.Button(context).apply {
-                    text = "Choose broadcast date and start time"
-                    setOnClickListener {
-                        android.app.DatePickerDialog(
-                            context,
-                            { _, year, month, day ->
-                                startTime.set(year, month, day)
-                                android.app.TimePickerDialog(
-                                    context,
-                                    { _, hour, minute ->
-                                        startTime.set(java.util.Calendar.YEAR, year)
-                                        startTime.set(java.util.Calendar.MONTH, month)
-                                        startTime.set(java.util.Calendar.DAY_OF_MONTH, day)
-                                        startTime.set(java.util.Calendar.HOUR_OF_DAY, hour)
-                                        startTime.set(java.util.Calendar.MINUTE, minute)
-                                        startTime.set(java.util.Calendar.SECOND, 0)
-                                        text = java.text.DateFormat.getDateTimeInstance().format(startTime.time)
-                                    },
-                                    startTime.get(java.util.Calendar.HOUR_OF_DAY),
-                                    startTime.get(java.util.Calendar.MINUTE),
-                                    false
-                                ).show()
-                            },
-                            startTime.get(java.util.Calendar.YEAR),
-                            startTime.get(java.util.Calendar.MONTH),
-                            startTime.get(java.util.Calendar.DAY_OF_MONTH)
-                        ).show()
-                    }
-                }
-                val minuteOnly = CheckBox(context).apply {
-                    text = "Start time is approximate (within one minute)"
-                }
                 layout.addView(loginInput)
-                layout.addView(streamIdInput)
-                layout.addView(startTimeButton)
-                layout.addView(minuteOnly)
                 val dialog = AlertDialog.Builder(context)
-                    .setTitle("Deleted VOD recovery")
-                    .setMessage("Recovery only works if Twitch's original video segments still exist.")
+                    .setTitle("Find deleted VODs")
+                    .setMessage("Search stream history by channel. Xtra will look up stream IDs and UTC start times automatically, then test whether video segments are still available.")
                     .setView(layout)
                     .setNegativeButton(android.R.string.cancel, null)
-                    .setPositiveButton("Search", null)
+                    .setPositiveButton("Find streams", null)
                     .create()
                 dialog.setOnShowListener {
-                    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                        val login = loginInput.text.toString().trim()
-                        val rawVodId = streamIdInput.text.toString().trim()
-                        val streamId = Regex("(?:videos/|video/)?(\\d+)(?:[/?#]|$)", RegexOption.IGNORE_CASE)
-                            .find(rawVodId)?.groupValues?.get(1)?.toLongOrNull()
-                        val timestamp = startTime.takeIf { startTime.get(java.util.Calendar.YEAR) > 2000 }?.timeInMillis?.div(1000L)
-                        if (login.isBlank() || streamId == null || timestamp == null) {
-                            Toast.makeText(context, "Enter a channel name, a Twitch VOD link or ID, and choose its broadcast date/time.", Toast.LENGTH_LONG).show()
+                    val searchButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                    searchButton.setOnClickListener {
+                        val login = loginInput.text.toString().trim().removePrefix("@")
+                        if (!login.matches(Regex("[a-zA-Z0-9_]{1,25}"))) {
+                            Toast.makeText(context, "Enter a valid Twitch channel login.", Toast.LENGTH_LONG).show()
                             return@setOnClickListener
                         }
-                        val searchButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
                         searchButton.isEnabled = false
                         searchButton.text = "Searching…"
                         lifecycleScope.launch {
                             val result = runCatching {
-                                VodRecoveryRepository.recover(login, streamId, timestamp, minuteOnly.isChecked)
+                                VodStreamDiscoveryRepository.search(context, login)
                             }
                             if (!isAdded || !dialog.isShowing) return@launch
                             searchButton.isEnabled = true
-                            searchButton.text = "Search"
-                            val recovered = result.getOrNull()
-                            if (result.isFailure) {
+                            searchButton.text = "Find streams"
+                            val candidates = result.getOrNull()
+                            if (result.isFailure || candidates.isNullOrEmpty()) {
                                 AlertDialog.Builder(context)
-                                    .setTitle("Recovery search failed")
-                                    .setMessage(result.exceptionOrNull()?.message ?: "Check the details and try again.")
-                                    .setPositiveButton(android.R.string.ok, null)
-                                    .show()
-                            } else if (recovered == null) {
-                                AlertDialog.Builder(context)
-                                    .setTitle("No playable copy found")
-                                    .setMessage("No matching playlist with reachable video segments was found. Twitch may have permanently deleted the media.")
-                                    .setPositiveButton(android.R.string.ok, null)
-                                    .show()
-                            } else {
-                                val labels = recovered.qualities.map { quality ->
-                                    buildString {
-                                        append(quality.name)
-                                        quality.frameRate?.let { append(" · ").append(it.toInt()).append(" fps") }
-                                        quality.bitrate?.let { append(" · ").append(it / 1000).append(" kbps") }
-                                    }
-                                }.toTypedArray()
-                                AlertDialog.Builder(context)
-                                    .setTitle("Playable copy found")
-                                    .setMessage("Choose a quality to play. Download support will be added through Xtra's existing download queue.")
-                                    .setItems(labels) { _, selected ->
-                                        val intent = Intent(context, MainActivity::class.java).apply {
-                                            action = MainActivity.INTENT_PLAY_RECOVERED_VOD
-                                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                                            putExtra(MainActivity.KEY_RECOVERED_LOGIN, recovered.streamerLogin)
-                                            putExtra(MainActivity.KEY_RECOVERED_STREAM_ID, recovered.streamId.toString())
-                                            putStringArrayListExtra(MainActivity.KEY_RECOVERED_URLS, arrayListOf(recovered.qualities[selected].url))
-                                            putStringArrayListExtra(MainActivity.KEY_RECOVERED_NAMES, arrayListOf(recovered.qualities[selected].name))
-                                            putExtra(MainActivity.KEY_RECOVERED_RESOLUTIONS, intArrayOf(recovered.qualities[selected].resolution ?: 0))
-                                            putExtra(MainActivity.KEY_RECOVERED_FRAME_RATES, floatArrayOf(recovered.qualities[selected].frameRate ?: 0f))
-                                            putExtra(MainActivity.KEY_RECOVERED_BITRATES, intArrayOf(recovered.qualities[selected].bitrate ?: 0))
+                                    .setTitle("No stream history found")
+                                    .setMessage(
+                                        if (result.isFailure) {
+                                            "Couldn't search stream history. Check your connection and try again."
+                                        } else {
+                                            "No streams with usable IDs and timestamps were found for this channel."
                                         }
-                                        startActivity(intent)
-                                    }
-                                    .setNegativeButton(android.R.string.cancel, null)
+                                    )
+                                    .setPositiveButton(android.R.string.ok, null)
                                     .show()
+                                return@launch
                             }
+                            val displayDate = java.text.SimpleDateFormat(
+                                "MMM d, yyyy · h:mm a",
+                                Locale.getDefault()
+                            )
+                            val labels = candidates.take(50).map { candidate ->
+                                val date = displayDate.format(java.util.Date(candidate.startTimestamp * 1000L))
+                                val duration = candidate.durationSeconds?.let {
+                                    " · ${it / 3600}h ${(it % 3600) / 60}m"
+                                }.orEmpty()
+                                "$date$duration\n${candidate.title.ifBlank { "Untitled stream" }}"
+                            }.toTypedArray()
+                            AlertDialog.Builder(context)
+                                .setTitle("Streams found · ${candidates.size}")
+                                .setItems(labels) { _, selected ->
+                                    val candidate = candidates[selected]
+                                    val progress = AlertDialog.Builder(context)
+                                        .setTitle("Checking deleted VOD")
+                                        .setMessage("Testing available Twitch video segments…")
+                                        .setNegativeButton(android.R.string.cancel, null)
+                                        .create()
+                                    progress.show()
+                                    lifecycleScope.launch {
+                                        val recovery = runCatching {
+                                            VodRecoveryRepository.recover(
+                                                candidate.streamerLogin,
+                                                candidate.streamId,
+                                                candidate.startTimestamp
+                                            )
+                                        }
+                                        if (!isAdded) return@launch
+                                        progress.dismiss()
+                                        val recovered = recovery.getOrNull()
+                                        if (recovery.isFailure || recovered == null) {
+                                            AlertDialog.Builder(context)
+                                                .setTitle("No playable copy found")
+                                                .setMessage("This stream was found in history, but its original video segments may have been deleted or are no longer reachable.")
+                                                .setPositiveButton(android.R.string.ok, null)
+                                                .show()
+                                            return@launch
+                                        }
+                                        val qualities = recovered.qualities
+                                        val qualityLabels = qualities.map { quality ->
+                                            buildString {
+                                                append(quality.name)
+                                                quality.frameRate?.let { append(" · ").append(it.toInt()).append(" fps") }
+                                                quality.bitrate?.let { append(" · ").append(it / 1000).append(" kbps") }
+                                            }
+                                        }.toTypedArray()
+                                        AlertDialog.Builder(context)
+                                            .setTitle("Playable copy found")
+                                            .setItems(qualityLabels) { _, qualityIndex ->
+                                                val quality = qualities[qualityIndex]
+                                                val intent = Intent(context, MainActivity::class.java).apply {
+                                                    action = MainActivity.INTENT_PLAY_RECOVERED_VOD
+                                                    flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                                    putExtra(MainActivity.KEY_RECOVERED_LOGIN, recovered.streamerLogin)
+                                                    putExtra(MainActivity.KEY_RECOVERED_STREAM_ID, recovered.streamId.toString())
+                                                    putStringArrayListExtra(MainActivity.KEY_RECOVERED_URLS, arrayListOf(quality.url))
+                                                    putStringArrayListExtra(MainActivity.KEY_RECOVERED_NAMES, arrayListOf(quality.name))
+                                                    putExtra(MainActivity.KEY_RECOVERED_RESOLUTIONS, intArrayOf(quality.resolution ?: 0))
+                                                    putExtra(MainActivity.KEY_RECOVERED_FRAME_RATES, floatArrayOf(quality.frameRate ?: 0f))
+                                                    putExtra(MainActivity.KEY_RECOVERED_BITRATES, intArrayOf(quality.bitrate ?: 0))
+                                                }
+                                                startActivity(intent)
+                                            }
+                                            .setNegativeButton(android.R.string.cancel, null)
+                                            .show()
+                                    }
+                                }
+                                .setNegativeButton(android.R.string.cancel, null)
+                                .show()
                         }
                     }
                 }
