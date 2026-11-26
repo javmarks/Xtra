@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -67,12 +68,12 @@ object VodStreamDiscoveryRepository {
             .put("query", query)
             .put("variables", JSONObject().put("login", login).put("first", 100))
             .toString()
-        val response = request(
+        val response = JSONObject(request(
             "https://gql.twitch.tv/gql",
             "POST",
             body,
             TwitchApiHelper.getGQLHeaders(context, true)
-        )
+        ))
         val edges = response.optJSONObject("data")
             ?.optJSONObject("user")
             ?.optJSONObject("videos")
@@ -99,12 +100,10 @@ object VodStreamDiscoveryRepository {
     }
 
     private fun fetchArchiveStreams(login: String): List<StreamCandidate> {
-        val response = request(
+        val array = JSONArray(request(
             "https://api.vodvod.top/channels/@$login",
             "GET"
-        )
-        val items = response.optJSONArray("items")
-        val array = items ?: return emptyList()
+        ))
         return buildList {
             for (index in 0 until array.length()) {
                 val metadata = array.optJSONObject(index)
@@ -154,7 +153,7 @@ object VodStreamDiscoveryRepository {
         method: String,
         body: String? = null,
         headers: Map<String, String> = emptyMap()
-    ): JSONObject {
+    ): String {
         val connection = (URL(address).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 8000
@@ -171,8 +170,8 @@ object VodStreamDiscoveryRepository {
             if (body != null) {
                 connection.outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(body) }
             }
-            if (connection.responseCode !in 200..299) return JSONObject()
-            connection.inputStream.bufferedReader(Charsets.UTF_8).use { JSONObject(it.readText()) }
+            if (connection.responseCode !in 200..299) return ""
+            connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         } finally {
             connection.disconnect()
         }
