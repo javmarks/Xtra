@@ -36,10 +36,14 @@ object VodStreamDiscoveryRepository {
             }
 
             coroutineScope {
+                // Twitch's own video catalogue contains broadcasts that are still
+                // publicly available. Do not label those as deleted/recoverable.
                 val twitch = async { runCatching { fetchTwitchVideos(context, login) }.getOrNull().orEmpty() }
                 val archive = async { runCatching { fetchArchiveStreams(login) }.getOrNull().orEmpty() }
-                (twitch.await() + archive.await())
+                val publicStreamIds = twitch.await().mapTo(HashSet()) { it.streamId }
+                archive.await()
                     .filter { it.streamId > 0L && it.startTimestamp > 0L }
+                    .filterNot { it.streamId in publicStreamIds }
                     .distinctBy { it.streamId }
                     .sortedByDescending { it.startTimestamp }
             }
