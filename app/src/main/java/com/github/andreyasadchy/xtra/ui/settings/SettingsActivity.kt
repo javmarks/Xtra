@@ -515,7 +515,7 @@ class SettingsActivity : AppCompatActivity() {
                                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                                             putExtra(MainActivity.KEY_RECOVERED_LOGIN, recovered.streamerLogin)
                                             putExtra(MainActivity.KEY_RECOVERED_STREAM_ID, recovered.streamId.toString())
-                                            putStringArrayListExtra(MainActivity.KEY_RECOVERED_URLS, ArrayList(recovered.qualities.map { it.url }))
+                                            putStringArrayListExtra(MainActivity.KEY_RECOVERED_URLS, arrayListOf(recovered.qualities[selected].url))
                                             putStringArrayListExtra(MainActivity.KEY_RECOVERED_NAMES, arrayListOf(recovered.qualities[selected].name))
                                             putExtra(MainActivity.KEY_RECOVERED_RESOLUTIONS, intArrayOf(recovered.qualities[selected].resolution ?: 0))
                                             putExtra(MainActivity.KEY_RECOVERED_FRAME_RATES, floatArrayOf(recovered.qualities[selected].frameRate ?: 0f))
