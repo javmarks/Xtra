@@ -47,9 +47,9 @@ object VodStreamDiscoveryRepository {
 
     private fun fetchTwitchVideos(context: Context, login: String): List<StreamCandidate> {
         val query = """
-            query($login: String!, $first: Int!) {
-              user(login: $login) {
-                videos(first: $first) {
+            query(\$login: String!, \$first: Int!) {
+              user(login: \$login) {
+                videos(first: \$first) {
                   edges {
                     node {
                       title
