@@ -71,14 +71,17 @@ object VodRecoveryRepository {
         streamerLogin: String,
         streamId: Long,
         startTimestamp: Long,
-        timestampIsMinuteOnly: Boolean = false
+        timestampIsMinuteOnly: Boolean = false,
+        searchTimeoutMillis: Long = 90_000L,
+        hostLimit: Int = vodHosts.size,
+        qualityLimit: Int = candidateQualities.size
     ): RecoveredVod? = withContext(Dispatchers.IO) {
         val login = streamerLogin.trim().lowercase()
         require(login.matches(Regex("[a-z0-9_]{1,25}"))) { "Enter a valid Twitch channel login." }
         require(streamId > 0) { "Enter a valid stream ID." }
         require(startTimestamp > 0) { "Enter a valid Unix start timestamp." }
 
-        val deadlineNanos = System.nanoTime() + 90_000_000_000L
+        val deadlineNanos = System.nanoTime() + searchTimeoutMillis.coerceAtLeast(1_000L) * 1_000_000L
         val offsets = if (timestampIsMinuteOnly) {
             (0L..59L).toList()
         } else {
@@ -100,8 +103,8 @@ object VodRecoveryRepository {
                 .removeSuffix("/chunked/index-dvr.m3u8")
 
             val checks = coroutineScope {
-                (vodHosts.flatMap { host ->
-                    candidateQualities.map { quality ->
+                (vodHosts.take(hostLimit.coerceAtLeast(1)).flatMap { host ->
+                    candidateQualities.take(qualityLimit.coerceAtLeast(1)).map { quality ->
                         async {
                             val playlistUrl = "$host$basePath/$quality/index-dvr.m3u8"
                             findPlayableQualities(playlistUrl, quality)
