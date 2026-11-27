@@ -6,6 +6,8 @@ import android.app.admin.DeviceAdminReceiver
 import android.app.admin.DevicePolicyManager
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -72,6 +74,7 @@ import com.github.andreyasadchy.xtra.util.vod.RecoveredVodStore
 import com.github.andreyasadchy.xtra.util.vod.VodStreamDiscoveryRepository
 import com.github.andreyasadchy.xtra.ui.settings.SettingsViewModel.Companion.SettingsViewModelFactory
 import com.github.andreyasadchy.xtra.util.C
+import com.github.andreyasadchy.xtra.util.CrashDiagnostics
 import com.github.andreyasadchy.xtra.util.TwitchApiHelper
 import com.github.andreyasadchy.xtra.util.applyTheme
 import com.github.andreyasadchy.xtra.util.getAlertDialogBuilder
@@ -1692,6 +1695,17 @@ class SettingsActivity : AppCompatActivity() {
                     }
                     true
                 }
+            }
+            findPreference<Preference>("copy_crash_report")?.setOnPreferenceClickListener {
+                val report = CrashDiagnostics.read(requireContext())
+                if (report.isNullOrBlank()) {
+                    Toast.makeText(requireContext(), "No crash report has been captured yet", Toast.LENGTH_SHORT).show()
+                } else {
+                    val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Xtra crash report", report))
+                    Toast.makeText(requireContext(), "Crash report copied", Toast.LENGTH_SHORT).show()
+                }
+                true
             }
             findPreference<Preference>("get_integrity_token")?.setOnPreferenceClickListener {
                 IntegrityDialog.newInstance(null).show(childFragmentManager, null)
