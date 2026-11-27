@@ -548,7 +548,7 @@ class SettingsActivity : AppCompatActivity() {
                                                         startTimestamp = recovered.startTimestamp,
                                                         title = candidate.title,
                                                         durationSeconds = candidate.durationSeconds,
-                                                        qualities = recovered.qualities.distinctBy { it.url }
+                                                        qualities = qualities
                                                     )
                                                 )
                                                 val intent = Intent(context, MainActivity::class.java).apply {
