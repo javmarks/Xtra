@@ -2425,10 +2425,15 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                 isFollowingChat = true
                 adapter?.resumeDisplay()
                 btnDown.isGone = true
-                recyclerView.post {
-                    val latestPosition = (adapter?.itemCount ?: 0) - 1
-                    if (latestPosition >= 0) recyclerView.scrollToPosition(latestPosition)
-                }
+                // Let the keyboard-hide/layout pass finish before positioning the last row.
+                // An immediate scroll can target the old viewport height and leave the newest
+                // message just below the visible area.
+                recyclerView.postDelayed({
+                    if (recyclerView.isAttachedToWindow) {
+                        val latestPosition = (adapter?.itemCount ?: 0) - 1
+                        if (latestPosition >= 0) recyclerView.scrollToPosition(latestPosition)
+                    }
+                }, 200)
                 true
             } else {
                 false
