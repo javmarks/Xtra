@@ -17,13 +17,33 @@ import kotlin.coroutines.coroutineContext
  * when at least one media segment can still be reached.
  */
 object VodRecoveryRepository {
+    // Mirrors the currently published TwitchRecover host list, with a fixed
+    // local fallback so recovery does not depend on a runtime GitHub request.
     private val vodHosts = listOf(
         "https://vod-secure.twitch.tv",
         "https://vod-metro.twitch.tv",
+        "https://vod-pop-secure.twitch.tv",
         "https://d2e2de1etea730.cloudfront.net",
         "https://dqrpb9wgowsf5.cloudfront.net",
         "https://ds0h3roq6wcgc.cloudfront.net",
-        "https://d2nvs31859zcd8.cloudfront.net"
+        "https://d2nvs31859zcd8.cloudfront.net",
+        "https://d2aba1wr3818hz.cloudfront.net",
+        "https://d3c27h4odz752x.cloudfront.net",
+        "https://dgeft87wbj63p.cloudfront.net",
+        "https://d1m7jfoe9zdc1j.cloudfront.net",
+        "https://d3vd9lfkzbru3h.cloudfront.net",
+        "https://d2vjef5jvl6bfs.cloudfront.net",
+        "https://d1ymi26ma8va5x.cloudfront.net",
+        "https://d1mhjrowxxagfy.cloudfront.net",
+        "https://ddacn6pr5v0tl.cloudfront.net",
+        "https://d3aqoihi2n8ty8.cloudfront.net"
+    )
+
+    // TwitchRecover checks these direct quality playlists; "chunked" is a
+    // media playlist, not necessarily a master playlist.
+    private val candidateQualities = listOf(
+        "chunked", "1080p60", "1080p", "720p60", "720p",
+        "480p30", "480p", "360p30", "160p30"
     )
 
     data class RecoveredVod(
@@ -46,6 +66,11 @@ object VodRecoveryRepository {
      * [timestampIsMinuteOnly] enables a bounded 60-second timestamp search.
      * Cancellation is checked between every network request.
      */
+    /**
+     * Searches a bounded range around the recorded UTC start time. Archive
+     * timestamps can be slightly imprecise, so test -30 through +60 seconds.
+     * Every host/quality candidate is checked concurrently, with a hard deadline.
+     */
     suspend fun recover(
         streamerLogin: String,
         streamId: Long,
@@ -57,43 +82,90 @@ object VodRecoveryRepository {
         require(streamId > 0) { "Enter a valid stream ID." }
         require(startTimestamp > 0) { "Enter a valid Unix start timestamp." }
 
-        // Prevent a minute-only lookup from turning into an unbounded CDN scan.
         val deadlineNanos = System.nanoTime() + 90_000_000_000L
-        val offsets = if (timestampIsMinuteOnly) 0L..59L else 0L..0L
+        val offsets = if (timestampIsMinuteOnly) {
+            (0L..59L).toList()
+        } else {
+            buildList {
+                add(0L)
+                for (distance in 1L..30L) {
+                    add(-distance)
+                    add(distance)
+                }
+                for (second in 31L..60L) add(second)
+            }
+        }
+
         for (offset in offsets) {
             coroutineContext.ensureActive()
             if (System.nanoTime() >= deadlineNanos) return@withContext null
             val timestamp = startTimestamp + offset
-            val path = buildPlaylistPath(login, streamId, timestamp)
-            for (host in vodHosts) {
-                coroutineContext.ensureActive()
-                if (System.nanoTime() >= deadlineNanos) return@withContext null
-                val masterUrl = "$host$path"
-                val master = fetchPlaylist(masterUrl) ?: continue
-                val qualities = parseQualities(master, masterUrl)
-                if (qualities.isEmpty()) continue
+            val basePath = buildPlaylistPath(login, streamId, timestamp)
+                .removeSuffix("/chunked/index-dvr.m3u8")
 
-                // A master playlist alone can survive after Twitch removes its media.
-                // Require a reachable media playlist and at least one media segment.
-                val playable = qualities.filter { quality ->
-                    coroutineContext.ensureActive()
-                    val media = fetchPlaylist(quality.url) ?: return@filter false
-                    val segment = media.lineSequence()
-                        .map(String::trim)
-                        .firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
-                        ?: return@filter false
-                    val segmentUrl = runCatching { URL(URL(quality.url), segment).toString() }.getOrNull()
-                        ?: return@filter false
-                    isReachableMedia(segmentUrl)
-                }
-                if (playable.isNotEmpty()) {
-                    return@withContext RecoveredVod(login, streamId, timestamp, masterUrl, playable)
-                }
+            val checks = coroutineScope {
+                (vodHosts.flatMap { host ->
+                    candidateQualities.map { quality ->
+                        async {
+                            val playlistUrl = "$host$basePath/$quality/index-dvr.m3u8"
+                            findPlayableQualities(playlistUrl, quality)
+                        }
+                    }
+                }).awaitAll()
+            }
+            val playable = checks.flatten().distinctBy { it.url }
+            if (playable.isNotEmpty()) {
+                val selected = playable.first()
+                val hostBase = selected.url.substringBefore("/${selected.name}/index-dvr.m3u8")
+                return@withContext RecoveredVod(login, streamId, timestamp, hostBase, playable)
             }
         }
         null
     }
 
+    private suspend fun findPlayableQualities(
+        playlistUrl: String,
+        qualityName: String
+    ): List<RecoveredQuality> {
+        coroutineContext.ensureActive()
+        val content = fetchPlaylist(playlistUrl) ?: return emptyList()
+
+        // A direct quality URL normally serves a media playlist. Some hosts may
+        // instead return a master playlist, so retain support for both formats.
+        val parsed = parseQualities(content, playlistUrl)
+        val candidates = if (parsed.isNotEmpty()) {
+            parsed
+        } else if (content.contains("#EXTINF", ignoreCase = true)) {
+            val resolution = Regex("""(\\d+)p""").find(qualityName)?.groupValues?.get(1)?.toIntOrNull()
+            listOf(
+                RecoveredQuality(
+                    name = qualityName,
+                    resolution = resolution,
+                    frameRate = if (qualityName.endsWith("60")) 60f else null,
+                    bitrate = null,
+                    url = playlistUrl
+                )
+            )
+        } else {
+            emptyList()
+        }
+
+        return candidates.filter { quality ->
+            coroutineContext.ensureActive()
+            val media = if (quality.url == playlistUrl) content else fetchPlaylist(quality.url)
+            media != null && hasReachableSegment(media, quality.url)
+        }
+    }
+
+    private fun hasReachableSegment(mediaPlaylist: String, playlistUrl: String): Boolean {
+        val segment = mediaPlaylist.lineSequence()
+            .map(String::trim)
+            .firstOrNull { it.isNotEmpty() && !it.startsWith("#") }
+            ?: return false
+        val segmentUrl = runCatching { URL(URL(playlistUrl), segment).toString() }.getOrNull()
+            ?: return false
+        return isReachableMedia(segmentUrl)
+    }
     internal fun buildPlaylistPath(login: String, streamId: Long, timestamp: Long): String {
         val base = "${login.lowercase()}_${streamId}_${timestamp}"
         val digest = MessageDigest.getInstance("SHA-1")
