@@ -395,6 +395,7 @@ class MediaPlayerFragment : PlayerFragment() {
     }
 
     override fun startAudioOnly() {
+        markAudioOnlyBackgroundMode()
         if (playbackService != null) {
             playbackService?.startAudioOnly()
             playbackService?.setSleepTimer((activity as? MainActivity)?.getSleepTimerTimeLeft() ?: 0)
