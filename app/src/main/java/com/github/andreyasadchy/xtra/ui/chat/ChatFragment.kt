@@ -201,6 +201,9 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
     // Keep following state independent of the finger's current touch state. A reader
     // who scrolls upward must not be pulled back to the newest message when a new row arrives.
     private var isFollowingChat = true
+    // Ignore layout/keyboard-driven RecyclerView movement; only a user drag/fling
+    // should pause automatic following of new chat messages.
+    private var isUserScrollingChat = false
     private var showChatStatus = false
     private var hasRecentEmotes = false
     private var messagingEnabled = false
@@ -883,10 +886,10 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                                 // Only an actual downward scroll reaching the bottom resumes follow;
                                 // dy == 0 can also happen during adapter/layout updates and must not
                                 // pull the reader back to the newest message.
-                                if (dy < 0) {
+                                if (isUserScrollingChat && dy < 0) {
                                     isFollowingChat = false
                                     adapter?.pauseDisplay()
-                                } else if (dy > 0 && atBottom) {
+                                } else if (isUserScrollingChat && dy > 0 && atBottom) {
                                     isFollowingChat = true
                                     adapter?.resumeDisplay()
                                 }
@@ -895,6 +898,11 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
 
                             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                                 super.onScrollStateChanged(recyclerView, newState)
+                                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                                    isUserScrollingChat = true
+                                } else if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                                    isUserScrollingChat = false
+                                }
                                 if (showChatStatus && chatStatus.isGone && newState == RecyclerView.SCROLL_STATE_DRAGGING) {
                                     chatStatus.visibility = View.VISIBLE
                                     chatStatus.postDelayed({ chatStatus.visibility = View.GONE }, 5000)
@@ -2415,8 +2423,12 @@ class ChatFragment : BaseNetworkFragment(), MessageClickedDialog.OnButtonClickLi
                     viewModel.chatMessages.lastIndex
                 }
                 isFollowingChat = true
+                adapter?.resumeDisplay()
                 btnDown.isGone = true
-                recyclerView.scrollToPosition(lastIndex)
+                recyclerView.post {
+                    val latestPosition = (adapter?.itemCount ?: 0) - 1
+                    if (latestPosition >= 0) recyclerView.scrollToPosition(latestPosition)
+                }
                 true
             } else {
                 false
