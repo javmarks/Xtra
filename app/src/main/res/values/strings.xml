@@ -73,6 +73,10 @@
     <string name="storage_permission_message">Storage permission is required to download videos.</string>
     <string name="permission_denied">Required permissions were denied.</string>
     <string name="nothing_here">Nothing here</string>
+    <string name="vod_auto_discovery_checking">Checking for deleted VODs…</string>
+    <string name="vod_auto_discovery_found">Deleted VOD recovered</string>
+    <string name="vod_auto_discovery_none">No recoverable deleted VODs found</string>
+    <string name="vod_auto_discovery_last_checked">Last checked: %s</string>
     <string name="watch_live">Watch live</string>
     <string name="open_player">Open player</string>
     <string name="error_stream">Error when loading stream</string>
