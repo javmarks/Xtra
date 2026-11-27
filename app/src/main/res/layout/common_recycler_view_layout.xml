@@ -19,12 +19,24 @@
         app:layout_constraintRight_toRightOf="parent"
         tools:visibility="visible" />
 
+    <TextView
+        android:id="@+id/autoDiscoveryStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="6dp"
+        android:paddingBottom="6dp"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:visibility="gone"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <com.github.andreyasadchy.xtra.ui.view.CustomSwipeRefreshLayout
         android:id="@+id/swipeRefresh"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:enabled="false"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toBottomOf="@id/autoDiscoveryStatus">
 
         <com.github.andreyasadchy.xtra.ui.view.GridRecyclerView
             android:id="@+id/recyclerView"
