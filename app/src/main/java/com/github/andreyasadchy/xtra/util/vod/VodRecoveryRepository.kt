@@ -1,6 +1,9 @@
 package com.github.andreyasadchy.xtra.util.vod
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -41,10 +44,7 @@ object VodRecoveryRepository {
 
     // TwitchRecover checks these direct quality playlists; "chunked" is a
     // media playlist, not necessarily a master playlist.
-    private val candidateQualities = listOf(
-        "chunked", "1080p60", "1080p", "720p60", "720p",
-        "480p30", "480p", "360p30", "160p30"
-    )
+    private val candidateQualities = listOf("chunked", "1080p60")
 
     data class RecoveredVod(
         val streamerLogin: String,
@@ -62,10 +62,6 @@ object VodRecoveryRepository {
         val url: String
     )
 
-    /**
-     * [timestampIsMinuteOnly] enables a bounded 60-second timestamp search.
-     * Cancellation is checked between every network request.
-     */
     /**
      * Searches a bounded range around the recorded UTC start time. Archive
      * timestamps can be slightly imprecise, so test -30 through +60 seconds.
@@ -116,8 +112,7 @@ object VodRecoveryRepository {
             val playable = checks.flatten().distinctBy { it.url }
             if (playable.isNotEmpty()) {
                 val selected = playable.first()
-                val hostBase = selected.url.substringBefore("/${selected.name}/index-dvr.m3u8")
-                return@withContext RecoveredVod(login, streamId, timestamp, hostBase, playable)
+                return@withContext RecoveredVod(login, streamId, timestamp, selected.url, playable)
             }
         }
         null
