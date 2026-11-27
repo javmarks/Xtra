@@ -131,7 +131,7 @@ object VodRecoveryRepository {
         val candidates = if (parsed.isNotEmpty()) {
             parsed
         } else if (content.contains("#EXTINF", ignoreCase = true)) {
-            val resolution = Regex("""(\\d+)p""").find(qualityName)?.groupValues?.get(1)?.toIntOrNull()
+            val resolution = Regex("""(\d+)p""").find(qualityName)?.groupValues?.get(1)?.toIntOrNull()
             listOf(
                 RecoveredQuality(
                     name = qualityName,
