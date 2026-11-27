@@ -92,12 +92,28 @@ class ChannelVideosFragment : PagedListFragment(), Scrollable, Sortable, VideosS
         val appContext = requireContext().applicationContext
         val channelLogin = args.channelLogin
         if (!channelLogin.isNullOrBlank()) {
-            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-                val added = RecoveredVodAutoDiscovery.check(appContext, channelLogin)
-                if (added) {
+            val lastCheck = RecoveredVodAutoDiscovery.lastCheckAt(appContext, channelLogin)
+            val checkDue = RecoveredVodAutoDiscovery.isCheckDue(appContext, channelLogin)
+            binding.autoDiscoveryStatus.isVisible = true
+            if (checkDue) {
+                binding.autoDiscoveryStatus.setText(R.string.vod_auto_discovery_checking)
+            } else if (lastCheck > 0L) {
+                binding.autoDiscoveryStatus.text = getString(
+                    R.string.vod_auto_discovery_last_checked,
+                    android.text.format.DateFormat.getTimeFormat(requireContext()).format(java.util.Date(lastCheck))
+                )
+            }
+            if (checkDue) {
+                viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                    val added = RecoveredVodAutoDiscovery.check(appContext, channelLogin)
                     withContext(Dispatchers.Main) {
                         if (_binding != null && ::recoveredAdapter.isInitialized) {
-                            refreshRecoveredVods()
+                            if (added) {
+                                refreshRecoveredVods()
+                                binding.autoDiscoveryStatus.setText(R.string.vod_auto_discovery_found)
+                            } else {
+                                binding.autoDiscoveryStatus.setText(R.string.vod_auto_discovery_none)
+                            }
                         }
                     }
                 }
