@@ -20,6 +20,17 @@ object RecoveredVodAutoDiscovery {
     private const val AUTO_HOST_LIMIT = 4
     private const val AUTO_QUALITY_LIMIT = 1
 
+    fun lastCheckAt(context: Context, streamerLogin: String): Long {
+        val login = streamerLogin.trim().removePrefix("@").lowercase(Locale.ROOT)
+        if (!login.matches(Regex("[a-z0-9_]{1,25}"))) return 0L
+        return context.applicationContext.prefs().getLong("recovered_vod_auto_check_$login", 0L)
+    }
+
+    fun isCheckDue(context: Context, streamerLogin: String, now: Long = System.currentTimeMillis()): Boolean {
+        val last = lastCheckAt(context, streamerLogin)
+        return last <= 0L || now - last >= CHECK_INTERVAL_MILLIS
+    }
+
     /**
      * Returns true when at least one new playable VOD was saved.
      * The check timestamp is recorded before network work, preventing repeated
