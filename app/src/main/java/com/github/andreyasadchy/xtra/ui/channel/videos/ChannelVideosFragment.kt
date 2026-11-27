@@ -32,12 +32,15 @@ import com.github.andreyasadchy.xtra.ui.common.Scrollable
 import com.github.andreyasadchy.xtra.ui.common.Sortable
 import com.github.andreyasadchy.xtra.ui.common.VideosAdapter
 import com.github.andreyasadchy.xtra.util.vod.RecoveredVodStore
+import com.github.andreyasadchy.xtra.util.vod.RecoveredVodAutoDiscovery
 import com.github.andreyasadchy.xtra.ui.common.VideosSortDialog
 import com.github.andreyasadchy.xtra.ui.download.DownloadDialog
 import com.github.andreyasadchy.xtra.util.C
 import com.github.andreyasadchy.xtra.util.TwitchApiHelper
 import com.github.andreyasadchy.xtra.util.prefs
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 class ChannelVideosFragment : PagedListFragment(), Scrollable, Sortable, VideosSortDialog.OnFilter {
@@ -86,6 +89,20 @@ class ChannelVideosFragment : PagedListFragment(), Scrollable, Sortable, VideosS
         recoveredAdapter = RecoveredVodsAdapter()
         binding.recyclerView.adapter = ConcatAdapter(recoveredAdapter, pagingAdapter)
         refreshRecoveredVods()
+        val appContext = requireContext().applicationContext
+        val channelLogin = args.channelLogin
+        if (!channelLogin.isNullOrBlank()) {
+            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                val added = RecoveredVodAutoDiscovery.check(appContext, channelLogin)
+                if (added) {
+                    withContext(Dispatchers.Main) {
+                        if (_binding != null && ::recoveredAdapter.isInitialized) {
+                            refreshRecoveredVods()
+                        }
+                    }
+                }
+            }
+        }
         ViewCompat.setOnApplyWindowInsetsListener(view) { _, windowInsets ->
             if (activity?.findViewById<LinearLayout>(R.id.navBarContainer)?.isVisible == false) {
                 val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -162,6 +179,11 @@ class ChannelVideosFragment : PagedListFragment(), Scrollable, Sortable, VideosS
             if (login.isNullOrBlank()) emptyList()
             else RecoveredVodStore.load(requireContext(), login)
         )
+        if (::pagingAdapter.isInitialized) {
+            binding.nothingHere.isVisible =
+                pagingAdapter.loadStateFlow.value.refresh !is androidx.paging.LoadState.Loading &&
+                    pagingAdapter.itemCount == 0 && recoveredAdapter.itemCount == 0
+        }
     }
 
     override fun onResume() {
