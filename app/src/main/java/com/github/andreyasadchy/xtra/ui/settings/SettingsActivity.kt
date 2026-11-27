@@ -523,7 +523,11 @@ class SettingsActivity : AppCompatActivity() {
                                                 .show()
                                             return@launch
                                         }
-                                        val qualities = recovered.qualities
+                                        // Multiple CDN hosts can expose the same quality playlist.
+                                        // Keep one chooser entry per actual quality, not one per host copy.
+                                        val qualities = recovered.qualities.distinctBy { quality ->
+                                            listOf(quality.name, quality.resolution, quality.frameRate, quality.bitrate)
+                                        }
                                         val qualityLabels = qualities.map { quality ->
                                             buildString {
                                                 append(quality.name)
