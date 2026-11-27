@@ -17,6 +17,7 @@ import androidx.navigation.fragment.navArgs
 import androidx.paging.PagingData
 import androidx.paging.PagingDataAdapter
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.ConcatAdapter
 import com.github.andreyasadchy.xtra.R
 import com.github.andreyasadchy.xtra.databinding.CommonRecyclerViewLayoutBinding
 import com.github.andreyasadchy.xtra.databinding.SortBarBinding
@@ -30,6 +31,7 @@ import com.github.andreyasadchy.xtra.ui.common.PagedListFragment
 import com.github.andreyasadchy.xtra.ui.common.Scrollable
 import com.github.andreyasadchy.xtra.ui.common.Sortable
 import com.github.andreyasadchy.xtra.ui.common.VideosAdapter
+import com.github.andreyasadchy.xtra.util.vod.RecoveredVodStore
 import com.github.andreyasadchy.xtra.ui.common.VideosSortDialog
 import com.github.andreyasadchy.xtra.ui.download.DownloadDialog
 import com.github.andreyasadchy.xtra.util.C
@@ -45,6 +47,7 @@ class ChannelVideosFragment : PagedListFragment(), Scrollable, Sortable, VideosS
     private val args: ChannelPagerFragmentArgs by navArgs()
     private val viewModel: ChannelVideosViewModel by viewModels { ChannelVideosViewModelFactory }
     private lateinit var pagingAdapter: PagingDataAdapter<Video, out RecyclerView.ViewHolder>
+    private lateinit var recoveredAdapter: RecoveredVodsAdapter
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = CommonRecyclerViewLayoutBinding.inflate(inflater, container, false)
@@ -80,6 +83,9 @@ class ChannelVideosFragment : PagedListFragment(), Scrollable, Sortable, VideosS
             )
         }, showChannel = false)
         setAdapter(binding.recyclerView, pagingAdapter)
+        recoveredAdapter = RecoveredVodsAdapter()
+        binding.recyclerView.adapter = ConcatAdapter(recoveredAdapter, pagingAdapter)
+        refreshRecoveredVods()
         ViewCompat.setOnApplyWindowInsetsListener(view) { _, windowInsets ->
             if (activity?.findViewById<LinearLayout>(R.id.navBarContainer)?.isVisible == false) {
                 val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -123,6 +129,15 @@ class ChannelVideosFragment : PagedListFragment(), Scrollable, Sortable, VideosS
             }
         }
         initializeAdapter(binding, pagingAdapter)
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                pagingAdapter.loadStateFlow.collectLatest { loadState ->
+                    binding.nothingHere.isVisible =
+                        loadState.refresh !is androidx.paging.LoadState.Loading &&
+                                pagingAdapter.itemCount == 0 && recoveredAdapter.itemCount == 0
+                }
+            }
+        }
         if (requireContext().prefs().getBoolean(C.PLAYER_USE_VIDEO_POSITIONS, true)) {
             viewLifecycleOwner.lifecycleScope.launch {
                 repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -138,6 +153,21 @@ class ChannelVideosFragment : PagedListFragment(), Scrollable, Sortable, VideosS
                     (pagingAdapter as VideosAdapter).setBookmarksList(it)
                 }
             }
+        }
+    }
+
+    private fun refreshRecoveredVods() {
+        val login = args.channelLogin
+        recoveredAdapter.submitEntries(
+            if (login.isNullOrBlank()) emptyList()
+            else RecoveredVodStore.load(requireContext(), login)
+        )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (_binding != null && ::recoveredAdapter.isInitialized) {
+            refreshRecoveredVods()
         }
     }
 
