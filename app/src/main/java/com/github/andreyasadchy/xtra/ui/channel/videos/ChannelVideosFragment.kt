@@ -179,11 +179,6 @@ class ChannelVideosFragment : PagedListFragment(), Scrollable, Sortable, VideosS
             if (login.isNullOrBlank()) emptyList()
             else RecoveredVodStore.load(requireContext(), login)
         )
-        if (::pagingAdapter.isInitialized) {
-            binding.nothingHere.isVisible =
-                pagingAdapter.loadStateFlow.value.refresh !is androidx.paging.LoadState.Loading &&
-                    pagingAdapter.itemCount == 0 && recoveredAdapter.itemCount == 0
-        }
     }
 
     override fun onResume() {
