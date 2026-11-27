@@ -68,6 +68,7 @@ import com.github.andreyasadchy.xtra.model.ui.SettingsSearchItem
 import com.github.andreyasadchy.xtra.ui.common.IntegrityDialog
 import com.github.andreyasadchy.xtra.ui.main.MainActivity
 import com.github.andreyasadchy.xtra.util.vod.VodRecoveryRepository
+import com.github.andreyasadchy.xtra.util.vod.RecoveredVodStore
 import com.github.andreyasadchy.xtra.util.vod.VodStreamDiscoveryRepository
 import com.github.andreyasadchy.xtra.ui.settings.SettingsViewModel.Companion.SettingsViewModelFactory
 import com.github.andreyasadchy.xtra.util.C
@@ -539,6 +540,17 @@ class SettingsActivity : AppCompatActivity() {
                                             .setTitle("Playable copy found")
                                             .setItems(qualityLabels) { _, qualityIndex ->
                                                 val quality = qualities[qualityIndex]
+                                                RecoveredVodStore.save(
+                                                    context,
+                                                    RecoveredVodStore.Entry(
+                                                        streamerLogin = recovered.streamerLogin,
+                                                        streamId = recovered.streamId,
+                                                        startTimestamp = recovered.startTimestamp,
+                                                        title = candidate.title,
+                                                        durationSeconds = candidate.durationSeconds,
+                                                        qualities = recovered.qualities.distinctBy { it.url }
+                                                    )
+                                                )
                                                 val intent = Intent(context, MainActivity::class.java).apply {
                                                     action = MainActivity.INTENT_PLAY_RECOVERED_VOD
                                                     flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
